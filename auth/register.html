@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TrackFare - Create Account</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#822803",
+                        "surface-container-high": "#e8e7f0",
+                        "on-primary-container": "#98b3ff",
+                        "on-tertiary-container": "#ff9c7a",
+                        "secondary": "#0054cd",
+                        "on-secondary-fixed-variant": "#0040a1",
+                        "background": "#faf8ff",
+                        "on-primary-fixed": "#001848",
+                        "surface-container": "#ededf6",
+                        "surface-bright": "#faf8ff",
+                        "on-tertiary": "#ffffff",
+                        "on-surface-variant": "#434652",
+                        "surface-variant": "#e2e2ea",
+                        "primary-fixed-dim": "#b2c5ff",
+                        "secondary-fixed": "#dae2ff",
+                        "secondary-container": "#316ee9",
+                        "surface": "#faf8ff",
+                        "primary": "#002b73",
+                        "on-background": "#1a1b22",
+                        "surface-dim": "#d9d9e2",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-highest": "#e2e2ea",
+                        "on-secondary": "#ffffff",
+                        "on-primary-fixed-variant": "#0040a1",
+                        "outline": "#747784",
+                        "inverse-surface": "#2f3037",
+                        "primary-container": "#0040a1",
+                        "tertiary-fixed-dim": "#ffb59d",
+                        "on-tertiary-fixed-variant": "#822803",
+                        "tertiary-fixed": "#ffdbd0",
+                        "on-secondary-fixed": "#001847",
+                        "on-secondary-container": "#fefcff",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed-dim": "#b2c5ff",
+                        "on-surface": "#1a1b22",
+                        "error-container": "#ffdad6",
+                        "on-tertiary-fixed": "#390c00",
+                        "inverse-primary": "#b2c5ff",
+                        "on-error": "#ffffff",
+                        "inverse-on-surface": "#f0f0f9",
+                        "surface-container-low": "#f3f3fc",
+                        "outline-variant": "#c3c6d4",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "surface-tint": "#2c59ba",
+                        "primary-fixed": "#dae2ff",
+                        "tertiary": "#5d1900"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "3xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "base": "4px",
+                        "md": "16px",
+                        "margin-mobile": "20px",
+                        "sm": "8px",
+                        "xl": "32px",
+                        "2xl": "48px",
+                        "xs": "4px",
+                        "gutter-mobile": "12px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "price-display": ["Manrope"],
+                        "body-sm": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Manrope"],
+                        "headline-lg": ["Manrope"],
+                        "headline-sm": ["Manrope"],
+                        "label-bold": ["Inter"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "price-display": ["20px", {"lineHeight": "24px", "fontWeight": "700"}],
+                        "body-sm": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-md": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "headline-lg": ["28px", {"lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "label-bold": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #faf8ff;
+            -webkit-font-smoothing: antialiased;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .input-focus-ring:focus-within {
+            ring: 2px;
+            ring-color: #0056d2;
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface min-h-screen flex flex-col items-center">
+<!-- Hero Section / Brand Logo -->
+<header class="w-full flex flex-col items-center pt-xl pb-lg px-margin-mobile">
+<div class="w-32 h-auto mb-lg overflow-hidden flex justify-center">
+<img alt="TrackFare Logo" class="w-full h-auto object-contain" src="https://lh3.googleusercontent.com/aida/ADBb0uiJdxbgai5h7F26KRn2EhgrlTeTuXGIMXUghgv9_J8Mtwm-FH0YdXoCrDGqbALNo2zbBk4BdBmrQuPowcNbtJ04AzuaPCMSR4MV60QpDMamOGGgUI2vUTNx3GFI9NgCn5TvJLn21SSkXqSqnOP_yLpNwW5gnhDX4ldC2iuO3EI_kfdZElWBGnUe5jX9y-4uxF6jLDLbWSHSWuUki4AWZQNH9IZKBSQBC2PTNEMyRhjNvbvJr_Lu0e6UZKsdulNScbwpAvjBkg-3rJY"/>
+</div>
+<div class="text-center max-w-sm">
+<h1 class="font-headline-lg text-headline-lg text-primary tracking-tighter mb-sm">Create Account</h1>
+<p class="font-body-md text-body-md text-on-surface-variant opacity-80">
+                Join TrackFare to streamline your transit expenses and journey logs.
+            </p>
+</div>
+</header>
+<!-- Main Registration Form -->
+<main class="w-full max-w-md px-margin-mobile pb-xl">
+<form class="space-y-md">
+<!-- Full Name Field -->
+<div class="space-y-xs">
+<label class="font-label-bold text-label-bold text-primary block px-xs" for="name">Full Name</label>
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-md flex items-center pointer-events-none text-outline group-focus-within:text-secondary">
+<span class="material-symbols-outlined text-[20px]">person</span>
+</div>
+<input class="w-full h-12 pl-11 pr-md bg-surface-container-low border border-outline-variant/30 rounded-xl font-body-md text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all" id="name" name="name" placeholder="John Doe" type="text"/>
+</div>
+</div>
+<!-- Email Field -->
+<div class="space-y-xs">
+<label class="font-label-bold text-label-bold text-primary block px-xs" for="email">Email Address</label>
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-md flex items-center pointer-events-none text-outline group-focus-within:text-secondary">
+<span class="material-symbols-outlined text-[20px]">mail</span>
+</div>
+<input class="w-full h-12 pl-11 pr-md bg-surface-container-low border border-outline-variant/30 rounded-xl font-body-md text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all" id="email" name="email" placeholder="john@example.com" type="email"/>
+</div>
+</div>
+<!-- Phone Number Field -->
+<div class="space-y-xs">
+<label class="font-label-bold text-label-bold text-primary block px-xs" for="phone">Phone Number</label>
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-md flex items-center pointer-events-none text-outline group-focus-within:text-secondary">
+<span class="material-symbols-outlined text-[20px]">call</span>
+</div>
+<input class="w-full h-12 pl-11 pr-md bg-surface-container-low border border-outline-variant/30 rounded-xl font-body-md text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all" id="phone" name="phone" placeholder="+1 (555) 000-0000" type="tel"/>
+</div>
+</div>
+<!-- Password Field -->
+<div class="space-y-xs">
+<label class="font-label-bold text-label-bold text-primary block px-xs" for="password">Password</label>
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-md flex items-center pointer-events-none text-outline group-focus-within:text-secondary">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+</div>
+<input class="w-full h-12 pl-11 pr-11 bg-surface-container-low border border-outline-variant/30 rounded-xl font-body-md text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all" id="password" name="password" placeholder="Min. 8 characters" type="password"/>
+<button class="absolute inset-y-0 right-0 pr-md flex items-center text-outline hover:text-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility</span>
+</button>
+</div>
+</div>
+<!-- Sign Up Button -->
+<button class="w-full h-12 mt-lg bg-[#0056d2] text-on-primary font-headline-sm text-headline-sm rounded-xl shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-transform flex items-center justify-center gap-sm" type="submit">
+                Sign Up
+            </button>
+</form>
+<!-- Divider -->
+<!-- Social Login Buttons -->
+<!-- Footer Link -->
+<footer class="mt-2xl text-center">
+<p class="font-body-md text-body-md text-on-surface-variant">
+                Already have an account? 
+                <a class="text-secondary font-headline-sm hover:underline underline-offset-4 ml-xs" href="#">Back to Login</a>
+</p>
+</footer>
+</main>
+<!-- Bottom Decorative Surface -->
+<div class="hidden md:block fixed bottom-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary opacity-20"></div>
+</body></html>

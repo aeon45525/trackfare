@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary-fixed-dim": "#ffb783",
+              "on-primary-fixed-variant": "#0040a1",
+              "surface-container": "#edeeef",
+              "on-tertiary-container": "#ffd0b0",
+              "on-secondary": "#ffffff",
+              "on-surface": "#191c1d",
+              "outline-variant": "#c3c6d6",
+              "tertiary-fixed": "#ffdcc5",
+              "surface-tint": "#0056d2",
+              "surface": "#f8f9fa",
+              "surface-container-highest": "#e1e3e4",
+              "tertiary-container": "#944b00",
+              "on-error": "#ffffff",
+              "on-primary-fixed": "#001847",
+              "on-surface-variant": "#424654",
+              "secondary-fixed-dim": "#afcae2",
+              "secondary": "#486176",
+              "tertiary": "#713700",
+              "surface-dim": "#d9dadb",
+              "surface-bright": "#f8f9fa",
+              "on-secondary-container": "#4e677c",
+              "on-error-container": "#93000a",
+              "secondary-container": "#cbe6ff",
+              "surface-container-high": "#e7e8e9",
+              "outline": "#737785",
+              "inverse-surface": "#2e3132",
+              "on-background": "#191c1d",
+              "background": "#f8f9fa",
+              "inverse-primary": "#b2c5ff",
+              "surface-container-lowest": "#ffffff",
+              "secondary-fixed": "#cbe6ff",
+              "error": "#ba1a1a",
+              "surface-container-low": "#f3f4f5",
+              "primary-fixed": "#dae2ff",
+              "primary": "#0040a1",
+              "inverse-on-surface": "#f0f1f2",
+              "on-secondary-fixed-variant": "#30495d",
+              "on-tertiary-fixed-variant": "#713700",
+              "primary-container": "#0056d2",
+              "error-container": "#ffdad6",
+              "on-tertiary-fixed": "#301400",
+              "on-primary-container": "#ccd8ff",
+              "on-secondary-fixed": "#001e30",
+              "surface-variant": "#e1e3e4",
+              "on-tertiary": "#ffffff",
+              "primary-fixed-dim": "#b2c5ff",
+              "on-primary": "#ffffff"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .hide-scrollbar::-webkit-scrollbar { display: none; }
+      .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface font-body text-on-surface">
+<!-- TopAppBar -->
+<nav class="fixed top-0 left-0 w-full flex justify-between items-center px-4 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm dark:shadow-none z-50">
+<div class="flex items-center gap-4">
+<button class="active:scale-95 transition-transform hover:opacity-80">
+<span class="material-symbols-outlined text-[#0040a1] dark:text-blue-400">arrow_back</span>
+</button>
+<h1 class="font-['Manrope'] font-bold text-lg tracking-tight text-[#0040a1] dark:text-blue-400">Notifications</h1>
+</div>
+<button class="active:scale-95 transition-transform hover:opacity-80">
+<span class="material-symbols-outlined text-slate-500">more_vert</span>
+</button>
+</nav>
+<!-- Main Content -->
+<main class="pt-20 pb-28 px-4 max-w-2xl mx-auto space-y-4">
+<!-- Section: Today -->
+<div class="space-y-4">
+<div class="px-2">
+<span class="font-headline font-extrabold text-xs uppercase tracking-widest text-outline">Today</span>
+</div>
+<div class="space-y-2">
+<!-- Notification Card: Arriving Soon -->
+<div class="bg-surface-container-lowest p-4 rounded-xl flex items-start gap-4 transition-all hover:bg-surface-container-low">
+<div class="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-secondary-container" data-icon="directions_bus">directions_bus</span>
+</div>
+<div class="flex-1 space-y-1">
+<div class="flex justify-between items-start">
+<h3 class="font-headline font-bold text-on-surface">Bus Arriving Soon</h3>
+<span class="text-[10px] font-medium text-outline uppercase tracking-tighter">2m ago</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed">Route SM24 is 500m away from your current stop at MacArthur Highway.</p>
+</div>
+</div>
+<!-- Notification Card: Low Balance -->
+<div class="bg-surface-container-lowest p-4 rounded-xl flex items-start gap-4 transition-all hover:bg-surface-container-low">
+<div class="w-12 h-12 rounded-full bg-error-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-error" data-icon="account_balance_wallet">account_balance_wallet</span>
+</div>
+<div class="flex-1 space-y-1">
+<div class="flex justify-between items-start">
+<h3 class="font-headline font-bold text-on-surface">Wallet Low Balance</h3>
+<span class="text-[10px] font-medium text-outline uppercase tracking-tighter">1h ago</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed">Your balance is below ₱50.00. Top up now to avoid travel disruptions.</p>
+<button class="mt-2 px-4 py-1.5 bg-primary text-white text-xs font-bold rounded-full transition-transform active:scale-95">Top Up Now</button>
+</div>
+</div>
+<!-- Notification Card: Route Update -->
+<div class="bg-surface-container-lowest p-4 rounded-xl flex items-start gap-4 transition-all hover:bg-surface-container-low">
+<div class="w-12 h-12 rounded-full bg-tertiary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-tertiary-fixed-variant" data-icon="info">info</span>
+</div>
+<div class="flex-1 space-y-1">
+<div class="flex justify-between items-start">
+<h3 class="font-headline font-bold text-on-surface">Route Delay Alert</h3>
+<span class="text-[10px] font-medium text-outline uppercase tracking-tighter">3h ago</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed">NLEX Express route is experiencing 15-minute delays due to road maintenance.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Section: Yesterday -->
+<div class="space-y-4 pt-4">
+<div class="px-2">
+<span class="font-headline font-extrabold text-xs uppercase tracking-widest text-outline">Yesterday</span>
+</div>
+<div class="space-y-2">
+<!-- Notification Card: Transaction Success -->
+<div class="bg-surface-container-low/50 p-4 rounded-xl flex items-start gap-4 transition-all opacity-80">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="check_circle">check_circle</span>
+</div>
+<div class="flex-1 space-y-1">
+<div class="flex justify-between items-start">
+<h3 class="font-headline font-bold text-on-surface">Payment Successful</h3>
+<span class="text-[10px] font-medium text-outline uppercase tracking-tighter">1d ago</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed">Your fare of ₱32.00 for Trip #8921 has been successfully processed.</p>
+</div>
+</div>
+<!-- Notification Card: Promotion -->
+<div class="bg-surface-container-low/50 p-4 rounded-xl flex items-start gap-4 transition-all opacity-80">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="redeem">redeem</span>
+</div>
+<div class="flex-1 space-y-1">
+<div class="flex justify-between items-start">
+<h3 class="font-headline font-bold text-on-surface">Weekend Promo</h3>
+<span class="text-[10px] font-medium text-outline uppercase tracking-tighter">1d ago</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed">Enjoy 10% off on your next 3 trips this coming weekend. Valid for all Bulacan routes.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Empty State Logic (Hidden) -->
+<div class="hidden flex-col items-center justify-center py-20 text-center space-y-4">
+<span class="material-symbols-outlined text-6xl text-surface-container-highest" style="font-variation-settings: 'opsz' 48;">notifications_off</span>
+<div class="space-y-1">
+<p class="font-headline font-bold text-lg text-on-surface-variant">All Caught Up!</p>
+<p class="text-sm text-outline">You don't have any new notifications at the moment.</p>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-2 pb-safe h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-t-3xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)] border-t border-slate-100 dark:border-slate-800 z-50">
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-2 px-4 hover:text-[#0056d2] active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="home">home</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-2 px-4 hover:text-[#0056d2] active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="directions_bus">directions_bus</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Routes</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-2 px-4 hover:text-[#0056d2] active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="qr_code_scanner">qr_code_scanner</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Scan</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-2 px-4 hover:text-[#0056d2] active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="history">history</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">History</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-2 px-4 hover:text-[#0056d2] active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="person">person</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Profile</span>
+</a>
+</nav>
+</body></html>

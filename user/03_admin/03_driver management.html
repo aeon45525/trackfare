@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Driver Management - TrackFare Admin</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "secondary-fixed-dim": "#afcae2",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "surface-container": "#edeeef",
+                        "error": "#ba1a1a",
+                        "on-primary-fixed-variant": "#0040a1",
+                        "background": "#f8f9fa",
+                        "on-secondary-container": "#4e677c",
+                        "tertiary": "#713700",
+                        "surface-dim": "#d9dadb",
+                        "primary": "#0040a1",
+                        "on-tertiary-container": "#ffd0b0",
+                        "surface-tint": "#0056d2",
+                        "on-background": "#191c1d",
+                        "surface-container-low": "#f3f4f5",
+                        "on-primary-fixed": "#001847",
+                        "inverse-primary": "#b2c5ff",
+                        "surface-container-high": "#e7e8e9",
+                        "outline-variant": "#c3c6d6",
+                        "primary-fixed-dim": "#b2c5ff",
+                        "primary-container": "#0056d2",
+                        "primary-fixed": "#dae2ff",
+                        "on-secondary-fixed-variant": "#30495d",
+                        "on-primary": "#ffffff",
+                        "inverse-surface": "#2e3132",
+                        "on-tertiary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "surface-variant": "#e1e3e4",
+                        "inverse-on-surface": "#f0f1f2",
+                        "outline": "#737785",
+                        "on-secondary-fixed": "#001e30",
+                        "surface-bright": "#f8f9fa",
+                        "on-primary-container": "#ccd8ff",
+                        "on-error": "#ffffff",
+                        "secondary": "#486176",
+                        "on-surface": "#191c1d",
+                        "surface-container-lowest": "#ffffff",
+                        "surface": "#f8f9fa",
+                        "secondary-fixed": "#cbe6ff",
+                        "on-tertiary-fixed": "#301400",
+                        "on-tertiary-fixed-variant": "#713700",
+                        "tertiary-fixed": "#ffdcc5",
+                        "surface-container-highest": "#e1e3e4",
+                        "secondary-container": "#cbe6ff",
+                        "on-surface-variant": "#424654",
+                        "on-secondary": "#ffffff",
+                        "tertiary-container": "#944b00",
+                        "error-container": "#ffdad6"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body antialiased">
+<div class="flex min-h-screen">
+<!-- SideNavBar (Styled from SCREEN_29) -->
+<aside class="fixed left-0 top-0 h-screen w-64 border-r border-slate-100 bg-slate-50 flex flex-col py-6 z-50">
+<div class="px-6 mb-8">
+<span class="text-2xl font-black tracking-tight text-blue-900 font-headline">TrackFare</span>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="text-slate-600 flex items-center gap-3 px-6 py-3 hover:bg-white hover:text-blue-600 transition-all duration-300 ease-in-out font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="text-slate-600 flex items-center gap-3 px-6 py-3 hover:bg-white hover:text-blue-600 transition-all duration-300 ease-in-out font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="directions_bus">directions_bus</span>
+<span>Bus Management</span>
+</a>
+<a class="text-blue-700 font-bold border-r-4 border-blue-700 bg-blue-50/50 flex items-center gap-3 px-6 py-3 transition-all duration-300 ease-in-out font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="badge">badge</span>
+<span>Driver Management</span>
+</a>
+<a class="text-slate-600 flex items-center gap-3 px-6 py-3 hover:bg-white hover:text-blue-600 transition-all duration-300 ease-in-out font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span>Analytics</span>
+</a>
+</nav>
+<!-- Profile & Logout (Bottom of Sidebar) -->
+<div class="px-6 border-t border-slate-100 pt-4">
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-slate-200">
+<img alt="John Doe" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ADBb0ujtfs3LtLrKxV7Upnl5nwNwsu3icOaXIgHBavoNRtHg4-kCm6TB8P3eu-DZnC09Z-EATLRyqa8j0X5H31anw26ZXJV8oaJfjSf1Hl4oOxFlIGxoxAYq-u_83r8HYfaLOu2MwGzCPHUU0ySsYFjjO6Kc8tNvgTeGF-Ln-2i_HfB4U6IXh_oQdxfkQBq7DqckWq3WcZEDGwqWtwe1C4czuxQERpbRv_uppmgo5F4xIkhnas_tb8IziK7enS-OHxUfdnSfq-Lu0YDPGLA"/>
+</div>
+<div>
+<p class="text-sm font-bold text-on-surface whitespace-nowrap">John Doe</p>
+<p class="text-xs text-on-secondary-container">8821 • ADMIN</p>
+</div>
+</div>
+<button class="flex items-center justify-center p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all" title="Logout">
+<span class="material-symbols-outlined text-lg">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 ml-64 p-8">
+<!-- Top Bar (Search + Notifications from SCREEN_29) -->
+<header class="flex justify-between items-center mb-4 h-12">
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl" data-icon="search">search</span>
+<input class="w-full bg-surface-container-low border-none rounded-xl py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all" placeholder="Search routes, buses, or drivers..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="w-10 h-10 rounded-full bg-surface-container-lowest shadow-sm flex items-center justify-center hover:bg-surface-container">
+<span class="material-symbols-outlined text-on-surface">notifications</span>
+</button>
+</div>
+</header>
+<!-- Page Header -->
+<div class="flex justify-between items-end mb-6">
+<div>
+<h1 class="text-3xl font-extrabold font-headline tracking-tight text-on-surface">Driver Management</h1>
+<p class="text-on-secondary-container font-medium">Manage and monitor driver performance across Bulacan routes.</p>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-[10px] font-bold text-xs hover:opacity-90 shadow-sm transition-all">
+<span class="material-symbols-outlined text-sm">add</span>
+<span>ADD DRIVER</span>
+</button>
+</div>
+</div>
+<!-- Drivers Table (Styled as Dashboard Cards/Feed) -->
+<div class="bg-surface-container-lowest rounded-[10px] shadow-sm overflow-hidden mb-6">
+<div class="overflow-x-auto">
+<table class="w-full border-collapse text-left">
+<thead>
+<tr class="border-b border-surface-container-low">
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-secondary-container font-label">Driver Name</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-secondary-container font-label">Assigned Bus</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-secondary-container font-label">Status</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-secondary-container font-label">Daily Earnings</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-secondary-container font-label text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low/50">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-low/30 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-slate-100">
+<img alt="John Doe" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgw3dCs9PJevGG8R0V6p3KsbM6-e6m7-PWSLipo8pEZxHdmQYIagQF0IEXtXlJgZtWoEnunexRe9CeBek20trXgRC8YB9E5qgmWd84XmuNx0IUV6UYvgkW_zmhSggg131d6HiR-0OOUlpwMkJFsOh1kri12X4OU3ILPOgd05IytSqwYgz6aCzKLvLr0hprCaylw1uK_RfN0FWJTvwS9QPeLqKb9qXmo9tW7Nu7vx0vGybGvbH_Q4StUASDSc-xB_wUuq7uhrcq7zt8"/>
+</div>
+<div>
+<p class="font-bold text-on-surface text-sm">John Doe</p>
+<p class="text-[10px] font-bold text-on-secondary-container">ID: #DRV-0921</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-black bg-secondary-container text-on-secondary-fixed-variant uppercase">NLEX EXPRESS</span>
+<span class="text-sm text-on-secondary-container font-medium">B-772- Bulacan</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="text-xs font-bold text-on-surface">Active</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<p class="text-sm font-black text-on-surface">₱1,240.00</p>
+<p class="text-[10px] font-bold text-on-secondary-container uppercase">Updated 5m ago</p>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="p-1.5 hover:bg-surface-container rounded-lg text-slate-400">
+<span class="material-symbols-outlined text-lg">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-low/30 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-slate-100">
+<img alt="Ricardo Gomez" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgw3dCs9PJevGG8R0V6p3KsbM6-e6m7-PWSLipo8pEZxHdmQYIagQF0IEXtXlJgZtWoEnunexRe9CeBek20trXgRC8YB9E5qgmWd84XmuNx0IUV6UYvgkW_zmhSggg131d6HiR-0OOUlpwMkJFsOh1kri12X4OU3ILPOgd05IytSqwYgz6aCzKLvLr0hprCaylw1uK_RfN0FWJTvwS9QPeLqKb9qXmo9tW7Nu7vx0vGybGvbH_Q4StUASDSc-xB_wUuq7uhrcq7zt8"/>
+</div>
+<div>
+<p class="font-bold text-on-surface text-sm">Ricardo Gomez</p>
+<p class="text-[10px] font-bold text-on-secondary-container">ID: #DRV-1142</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-black bg-tertiary-fixed text-on-tertiary-fixed-variant uppercase">MACARTHUR</span>
+<span class="text-sm text-on-secondary-container font-medium">B-901- Bulacan</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-slate-400"></span>
+<span class="text-xs font-bold text-on-secondary-container">Offline</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<p class="text-sm font-black text-on-surface">₱980.00</p>
+<p class="text-[10px] font-bold text-on-secondary-container uppercase">Yesterday Total</p>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="p-1.5 hover:bg-surface-container rounded-lg text-slate-400">
+<span class="material-symbols-outlined text-lg">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-low/30 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-slate-100">
+<img alt="Elena Santos" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgw3dCs9PJevGG8R0V6p3KsbM6-e6m7-PWSLipo8pEZxHdmQYIagQF0IEXtXlJgZtWoEnunexRe9CeBek20trXgRC8YB9E5qgmWd84XmuNx0IUV6UYvgkW_zmhSggg131d6HiR-0OOUlpwMkJFsOh1kri12X4OU3ILPOgd05IytSqwYgz6aCzKLvLr0hprCaylw1uK_RfN0FWJTvwS9QPeLqKb9qXmo9tW7Nu7vx0vGybGvbH_Q4StUASDSc-xB_wUuq7uhrcq7zt8"/>
+</div>
+<div>
+<p class="font-bold text-on-surface text-sm">Elena Santos</p>
+<p class="text-[10px] font-bold text-on-secondary-container">ID: #DRV-0887</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-black bg-secondary-container text-on-secondary-fixed-variant uppercase">NLEX EXPRESS</span>
+<span class="text-sm text-on-secondary-container font-medium">B-441- Bulacan</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="text-xs font-bold text-on-surface">Active</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<p class="text-sm font-black text-on-surface">₱1,120.00</p>
+<p class="text-[10px] font-bold text-on-secondary-container uppercase">Updated 12m ago</p>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="p-1.5 hover:bg-surface-container rounded-lg text-slate-400">
+<span class="material-symbols-outlined text-lg">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination (From Driver Management original footer but styled as per dashboard elements) -->
+<div class="px-6 py-4 flex items-center justify-between border-t border-surface-container-low/50">
+<p class="text-[10px] font-bold text-on-secondary-container uppercase tracking-widest">Showing 4 of 32 drivers</p>
+<div class="flex items-center gap-2">
+<button class="p-1.5 rounded-lg border border-slate-100 hover:bg-slate-50 transition-all">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<span class="text-xs font-black text-primary px-3 py-1 bg-blue-50 rounded-md">1</span>
+<button class="p-1.5 rounded-lg border border-slate-100 hover:bg-slate-50 transition-all">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Summary Statistics (Styled like Dashboard Summary Cards) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="bg-surface-container-lowest p-6 rounded-[10px] shadow-sm flex items-center justify-between">
+<div>
+<p class="text-xs font-bold font-label text-on-secondary-container uppercase tracking-wider mb-1">Total Fleet Drivers</p>
+<h4 class="text-2xl font-black font-headline text-on-surface">32</h4>
+</div>
+<div class="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-2xl">groups</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-[10px] shadow-sm flex items-center justify-between">
+<div>
+<p class="text-xs font-bold font-label text-on-secondary-container uppercase tracking-wider mb-1">Total Earnings (Today)</p>
+<h4 class="text-2xl font-black font-headline text-on-surface">₱42.5k</h4>
+</div>
+<div class="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+<span class="material-symbols-outlined text-2xl">payments</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-[10px] shadow-sm flex items-center justify-between">
+<div>
+<p class="text-xs font-bold font-label text-on-secondary-container uppercase tracking-wider mb-1">Attendance Rate</p>
+<h4 class="text-2xl font-black font-headline text-on-surface">94%</h4>
+</div>
+<div class="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-2xl">query_stats</span>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

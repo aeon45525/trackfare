@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TrackFare Driver - Live Tracking</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-fixed-dim": "#afcae2",
+              "tertiary-fixed-dim": "#ffb783",
+              "surface-container": "#edeeef",
+              "error": "#ba1a1a",
+              "on-primary-fixed-variant": "#0040a1",
+              "background": "#f8f9fa",
+              "on-secondary-container": "#4e677c",
+              "tertiary": "#713700",
+              "surface-dim": "#d9dadb",
+              "primary": "#0040a1",
+              "on-tertiary-container": "#ffd0b0",
+              "surface-tint": "#0056d2",
+              "on-background": "#191c1d",
+              "surface-container-low": "#f3f4f5",
+              "on-primary-fixed": "#001847",
+              "inverse-primary": "#b2c5ff",
+              "surface-container-high": "#e7e8e9",
+              "outline-variant": "#c3c6d6",
+              "primary-fixed-dim": "#b2c5ff",
+              "primary-container": "#0056d2",
+              "primary-fixed": "#dae2ff",
+              "on-secondary-fixed-variant": "#30495d",
+              "on-primary": "#ffffff",
+              "inverse-surface": "#2e3132",
+              "on-tertiary": "#ffffff",
+              "on-error-container": "#93000a",
+              "surface-variant": "#e1e3e4",
+              "inverse-on-surface": "#f0f1f2",
+              "outline": "#737785",
+              "on-secondary-fixed": "#001e30",
+              "surface-bright": "#f8f9fa",
+              "on-primary-container": "#ccd8ff",
+              "on-error": "#ffffff",
+              "secondary": "#486176",
+              "on-surface": "#191c1d",
+              "surface-container-lowest": "#ffffff",
+              "surface": "#f8f9fa",
+              "secondary-fixed": "#cbe6ff",
+              "on-tertiary-fixed": "#301400",
+              "on-tertiary-fixed-variant": "#713700",
+              "tertiary-fixed": "#ffdcc5",
+              "surface-container-highest": "#e1e3e4",
+              "secondary-container": "#cbe6ff",
+              "on-surface-variant": "#424654",
+              "on-secondary": "#ffffff",
+              "tertiary-container": "#944b00",
+              "error-container": "#ffdad6"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tonal-layering-no-lines {
+            border: none !important;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body class="bg-background font-body text-on-surface">
+<div class="flex h-screen overflow-hidden">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 bg-slate-50 border-r border-slate-100 w-64 z-50">
+<div class="px-6 mb-8">
+<span class="text-2xl font-black tracking-tight text-blue-900 font-headline">TrackFare</span>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="text-slate-600 flex items-center gap-3 px-6 py-3 hover:bg-white hover:text-blue-600 transition-all duration-300 font-['Inter'] font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="text-blue-700 font-bold border-r-4 border-blue-700 bg-blue-50/50 flex items-center gap-3 px-6 py-3 transition-all duration-300 font-['Inter'] font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="explore">explore</span>
+<span>Live Tracking</span>
+</a>
+<a class="text-slate-600 flex items-center gap-3 px-6 py-3 hover:bg-white hover:text-blue-600 transition-all duration-300 font-['Inter'] font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span>Fare Status</span>
+</a>
+<a class="text-slate-600 flex items-center gap-3 px-6 py-3 hover:bg-white hover:text-blue-600 transition-all duration-300 font-['Inter'] font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+<span>Profile</span>
+</a>
+</nav>
+<div class="px-6 border-t border-slate-100 pt-4">
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-slate-200">
+<img alt="John Doe" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ADBb0ugmEW0ywc5tS36UJsadWX3n_pmch930_VvWX5QixnoWYaYzHXui9GLkBu9ZElbaaOfbQMpbptZwPRmWqXh50P53_5Bgs9MMDWRoFQrRmEZo2BYWP9u7xMowRfUgVDrPMHk-yME22fi6kkuz3PuZLyRCjRPy4jkjWuRP0ghohGW3ZRAeuZQKv5UiIfsHSDi_JG-2wTmgQLtpQuriVaVDsTNXMge2dIwiOEjYQWdJ5JE6eHTho4Z09Y1ltnFTV6NiuILnzzG4QDZ7h3k"/>
+</div>
+<div>
+<p class="text-sm font-bold text-on-surface whitespace-nowrap">John Doe</p>
+<p class="text-xs text-on-secondary-container">8821</p>
+</div>
+</div>
+<button class="flex items-center justify-center p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all" title="Logout">
+<span class="material-symbols-outlined text-lg">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 ml-64 relative flex flex-col">
+<!-- TopNavBar (Embedded in Canvas) -->
+<header class="w-full h-16 flex justify-between items-center px-6 sticky top-0 z-40 bg-white/80 backdrop-blur-md shadow-sm tonal-layering-no-lines">
+<div class="flex items-center gap-4">
+<div class="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full text-[10px] font-bold font-label uppercase tracking-widest">
+                    VICTORY LINER 802
+                </div>
+<h1 class="font-['Manrope'] font-semibold text-lg text-blue-700">En Route: NLET Terminal → Balagtas Junction</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="bg-surface-container-low px-4 py-2 rounded-full flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="text-[10px] font-bold font-label uppercase tracking-widest text-on-secondary-container">GPS Active</span>
+</div>
+<button class="w-10 h-10 rounded-full bg-surface-container-lowest shadow-sm flex items-center justify-center hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-on-surface">notifications</span>
+</button>
+<div class="h-8 w-px bg-slate-200"></div>
+<div class="text-right">
+<p class="text-[10px] font-bold text-slate-400 font-label uppercase tracking-widest leading-none mb-1">Status</p>
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-green-500"></span>
+<span class="text-sm font-bold text-on-surface">ON TIME</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Map Section (Full Width Canvas) -->
+<div class="flex-1 relative bg-surface-dim overflow-hidden">
+<div id="map" class="w-full h-full" style="border-radius: 0.75rem;"></div>
+<!-- Map Overlay Elements -->
+<div class="absolute inset-0 pointer-events-none">
+<!-- Route Line SVG (Simulated) -->
+<!-- Bus Icon Marker -->
+</div>
+<!-- Sidebar Overlay Cards -->
+<div class="absolute top-6 left-6 w-96 space-y-4 pointer-events-auto">
+<!-- Next Stop Bento Card -->
+<div class="bg-surface-container-lowest/90 backdrop-blur-xl p-6 rounded-2xl shadow-lg border border-white/20">
+<div class="flex justify-between items-start mb-6">
+<div>
+<p class="text-[10px] font-bold text-primary font-label uppercase tracking-[0.2em] mb-1">Next Destination</p>
+<h2 class="font-headline font-extrabold text-2xl tracking-tight text-on-surface">Bocaue Exit</h2>
+</div>
+<div class="bg-tertiary-fixed text-on-tertiary-fixed px-3 py-1 rounded-lg">
+<p class="text-xl font-black font-headline">5</p>
+<p class="text-[10px] font-bold font-label text-center">MINS</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-low p-3 rounded-xl">
+<div class="flex items-center gap-2 mb-1 text-slate-500">
+<span class="material-symbols-outlined text-sm" data-icon="group">group</span>
+<span class="text-[10px] font-bold font-label uppercase tracking-wider">Occupancy</span>
+</div>
+<p class="font-headline font-bold text-lg text-on-surface">32 <span class="text-sm font-medium text-slate-400">/ 45</span></p>
+</div>
+<div class="bg-surface-container-low p-3 rounded-xl">
+<div class="flex items-center gap-2 mb-1 text-slate-500">
+<span class="material-symbols-outlined text-sm" data-icon="distance">distance</span>
+<span class="text-[10px] font-bold font-label uppercase tracking-wider">Distance</span>
+</div>
+<p class="font-headline font-bold text-lg text-on-surface">3.8 <span class="text-sm font-medium text-slate-400">KM</span></p>
+</div>
+</div>
+</div>
+<!-- Traffic Alert Card -->
+<!-- Route Progress Glass Card -->
+<div class="bg-surface-container-lowest/80 backdrop-blur-md p-5 rounded-2xl shadow-lg border border-white/20">
+<p class="text-[10px] font-bold text-slate-400 font-label uppercase tracking-widest mb-4">Journey Timeline</p>
+<div class="space-y-4"><!-- Stop 1: Completed -->
+<div class="flex items-center gap-4">
+<div class="relative flex flex-col items-center">
+<div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+<div class="w-0.5 h-8 bg-slate-200"></div>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-500">NLET Terminal → Balagtas Junction</p>
+<p class="text-[10px] text-slate-400">Completed 08:45 AM</p>
+</div>
+</div>
+<!-- Stop 2: Active/Approaching -->
+<div class="flex items-center gap-4">
+<div class="relative flex flex-col items-center">
+<div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center ring-4 ring-primary/20">
+<div class="w-2 h-2 rounded-full bg-white"></div>
+</div>
+<div class="w-0.5 h-8 bg-slate-200"></div>
+</div>
+<div>
+<p class="text-sm font-bold text-on-surface">NLET Terminal → Balagtas Junction</p>
+<p class="text-xs font-semibold text-primary">Approaching Now</p>
+</div>
+</div>
+<!-- Stop 3: Upcoming -->
+<div class="flex items-center gap-4">
+<div class="relative flex flex-col items-center">
+<div class="w-3 h-3 rounded-full bg-slate-200"></div>
+<div class="w-0.5 h-8 bg-slate-200"></div>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-400">Bocaue Public Market</p>
+<p class="text-[10px] text-slate-300">Est. 10:15 AM</p>
+</div>
+</div>
+<!-- Stop 4: Final Stop -->
+<div class="flex items-center gap-4">
+<div class="relative flex flex-col items-center">
+<div class="w-3 h-3 rounded-full bg-slate-200"></div>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-400">Balagtas Junction</p>
+<p class="text-[10px] text-slate-300">Est. 10:45 AM</p>
+</div>
+</div></div>
+</div>
+</div>
+<!-- Floating Bottom Actions -->
+<div class="absolute bottom-8 right-8 flex gap-4 pointer-events-auto">
+<button class="flex items-center gap-2 px-6 py-4 rounded-xl border-2 border-primary text-primary font-bold bg-white/90 hover:bg-primary/5 transition-all shadow-lg active:scale-95 duration-200">
+<span class="material-symbols-outlined" data-icon="report_problem">report_problem</span>
+                    Report Issue
+                </button>
+<button class="flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r from-primary to-primary-container text-white font-bold shadow-xl hover:brightness-110 transition-all active:scale-95 duration-200">
+<span class="material-symbols-outlined" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                    Mark Stop Completed
+                </button>
+</div>
+<!-- Map Controls -->
+<div class="absolute bottom-8 left-8 flex flex-col gap-2 pointer-events-auto">
+<button class="w-12 h-12 bg-white rounded-xl shadow-lg flex items-center justify-center text-on-surface hover:bg-slate-50 transition-colors">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+<button class="w-12 h-12 bg-white rounded-xl shadow-lg flex items-center justify-center text-on-surface hover:bg-slate-50 transition-colors">
+<span class="material-symbols-outlined" data-icon="remove">remove</span>
+</button>
+<button class="w-12 h-12 bg-primary text-white rounded-xl shadow-lg flex items-center justify-center hover:brightness-110 transition-colors mt-2">
+<span class="material-symbols-outlined" data-icon="my_location" style="font-variation-settings: 'FILL' 1;">my_location</span>
+</button>
+</div>
+</div>
+</main>
+</div>
+<script>
+      var map = L.map('map');
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      var currentLocation = [14.80811, 120.91714];
+      var destination = [14.81425, 120.91158];
+
+      var busIcon = L.icon({
+        iconUrl: 'https://img.icons8.com/color/48/bus.png',
+        iconSize: [48, 48],
+        iconAnchor: [24, 48],
+        popupAnchor: [0, -48]
+      });
+
+      L.marker(currentLocation, {icon: busIcon}).addTo(map)
+        .bindPopup('Current Bus Location')
+        .openPopup();
+      L.marker(destination).addTo(map)
+        .bindPopup('Destination');
+
+      L.polyline([currentLocation, destination], {color: 'blue'}).addTo(map);
+      var bounds = L.latLngBounds([currentLocation, destination]);
+      map.fitBounds(bounds);
+    </script>
+</body></html>
