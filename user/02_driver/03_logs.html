@@ -1,11 +1,9 @@
 <!doctype html>
 
-<html lang="en">
+<html class="light" lang="en">
   <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>TrackFare Driver Profile</title>
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap"
       rel="stylesheet"
@@ -14,6 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
       rel="stylesheet"
     />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
@@ -90,10 +89,11 @@
           "wght" 400,
           "GRAD" 0,
           "opsz" 24;
+        vertical-align: middle;
       }
-      .glass-effect {
+      .glass-nav {
+        background: rgba(255, 255, 255, 0.8);
         backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
       }
     </style>
   </head>
@@ -126,14 +126,14 @@
               <span>Route</span>
             </a>
             <a
-              class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
+              class="flex items-center gap-3 px-5 py-3 rounded-r-full bg-blue-50 text-blue-700 border-r-4 border-blue-700 font-semibold transition"
               href="03_logs.html"
             >
               <span class="material-symbols-outlined">receipt_long</span>
               <span>Logs</span>
             </a>
             <a
-              class="flex items-center gap-3 px-5 py-3 rounded-r-full bg-blue-50 text-blue-700 border-r-4 border-blue-700 font-semibold transition"
+              class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
               href="04_profile.html"
             >
               <span class="material-symbols-outlined">person</span>
@@ -168,52 +168,135 @@
           </div>
         </div>
       </aside>
-
       <main class="ml-[260px] flex-1 min-h-screen bg-slate-100 p-10">
         <div class="max-w-full">
           <header class="mb-10">
             <h1
               class="text-4xl font-extrabold tracking-tight text-slate-900 font-headline"
             >
-              Profile
+              Passenger Logs
             </h1>
-            <p class="mt-2 text-sm text-slate-600">Driver account overview</p>
+            <p class="mt-2 text-sm text-slate-600">
+              Monitor passenger tap activity and fare status in real time.
+            </p>
           </header>
-
           <section
-            class="bg-white rounded-[1.5rem] shadow-sm border border-slate-200 overflow-hidden p-6"
+            class="bg-white rounded-[1.5rem] shadow-sm border border-slate-200 overflow-hidden"
           >
-            <h2 class="font-bold text-lg text-slate-900 mb-4">
-              Driver Information
-            </h2>
-            <div class="grid grid-cols-2 gap-4 text-sm text-slate-700">
+            <div
+              class="px-8 py-6 border-b border-slate-200 flex items-center justify-between"
+            >
               <div>
-                <p class="font-semibold text-slate-900">Driver Name</p>
-                <p class="mt-1">John Doe</p>
+                <p
+                  class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                >
+                  Logs
+                </p>
+                <h2 class="mt-2 text-2xl font-black text-slate-900">
+                  Passenger Activity
+                </h2>
               </div>
-              <div>
-                <p class="font-semibold text-slate-900">Email</p>
-                <p class="mt-1">j.doe@v-liner.ph</p>
-              </div>
-              <div>
-                <p class="font-semibold text-slate-900">Assigned Route</p>
-                <p class="mt-1">NLET Terminal → Balagtas Junction</p>
-              </div>
-              <div>
-                <p class="font-semibold text-slate-900">Bus Number</p>
-                <p class="mt-1">802</p>
+              <div
+                class="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600"
+              >
+                <span class="material-symbols-outlined">history</span>
+                Real-time updates
               </div>
             </div>
-
-            <div class="mt-6 flex justify-end">
-              <form action="/logout" method="post">
-                <button
-                  type="submit"
-                  class="px-4 py-2 rounded-lg bg-primary text-white font-bold"
-                >
-                  Logout
-                </button>
-              </form>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-left">
+                <thead class="bg-slate-50">
+                  <tr>
+                    <th
+                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Passenger
+                    </th>
+                    <th
+                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Status
+                    </th>
+                    <th
+                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Route
+                    </th>
+                    <th
+                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Fare
+                    </th>
+                    <th
+                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Timestamp
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                  <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
+                      Aaron
+                    </td>
+                    <td
+                      class="px-8 py-5 text-sm text-emerald-700 font-semibold"
+                    >
+                      Completed
+                    </td>
+                    <td class="px-8 py-5 text-sm text-slate-700">
+                      Bocaue → Marilao
+                    </td>
+                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
+                      ₱13
+                    </td>
+                    <td class="px-8 py-5 text-sm text-slate-500">8:30 AM</td>
+                  </tr>
+                  <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
+                      Maria
+                    </td>
+                    <td class="px-8 py-5 text-sm font-semibold text-blue-700">
+                      Active
+                    </td>
+                    <td class="px-8 py-5 text-sm text-slate-700">
+                      Marilao → ?
+                    </td>
+                    <td class="px-8 py-5 text-sm text-slate-700">Est. ₱13</td>
+                    <td class="px-8 py-5 text-sm text-slate-500">8:42 AM</td>
+                  </tr>
+                  <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
+                      Jin
+                    </td>
+                    <td
+                      class="px-8 py-5 text-sm text-emerald-700 font-semibold"
+                    >
+                      Completed
+                    </td>
+                    <td class="px-8 py-5 text-sm text-slate-700">
+                      NLET → Balagtas
+                    </td>
+                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
+                      ₱20
+                    </td>
+                    <td class="px-8 py-5 text-sm text-slate-500">9:05 AM</td>
+                  </tr>
+                  <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
+                      Angela
+                    </td>
+                    <td class="px-8 py-5 text-sm text-orange-600 font-semibold">
+                      Pending
+                    </td>
+                    <td class="px-8 py-5 text-sm text-slate-700">
+                      Marilao → Meycauayan
+                    </td>
+                    <td class="px-8 py-5 text-sm text-slate-700">Est. ₱18</td>
+                    <td class="px-8 py-5 text-sm text-slate-500">9:18 AM</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </section>
         </div>
