@@ -1,14 +1,24 @@
-<!DOCTYPE html>
+<!doctype html>
 
-<html lang="en"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>TrackFare - Routes</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<script id="tailwind-config">
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>TrackFare - Routes</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
         theme: {
@@ -19,9 +29,9 @@
               "surface-container": "#edeeef",
               "on-tertiary-container": "#ffd0b0",
               "surface-container-low": "#f3f4f5",
-              "tertiary": "#713700",
+              tertiary: "#713700",
               "secondary-fixed": "#cbe6ff",
-              "background": "#f8f9fa",
+              background: "#f8f9fa",
               "surface-tint": "#0056d2",
               "on-secondary-fixed-variant": "#30495d",
               "inverse-on-surface": "#f0f1f2",
@@ -35,19 +45,19 @@
               "outline-variant": "#c3c6d6",
               "inverse-primary": "#b2c5ff",
               "surface-variant": "#e1e3e4",
-              "primary": "#0040a1",
+              primary: "#0040a1",
               "inverse-surface": "#2e3132",
               "error-container": "#ffdad6",
               "primary-fixed-dim": "#b2c5ff",
               "on-surface": "#191c1d",
-              "secondary": "#486176",
+              secondary: "#486176",
               "on-primary-container": "#ccd8ff",
               "on-error-container": "#93000a",
               "surface-container-high": "#e7e8e9",
               "secondary-fixed-dim": "#afcae2",
               "on-tertiary-fixed": "#301400",
               "tertiary-fixed-dim": "#ffb783",
-              "surface": "#f8f9fa",
+              surface: "#f8f9fa",
               "tertiary-fixed": "#ffdcc5",
               "on-tertiary-fixed-variant": "#713700",
               "on-error": "#ffffff",
@@ -58,251 +68,208 @@
               "on-surface-variant": "#424654",
               "surface-dim": "#d9dadb",
               "primary-container": "#0056d2",
-              "error": "#ba1a1a",
-              "outline": "#737785",
-              "on-primary": "#ffffff"
+              error: "#ba1a1a",
+              outline: "#737785",
+              "on-primary": "#ffffff",
             },
             fontFamily: {
-              "headline": ["Manrope"],
-              "body": ["Inter"],
-              "label": ["Inter"]
+              headline: ["Manrope"],
+              body: ["Inter"],
+              label: ["Inter"],
             },
-            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+            borderRadius: {
+              DEFAULT: "0.125rem",
+              lg: "0.25rem",
+              xl: "0.5rem",
+              full: "0.75rem",
+            },
           },
         },
-      }
+      };
     </script>
-<style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        .route-line-nlex { background: linear-gradient(90deg, #0040a1 0%, #0056d2 100%); }
-        .route-line-macarthur { background: linear-gradient(90deg, #2e7d32 0%, #4caf50 100%); }
-        .route-line-santamaria { background: linear-gradient(90deg, #ef6c00 0%, #ff9800 100%); }
-        body { -webkit-tap-highlight-color: transparent; }
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings:
+          "FILL" 0,
+          "wght" 400,
+          "GRAD" 0,
+          "opsz" 24;
+      }
+      body {
+        margin: 0;
+        min-height: max(884px, 100dvh);
+        display: flex;
+        justify-content: center;
+        background: #f8f9fa;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #app-shell {
+        width: min(100%, 420px);
+        min-height: 100dvh;
+        position: relative;
+      }
     </style>
-<style>
-    body {
-      min-height: max(884px, 100dvh);
-    }
-  </style>
-</head>
-<body class="bg-background text-on-surface font-body selection:bg-primary-fixed selection:text-on-primary-fixed">
-<!-- TopAppBar -->
-<header class="sticky top-0 z-50 w-full bg-surface/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm shadow-blue-900/5 flex items-center px-4 h-16 w-full">
-<div class="flex items-center justify-between w-full">
-<div class="flex items-center gap-4">
-<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:scale-95 duration-200">
-<span class="material-symbols-outlined text-[#0040a1]">arrow_back</span>
-</button>
-<h1 class="font-manrope font-bold text-xl tracking-tight text-[#0040a1]">Routes</h1>
-</div>
-<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:scale-95 duration-200">
-<span class="material-symbols-outlined text-slate-500">notifications</span>
-</button>
-</div>
-</header>
-<main class="max-w-3xl mx-auto px-4 pt-6 pb-32">
-<!-- Search/Filter Area (Contextual Addition) -->
-<div class="mb-8 p-1 bg-surface-container-low rounded-xl flex items-center">
-<div class="flex-1 flex items-center px-4 py-3 gap-3">
-<span class="material-symbols-outlined text-outline">search</span>
-<span class="text-on-surface-variant font-medium">Search destinations in Bulacan...</span>
-</div>
-</div>
-<section class="space-y-4">
-<!-- Route Card 1: Victory Liner NLEX -->
-<article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-outline-variant/10 group transition-all duration-300 hover:shadow-md">
-<div class="flex justify-between items-start mb-3">
-<div>
-<h2 class="font-headline font-bold text-on-surface text-lg leading-tight">Victory Liner – NLEX Route</h2>
-<div class="flex items-center gap-2 mt-1">
-<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[10px] font-bold tracking-wider uppercase">NLEX Express</span>
-<span class="w-1.5 h-1.5 rounded-full bg-tertiary-container"></span>
-<span class="text-label text-xs text-on-surface-variant font-medium">Medium Load</span>
-</div>
-</div>
-<div class="text-right">
-<p class="font-headline font-extrabold text-primary text-xl">20–25 mins</p>
-<p class="text-label text-[10px] font-semibold text-outline uppercase tracking-tighter">Est. Time</p>
-</div>
-</div>
-<div class="flex items-center gap-3 py-3 px-1">
-<div class="flex flex-col items-center gap-1">
-<span class="material-symbols-outlined text-primary text-sm">location_on</span>
-<div class="w-px h-4 border-l border-dashed border-outline-variant"></div>
-<span class="material-symbols-outlined text-outline text-sm">adjust</span>
-</div>
-<div class="flex-1">
-<p class="font-headline font-bold text-on-surface text-sm">NLET Terminal</p>
-<div class="h-4"></div>
-<p class="font-headline font-bold text-on-surface text-sm">Marilao Exit</p>
-</div>
-</div>
-<!-- Mini Map Placeholder -->
-<div class="relative w-full h-[60px] bg-surface-container-low rounded-lg my-3 overflow-hidden">
-<div class="absolute inset-0 opacity-20" data-alt="Subtle grid pattern representing a map base" style="background-image: radial-gradient(#0040a1 0.5px, transparent 0.5px); background-size: 8px 8px;"></div>
-<div class="absolute top-1/2 left-4 right-4 h-1 route-line-nlex rounded-full -translate-y-1/2"></div>
-<div class="absolute top-1/2 left-4 w-3 h-3 bg-white border-2 border-primary rounded-full -translate-y-1/2"></div>
-<div class="absolute top-1/2 right-4 w-3 h-3 bg-primary rounded-full -translate-y-1/2"></div>
-</div>
-<div class="flex justify-end mt-4">
-<button class="h-12 px-8 rounded-xl bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-transform flex items-center gap-2">
-<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">near_me</span>
-                        Track
-                    </button>
-</div>
-</article>
-<!-- Route Card 2: MacArthur Highway Local -->
-<article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-outline-variant/10 group transition-all duration-300 hover:shadow-md">
-<div class="flex justify-between items-start mb-3">
-<div>
-<h2 class="font-headline font-bold text-on-surface text-lg leading-tight">First North Luzon – MacArthur</h2>
-<div class="flex items-center gap-2 mt-1">
-<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold tracking-wider uppercase">MacArthur Highway</span>
-<span class="w-1.5 h-1.5 rounded-full bg-on-secondary-container"></span>
-<span class="text-label text-xs text-on-surface-variant font-medium">Low Load</span>
-</div>
-</div>
-<div class="text-right">
-<p class="font-headline font-extrabold text-primary text-xl">20 mins</p>
-<p class="text-label text-[10px] font-semibold text-outline uppercase tracking-tighter">Est. Time</p>
-</div>
-</div>
-<div class="flex items-center gap-3 py-3 px-1">
-<div class="flex flex-col items-center gap-1">
-<span class="material-symbols-outlined text-primary text-sm">location_on</span>
-<div class="w-px h-4 border-l border-dashed border-outline-variant"></div>
-<span class="material-symbols-outlined text-outline text-sm">adjust</span>
-</div>
-<div class="flex-1">
-<p class="font-headline font-bold text-on-surface text-sm">Bocaue Public Market</p>
-<div class="h-4"></div>
-<p class="font-headline font-bold text-on-surface text-sm">Balagtas Junction</p>
-</div>
-</div>
-<!-- Mini Map Placeholder -->
-<div class="relative w-full h-[60px] bg-surface-container-low rounded-lg my-3 overflow-hidden">
-<div class="absolute inset-0 opacity-20" data-alt="Subtle grid pattern representing a map base" style="background-image: radial-gradient(#2e7d32 0.5px, transparent 0.5px); background-size: 8px 8px;"></div>
-<div class="absolute top-1/2 left-4 right-4 h-1 route-line-macarthur rounded-full -translate-y-1/2"></div>
-<div class="absolute top-1/2 left-4 w-3 h-3 bg-white border-2 border-[#2e7d32] rounded-full -translate-y-1/2"></div>
-<div class="absolute top-1/2 left-1/3 w-2 h-2 bg-[#2e7d32] rounded-full -translate-y-1/2"></div>
-<div class="absolute top-1/2 right-4 w-3 h-3 bg-[#2e7d32] rounded-full -translate-y-1/2"></div>
-</div>
-<div class="flex justify-end mt-4">
-<button class="h-12 px-8 rounded-xl bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-transform flex items-center gap-2">
-<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">near_me</span>
-                        Track
-                    </button>
-</div>
-</article>
-<!-- Route Card 3: Santa Maria Express -->
-<article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-outline-variant/10 group transition-all duration-300 hover:shadow-md">
-<div class="flex justify-between items-start mb-3">
-<div>
-<h2 class="font-headline font-bold text-on-surface text-lg leading-tight">Del Carmen – Sta. Maria Line</h2>
-<div class="flex items-center gap-2 mt-1">
-<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant text-[10px] font-bold tracking-wider uppercase">Santa Maria</span>
-<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
-<span class="text-label text-xs text-on-surface-variant font-medium">High Load</span>
-</div>
-</div>
-<div class="text-right">
-<p class="font-headline font-extrabold text-primary text-xl">30–40 mins</p>
-<p class="text-label text-[10px] font-semibold text-outline uppercase tracking-tighter">Est. Time</p>
-</div>
-</div>
-<div class="flex items-center gap-3 py-3 px-1">
-<div class="flex flex-col items-center gap-1">
-<span class="material-symbols-outlined text-primary text-sm">location_on</span>
-<div class="w-px h-4 border-l border-dashed border-outline-variant"></div>
-<span class="material-symbols-outlined text-outline text-sm">adjust</span>
-</div>
-<div class="flex-1">
-<p class="font-headline font-bold text-on-surface text-sm">Caypombo Terminal</p>
-<div class="h-4"></div>
-<p class="font-headline font-bold text-on-surface text-sm">Bocaue Exit</p>
-</div>
-</div>
-<!-- Mini Map Placeholder -->
-<div class="relative w-full h-[60px] bg-surface-container-low rounded-lg my-3 overflow-hidden">
-<div class="absolute inset-0 opacity-20" data-alt="Subtle grid pattern representing a map base" style="background-image: radial-gradient(#ef6c00 0.5px, transparent 0.5px); background-size: 8px 8px;"></div>
-<div class="absolute top-1/2 left-4 right-4 h-1 route-line-santamaria rounded-full -translate-y-1/2"></div>
-<div class="absolute top-1/2 left-4 w-3 h-3 bg-white border-2 border-[#ef6c00] rounded-full -translate-y-1/2"></div>
-<div class="absolute top-1/2 right-4 w-3 h-3 bg-[#ef6c00] rounded-full -translate-y-1/2"></div>
-</div>
-<div class="flex justify-end mt-4">
-<button class="h-12 px-8 rounded-xl bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-transform flex items-center gap-2">
-<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">near_me</span>
-                        Track
-                    </button>
-</div>
-</article>
-<!-- Route Card 4: Toll Exit Loop -->
-<article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-outline-variant/10 group transition-all duration-300 hover:shadow-md">
-<div class="flex justify-between items-start mb-3">
-<div>
-<h2 class="font-headline font-bold text-on-surface text-lg leading-tight">Baliwag Transit – Toll Loop</h2>
-<div class="flex items-center gap-2 mt-1">
-<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[10px] font-bold tracking-wider uppercase">NLEX Outer</span>
-<span class="w-1.5 h-1.5 rounded-full bg-on-secondary-container"></span>
-<span class="text-label text-xs text-on-surface-variant font-medium">Low Load</span>
-</div>
-</div>
-<div class="text-right">
-<p class="font-headline font-extrabold text-primary text-xl">30–40 mins</p>
-<p class="text-label text-[10px] font-semibold text-outline uppercase tracking-tighter">Est. Time</p>
-</div>
-</div>
-<div class="flex items-center gap-3 py-3 px-1">
-<div class="flex flex-col items-center gap-1">
-<span class="material-symbols-outlined text-primary text-sm">location_on</span>
-<div class="w-px h-4 border-l border-dashed border-outline-variant"></div>
-<span class="material-symbols-outlined text-outline text-sm">adjust</span>
-</div>
-<div class="flex-1">
-<p class="font-headline font-bold text-on-surface text-sm">Marilao Exit</p>
-<div class="h-4"></div>
-<p class="font-headline font-bold text-on-surface text-sm">Meycauayan Toll Exit</p>
-</div>
-</div>
-<!-- Mini Map Placeholder -->
-<div class="relative w-full h-[60px] bg-surface-container-low rounded-lg my-3 overflow-hidden">
-<div class="absolute inset-0 opacity-20" data-alt="Subtle grid pattern representing a map base" style="background-image: radial-gradient(#0040a1 0.5px, transparent 0.5px); background-size: 8px 8px;"></div>
-<div class="absolute top-1/2 left-4 right-4 h-1 route-line-nlex rounded-full -translate-y-1/2"></div>
-<div class="absolute top-1/2 left-4 w-3 h-3 bg-white border-2 border-primary rounded-full -translate-y-1/2"></div>
-<div class="absolute top-1/2 right-4 w-3 h-3 bg-primary rounded-full -translate-y-1/2"></div>
-</div>
-<div class="flex justify-end mt-4">
-<button class="h-12 px-8 rounded-xl bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-transform flex items-center gap-2">
-<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">near_me</span>
-                        Track
-                    </button>
-</div>
-</article>
-</section>
-</main>
-<!-- BottomNavBar -->
-<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-surface/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-200/50 dark:border-slate-800/50 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] z-50 rounded-t-3xl">
-<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 p-2 hover:text-[#0040a1] dark:hover:text-blue-300 active:scale-90 transition-transform duration-150" href="#">
-<span class="material-symbols-outlined">home</span>
-<span class="font-inter text-[10px] font-medium uppercase tracking-widest mt-1">Home</span>
-</a>
-<a class="flex flex-col items-center justify-center bg-[#0056d2] text-white rounded-2xl p-2 shadow-lg shadow-blue-500/30 active:scale-90 transition-transform duration-150" href="#">
-<span class="material-symbols-outlined">directions_bus</span>
-<span class="font-inter text-[10px] font-medium uppercase tracking-widest mt-1">Routes</span>
-</a>
-<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 p-2 hover:text-[#0040a1] dark:hover:text-blue-300 active:scale-90 transition-transform duration-150" href="#">
-<span class="material-symbols-outlined">qr_code_scanner</span>
-<span class="font-inter text-[10px] font-medium uppercase tracking-widest mt-1">Scan</span>
-</a>
-<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 p-2 hover:text-[#0040a1] dark:hover:text-blue-300 active:scale-90 transition-transform duration-150" href="#">
-<span class="material-symbols-outlined">history</span>
-<span class="font-inter text-[10px] font-medium uppercase tracking-widest mt-1">History</span>
-</a>
-<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 p-2 hover:text-[#0040a1] dark:hover:text-blue-300 active:scale-90 transition-transform duration-150" href="#">
-<span class="material-symbols-outlined">person</span>
-<span class="font-inter text-[10px] font-medium uppercase tracking-widest mt-1">Profile</span>
-</a>
-</nav>
-</body></html>
+  </head>
+  <body
+    class="bg-background text-on-surface font-body selection:bg-primary-fixed selection:text-on-primary-fixed"
+  >
+    <div id="app-shell" class="w-full">
+      <!-- TopAppBar -->
+      <header
+        class="fixed inset-x-0 top-0 z-50 w-full max-w-[420px] mx-auto bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200/80"
+      >
+        <div class="flex items-center justify-between px-4 h-16">
+          <div>
+            <p
+              class="text-xs uppercase tracking-[0.25em] text-on-surface-variant"
+            >
+              TrackFare
+            </p>
+            <h1
+              class="font-manrope font-bold text-xl tracking-tight text-[#0040a1]"
+            >
+              Routes
+            </h1>
+          </div>
+          <img
+            src="../../images/pfp.png"
+            alt="Profile photo"
+            class="h-11 w-11 rounded-2xl object-cover border border-slate-200"
+          />
+        </div>
+      </header>
+      <main class="pt-20 pb-28 px-4 min-h-screen space-y-6">
+        <section
+          class="rounded-[1.75rem] bg-surface-container-lowest border border-outline-variant p-5 shadow-sm"
+        >
+          <p class="text-sm font-semibold text-on-surface-variant">
+            Route information
+          </p>
+          <h2 class="mt-3 text-2xl font-bold text-on-surface">
+            Bocaue → Marilao → Meycauayan
+          </h2>
+          <div
+            class="mt-6 rounded-[1.75rem] bg-white p-4 border border-surface-container-high shadow-sm"
+          >
+            <p
+              class="text-[11px] uppercase tracking-[0.2em] text-on-surface-variant"
+            >
+              Stops
+            </p>
+            <div class="mt-4 space-y-3 text-sm font-semibold text-on-surface">
+              <div
+                class="flex items-center justify-between rounded-3xl bg-surface-container-low p-3"
+              >
+                <span>Bocaue</span>
+                <span
+                  class="inline-flex h-2.5 w-2.5 rounded-full bg-primary"
+                ></span>
+              </div>
+              <div
+                class="flex items-center justify-between rounded-3xl bg-surface-container-low p-3"
+              >
+                <span>Marilao</span>
+                <span
+                  class="inline-flex h-2.5 w-2.5 rounded-full bg-primary"
+                ></span>
+              </div>
+              <div
+                class="flex items-center justify-between rounded-3xl bg-surface-container-low p-3"
+              >
+                <span>Meycauayan</span>
+                <span
+                  class="inline-flex h-2.5 w-2.5 rounded-full bg-primary"
+                ></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="rounded-3xl bg-surface-container-lowest border border-outline-variant p-5 shadow-sm"
+        >
+          <h2 class="text-lg font-bold text-on-surface">Fare matrix</h2>
+          <p class="mt-3 text-sm text-on-surface-variant">
+            Tap-in at your boarding stop and tap-out at your destination. The
+            fare is calculated based on this stop-to-stop pricing.
+          </p>
+          <div class="mt-5 grid gap-3 text-sm">
+            <div
+              class="rounded-3xl bg-white border border-surface-container-high p-4"
+            >
+              <p class="font-semibold text-on-surface">Bocaue → Marilao</p>
+              <p class="mt-1 text-on-surface-variant">₱25</p>
+            </div>
+            <div
+              class="rounded-3xl bg-white border border-surface-container-high p-4"
+            >
+              <p class="font-semibold text-on-surface">Marilao → Meycauayan</p>
+              <p class="mt-1 text-on-surface-variant">₱20</p>
+            </div>
+            <div
+              class="rounded-3xl bg-white border border-surface-container-high p-4"
+            >
+              <p class="font-semibold text-on-surface">Bocaue → Meycauayan</p>
+              <p class="mt-1 text-on-surface-variant">₱40</p>
+            </div>
+          </div>
+        </section>
+      </main>
+      <!-- BottomNavBar -->
+      <nav
+        class="fixed bottom-0 left-0 w-full flex justify-around items-center px-2 pb-safe h-20 bg-white/95 backdrop-blur-md rounded-t-3xl z-50 border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+      >
+        <a
+          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
+          href="01_home.html"
+        >
+          <span class="material-symbols-outlined">home</span>
+          <span
+            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
+            >Home</span
+          >
+        </a>
+        <a
+          class="flex flex-col items-center justify-center text-white bg-primary rounded-3xl px-4 py-2 shadow-lg"
+          href="02_routes.html"
+        >
+          <span class="material-symbols-outlined">directions_bus</span>
+          <span
+            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
+            >Routes</span
+          >
+        </a>
+        <a
+          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
+          href="03_wallet.html"
+        >
+          <span class="material-symbols-outlined">account_balance_wallet</span>
+          <span
+            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
+            >Wallet</span
+          >
+        </a>
+        <a
+          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
+          href="04_trips.html"
+        >
+          <span class="material-symbols-outlined">history</span>
+          <span
+            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
+            >Trips</span
+          >
+        </a>
+        <a
+          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
+          href="05_profile.html"
+        >
+          <span class="material-symbols-outlined">person</span>
+          <span
+            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
+            >Profile</span
+          >
+        </a>
+      </nav>
+    </div>
+  </body>
+</html>
