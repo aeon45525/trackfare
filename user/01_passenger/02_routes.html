@@ -7,16 +7,18 @@
     <title>TrackFare - Routes</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <link
-      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
       rel="stylesheet"
     />
     <link
-      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
       rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.10.0/dist/leaflet.css"
+      integrity="sha256-b48gk2+23GPlCGSO44BXlrwYMy9UFj+sZh1QmP4lw5w="
+      crossorigin=""
     />
     <script id="tailwind-config">
       tailwind.config = {
@@ -108,6 +110,61 @@
         min-height: 100dvh;
         position: relative;
       }
+      .map-card {
+        display: grid;
+        gap: 1rem;
+        background: #ffffff;
+        border: 1px solid #e1e3e4;
+        border-radius: 1.75rem;
+        padding: 1.25rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+      }
+      #map {
+        width: 100%;
+        height: 300px;
+        border-radius: 1.25rem;
+        overflow: hidden;
+        position: relative;
+        background: #e8eef4;
+      }
+      /* Fallback iframe map fills container */
+      #map-iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        border-radius: 1.25rem;
+        display: block;
+      }
+      /* Leaflet container */
+      .leaflet-container {
+        width: 100%;
+        height: 100%;
+        border-radius: inherit;
+      }
+      /* Bus pulse marker */
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+        100% {
+          transform: scale(2.4);
+          opacity: 0;
+        }
+      }
+      .bus-pulse-outer {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: rgba(0, 64, 161, 0.4);
+        animation: pulse-ring 1.6s ease-out infinite;
+      }
+      .bus-marker-wrap {
+        position: relative;
+        width: 20px;
+        height: 20px;
+      }
     </style>
   </head>
   <body
@@ -138,7 +195,9 @@
           />
         </div>
       </header>
+
       <main class="pt-20 pb-28 px-4 min-h-screen space-y-6">
+        <!-- Route Info -->
         <section
           class="rounded-[1.75rem] bg-surface-container-lowest border border-outline-variant p-5 shadow-sm"
         >
@@ -185,6 +244,28 @@
           </div>
         </section>
 
+        <!-- Map Card -->
+        <section class="map-card">
+          <div>
+            <p class="text-sm font-semibold text-on-surface-variant">
+              Live Bus Location
+            </p>
+            <p class="mt-2 text-sm text-on-surface-variant">
+              View your assigned bus in real time.
+            </p>
+          </div>
+          <!-- Map container: Leaflet renders here; iframe is the fallback -->
+          <div id="map">
+            <iframe
+              id="map-iframe"
+              src="https://www.openstreetmap.org/export/embed.html?bbox=120.9500%2C14.7800%2C121.0800%2C14.8900&layer=mapnik&marker=14.8400%2C121.0167"
+              title="Route map"
+              loading="lazy"
+            ></iframe>
+          </div>
+        </section>
+
+        <!-- Fare Matrix -->
         <section
           class="rounded-3xl bg-surface-container-lowest border border-outline-variant p-5 shadow-sm"
         >
@@ -215,6 +296,7 @@
           </div>
         </section>
       </main>
+
       <!-- BottomNavBar -->
       <nav
         class="fixed bottom-0 left-0 w-full flex justify-around items-center px-2 pb-safe h-20 bg-white/95 backdrop-blur-md rounded-t-3xl z-50 border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
@@ -271,5 +353,107 @@
         </a>
       </nav>
     </div>
+
+    <!-- Leaflet JS -->
+    <script>
+      src = "https://unpkg.com/leaflet@1.10.0/dist/leaflet.js";
+      integrity = "sha256-gZOGcR9PGyS3zT8aqfD7VG4HFSYx4M0Qv2eMCyMaC5k=";
+      crossorigin = "";
+
+      // Route stops coordinates
+      const stops = [
+        { name: "Bocaue", latlng: [14.7983, 120.9742] },
+        { name: "Marilao", latlng: [14.757, 120.9588] }, // corrected approx
+        { name: "Meycauayan", latlng: [14.735, 120.9604] },
+      ];
+
+      // Simulated bus position (between Bocaue and Marilao)
+      const busPosition = [14.778, 120.966];
+
+      function initLeaflet() {
+        const iframe = document.getElementById("map-iframe");
+        const mapEl = document.getElementById("map");
+
+        // Hide the fallback iframe
+        if (iframe) iframe.style.display = "none";
+
+        const map = L.map(mapEl, {
+          scrollWheelZoom: false,
+          attributionControl: false,
+          zoomControl: true,
+        }).setView([14.77, 120.965], 13);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+        }).addTo(map);
+
+        // Draw route polyline
+        const routeCoords = stops.map((s) => s.latlng);
+        L.polyline(routeCoords, {
+          color: "#0040a1",
+          weight: 4,
+          opacity: 0.75,
+          dashArray: "8 6",
+        }).addTo(map);
+
+        // Stop markers
+        stops.forEach((stop, i) => {
+          const isFirst = i === 0;
+          const isLast = i === stops.length - 1;
+          const color = isFirst ? "#22c55e" : isLast ? "#ef4444" : "#0040a1";
+
+          L.circleMarker(stop.latlng, {
+            radius: 8,
+            fillColor: color,
+            color: "#ffffff",
+            weight: 2,
+            fillOpacity: 1,
+          })
+            .addTo(map)
+            .bindPopup(`<b>${stop.name}</b>`);
+        });
+
+        // Animated bus marker using a DivIcon
+        const busIcon = L.divIcon({
+          className: "",
+          html: `
+            <div style="position:relative;width:28px;height:28px;">
+              <div style="
+                position:absolute;inset:0;border-radius:50%;
+                background:rgba(0,64,161,0.3);
+                animation:pulse-ring 1.6s ease-out infinite;
+              "></div>
+              <div style="
+                position:absolute;inset:4px;border-radius:50%;
+                background:#0040a1;border:2px solid #fff;
+                display:flex;align-items:center;justify-content:center;
+                font-size:10px;color:#fff;
+              ">🚌</div>
+            </div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
+
+        L.marker(busPosition, { icon: busIcon })
+          .addTo(map)
+          .bindPopup("<b>Your Bus</b><br>Currently en route")
+          .openPopup();
+
+        // Fit map to show full route
+        map.fitBounds(L.latLngBounds(routeCoords).pad(0.2));
+      }
+
+      // Try Leaflet first; fall back to iframe if Leaflet failed to load
+      if (typeof L !== "undefined") {
+        document.addEventListener("DOMContentLoaded", initLeaflet);
+      } else {
+        window.addEventListener("load", function () {
+          if (typeof L !== "undefined") {
+            initLeaflet();
+          }
+          // else: iframe fallback is already visible
+        });
+      }
+    </script>
   </body>
 </html>
