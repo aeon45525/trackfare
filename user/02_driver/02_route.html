@@ -17,6 +17,13 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
       rel="stylesheet"
     />
+    <!-- Leaflet CSS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.10.0/dist/leaflet.css"
+      integrity="sha256-b48gk2+23GPlCGSO44BXlrwYMy9UFj+sZh1QmP4lw5w="
+      crossorigin=""
+    />
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script id="tailwind-config">
       tailwind.config = {
@@ -26,8 +33,7 @@
             colors: {
               "secondary-fixed-dim": "#afcae2",
               "tertiary-fixed-dim": "#ffb783",
-              "surface-container": "#edeeef",
-              error: "#ba1a1a",
+            
               "on-primary-fixed-variant": "#0040a1",
               background: "#f8f9fa",
               "on-secondary-container": "#4e677c",
@@ -65,9 +71,6 @@
               "on-tertiary-fixed": "#301400",
               "on-tertiary-fixed-variant": "#713700",
               "tertiary-fixed": "#ffdcc5",
-              "surface-container-highest": "#e1e3e4",
-              "secondary-container": "#cbe6ff",
-              "on-surface-variant": "#424654",
               "on-secondary": "#ffffff",
               "tertiary-container": "#944b00",
               "error-container": "#ffdad6",
@@ -98,6 +101,90 @@
       }
       .tonal-layering-no-lines {
         border: none !important;
+      }
+      /* Route map */
+      #route-map {
+        width: 100%;
+        height: 440px;
+        min-height: 320px;
+        border-radius: 1rem;
+        overflow: hidden;
+        position: relative;
+      }
+      #route-map iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        border-radius: inherit;
+        display: block;
+      }
+      .route-progress .current {
+        border-color: #bfdbfe;
+        background: #fff;
+      }
+      /* Progress bar styles */
+      .progress-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .progress-segment {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 88px;
+      }
+      .progress-segment .dot {
+        width: 26px;
+        height: 26px;
+        border-radius: 9999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+      }
+      .progress-segment.completed .dot {
+        background: #10b981;
+        color: #fff;
+      }
+      .progress-segment.current .dot {
+        background: #0040a1;
+        color: #fff;
+      }
+      .progress-segment.upcoming .dot {
+        background: #fff;
+        border: 2px solid #cbd5e1;
+        color: #6b7280;
+      }
+      .progress-connector {
+        height: 6px;
+        border-radius: 9999px;
+        flex: 1;
+      }
+      .progress-connector.completed {
+        background: linear-gradient(90deg, #10b981, #60a5fa);
+      }
+      .progress-connector.upcoming {
+        background: #e6eef8;
+      }
+      .progress-label {
+        margin-top: 8px;
+        font-size: 0.85rem;
+        color: #374151;
+        text-align: center;
+      }
+      /* Current stop card emphasis */
+      .current-card {
+        border: 2px solid #0040a1;
+      }
+      .badge-active {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 9999px;
+        background: #0040a1;
+        color: #fff;
+        font-weight: 700;
+        font-size: 0.75rem;
       }
     </style>
   </head>
@@ -185,48 +272,30 @@
             </p>
           </header>
           <div class="grid grid-cols-12 gap-8">
-            <section class="col-span-12 lg:col-span-6 space-y-6">
+            <!-- Live Map (full width) -->
+            <section class="col-span-12">
               <article
-                class="rounded-[1.5rem] bg-white p-8 shadow-sm border border-slate-200"
+                class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200"
               >
                 <p
-                  class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                  class="text-xs uppercase tracking-[0.25em] text-slate-500 font-semibold"
                 >
-                  Current Stop
+                  Live Map
                 </p>
-                <h2 class="mt-3 text-3xl font-black text-slate-900">Marilao</h2>
-                <p class="mt-2 text-sm text-slate-600">
-                  Current boarding point on this route.
-                </p>
-              </article>
-              <article
-                class="rounded-[1.5rem] bg-white p-8 shadow-sm border border-slate-200"
-              >
-                <p
-                  class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-                >
-                  Stop Selector
-                </p>
-                <div class="mt-6 space-y-4">
-                  <label class="block text-sm font-semibold text-slate-700"
-                    >Choose next stop</label
-                  >
-                  <select
-                    class="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  >
-                    <option>Bocaue</option>
-                    <option selected>Marilao</option>
-                    <option>Meycauayan</option>
-                  </select>
-                  <button
-                    class="w-full rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition"
-                  >
-                    Confirm Stop Update
-                  </button>
+                <div class="mt-4">
+                  <div id="route-map">
+                    <iframe
+                      id="route-map-iframe"
+                      src="https://www.openstreetmap.org/export/embed.html?bbox=120.9500%2C14.7800%2C121.0800%2C14.8900&layer=mapnik&marker=14.8400%2C121.0167"
+                      title="Route map"
+                      loading="lazy"
+                    ></iframe>
+                  </div>
                 </div>
               </article>
             </section>
-            <section class="col-span-12 lg:col-span-6 space-y-6">
+            <!-- Current Stop removed: linear route progression enforced -->
+            <section class="col-span-12 lg:col-span-3 space-y-6">
               <article
                 class="rounded-[1.5rem] bg-white p-8 shadow-sm border border-slate-200"
               >
@@ -241,51 +310,52 @@
                       Bocaue → Marilao → Meycauayan
                     </h2>
                   </div>
-                  <span
-                    class="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-700"
-                    >Simulated</span
-                  >
                 </div>
-                <div class="mt-8 space-y-4">
+                <div class="mt-6">
                   <div
-                    class="rounded-3xl bg-slate-50 p-5 flex items-center justify-between"
+                    class="progress-bar"
+                    role="list"
+                    aria-label="Route progress"
                   >
-                    <div>
-                      <p class="text-sm font-semibold text-slate-500">Bocaue</p>
-                      <p class="text-xs text-slate-400">Completed</p>
+                    <div class="progress-segment completed" role="listitem">
+                      <div class="dot">✔</div>
+                      <div class="progress-label">Bocaue</div>
                     </div>
-                    <span
-                      class="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
-                      >Done</span
-                    >
+                    <div class="progress-connector completed" aria-hidden></div>
+                    <div class="progress-segment current" role="listitem">
+                      <div class="dot">●</div>
+                      <div class="progress-label">Marilao</div>
+                    </div>
+                    <div class="progress-connector upcoming" aria-hidden></div>
+                    <div class="progress-segment upcoming" role="listitem">
+                      <div class="dot">○</div>
+                      <div class="progress-label">Meycauayan</div>
+                    </div>
                   </div>
-                  <div
-                    class="rounded-3xl bg-white p-5 border border-blue-100 shadow-sm flex items-center justify-between"
-                  >
-                    <div>
-                      <p class="text-sm font-semibold text-slate-900">
-                        Marilao
-                      </p>
-                      <p class="text-xs text-blue-700">Current stop</p>
-                    </div>
-                    <span
-                      class="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
-                      >Now</span
-                    >
+                </div>
+              </article>
+            </section>
+            <section class="col-span-12 lg:col-span-3 space-y-6">
+              <article
+                class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200"
+              >
+                <p
+                  class="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold"
+                >
+                  Trip Metrics
+                </p>
+                <div class="mt-3 text-sm text-slate-700 space-y-2">
+                  <div class="flex justify-between">
+                    <span>Trip Duration</span><strong>1h 20m</strong>
                   </div>
-                  <div
-                    class="rounded-3xl bg-slate-50 p-5 flex items-center justify-between"
-                  >
-                    <div>
-                      <p class="text-sm font-semibold text-slate-500">
-                        Meycauayan
-                      </p>
-                      <p class="text-xs text-slate-400">Next stop</p>
-                    </div>
-                    <span
-                      class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600"
-                      >Upcoming</span
-                    >
+                  <div class="flex justify-between">
+                    <span>Distance Traveled</span><strong>42.5 km</strong>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Average Speed</span><strong>32 km/h</strong>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Est. Arrival</span><strong>12:40 PM</strong>
                   </div>
                 </div>
               </article>
@@ -294,5 +364,71 @@
         </div>
       </main>
     </div>
+    <!-- Leaflet JS and initialization -->
+    <script
+      src="https://unpkg.com/leaflet@1.10.0/dist/leaflet.js"
+      integrity="sha256-gZOGcR9PGyS3zT8aqfD7VG4HFSYx4M0Qv2eMCyMaC5k="
+      crossorigin=""
+    ></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const stops = [
+          { name: "Bocaue", latlng: [14.7983, 120.9742] },
+          { name: "Marilao", latlng: [14.757, 120.9588] },
+          { name: "Meycauayan", latlng: [14.735, 120.9604] },
+        ];
+
+        try {
+          const iframe = document.getElementById("route-map-iframe");
+          if (iframe) iframe.style.display = "none";
+
+          const mapEl = document.getElementById("route-map");
+          if (!mapEl) return;
+
+          const map = L.map(mapEl, {
+            attributionControl: false,
+            zoomControl: true,
+          }).setView([14.77, 120.965], 12);
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+          }).addTo(map);
+
+          const routeCoords = stops.map((s) => s.latlng);
+          L.polyline(routeCoords, {
+            color: "#0040a1",
+            weight: 4,
+            opacity: 0.85,
+          }).addTo(map);
+
+          stops.forEach((s, i) => {
+            L.circleMarker(s.latlng, {
+              radius: 8,
+              fillColor: i === 1 ? "#0040a1" : "#22c55e",
+              color: "#fff",
+              weight: 2,
+              fillOpacity: 1,
+            })
+              .addTo(map)
+              .bindPopup("<b>" + s.name + "</b>");
+          });
+
+          const busIcon = L.divIcon({
+            className: "",
+            html: '<div style="width:28px;height:28px;border-radius:14px;background:#0040a1;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px">🚌</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+          });
+          L.marker([14.778, 120.966], { icon: busIcon })
+            .addTo(map)
+            .bindPopup("<b>Your Bus</b>");
+
+          map.fitBounds(L.latLngBounds(routeCoords).pad(0.2));
+        } catch (e) {
+          console.warn("Route map init failed", e);
+          const iframe = document.getElementById("route-map-iframe");
+          if (iframe) iframe.style.display = "block";
+        }
+      });
+    </script>
   </body>
 </html>

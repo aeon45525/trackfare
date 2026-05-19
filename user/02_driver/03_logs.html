@@ -95,6 +95,18 @@
         background: rgba(255, 255, 255, 0.8);
         backdrop-filter: blur(20px);
       }
+      .pulse-ring {
+        animation: pulseRing 2.5s ease-out infinite;
+      }
+      @keyframes pulseRing {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
+        }
+        50% {
+          box-shadow: 0 0 0 16px rgba(16, 185, 129, 0);
+        }
+      }
     </style>
   </head>
   <body class="bg-slate-100 font-body text-slate-900 antialiased">
@@ -177,14 +189,15 @@
               Passenger Logs
             </h1>
             <p class="mt-2 text-sm text-slate-600">
-              Monitor passenger tap activity and fare status in real time.
+              Monitor onboard passengers and completed trips in a clean
+              dashboard view.
             </p>
           </header>
           <section
             class="bg-white rounded-[1.5rem] shadow-sm border border-slate-200 overflow-hidden"
           >
             <div
-              class="px-8 py-6 border-b border-slate-200 flex items-center justify-between"
+              class="px-8 py-6 border-b border-slate-200 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
             >
               <div>
                 <p
@@ -193,110 +206,347 @@
                   Logs
                 </p>
                 <h2 class="mt-2 text-2xl font-black text-slate-900">
-                  Passenger Activity
+                  Passenger Monitor
                 </h2>
               </div>
-              <div
-                class="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600"
-              >
-                <span class="material-symbols-outlined">history</span>
-                Real-time updates
+              <div class="flex flex-wrap items-center gap-3">
+                <span
+                  class="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-700 pulse-ring"
+                >
+                  <span
+                    class="w-2.5 h-2.5 rounded-full bg-emerald-600 shadow-sm"
+                  ></span>
+                  LIVE
+                </span>
+                <span
+                  class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600"
+                >
+                  <span class="material-symbols-outlined">insights</span>
+                  Bus monitoring view
+                </span>
               </div>
             </div>
-            <div class="overflow-x-auto">
-              <table class="min-w-full text-left">
-                <thead class="bg-slate-50">
-                  <tr>
-                    <th
-                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+
+            <div class="px-8 py-8 space-y-10">
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div
+                  class="rounded-[1.25rem] border border-emerald-200 bg-emerald-50 p-6"
+                >
+                  <p
+                    class="text-xs uppercase tracking-[0.3em] text-emerald-700 font-semibold"
+                  >
+                    Onboard Passengers
+                  </p>
+                  <p class="mt-3 text-4xl font-black text-slate-900">2</p>
+                  <p class="mt-2 text-sm text-slate-600">
+                    Active passengers currently on the bus.
+                  </p>
+                </div>
+                <div
+                  class="rounded-[1.25rem] border border-slate-200 bg-slate-50 p-6"
+                >
+                  <p
+                    class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                  >
+                    Completed Trips
+                  </p>
+                  <p class="mt-3 text-4xl font-black text-slate-900">2</p>
+                  <p class="mt-2 text-sm text-slate-600">
+                    Trips that have finished and left the active route.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                class="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/80 p-6 shadow-sm"
+              >
+                <div
+                  class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+                >
+                  <div>
+                    <p
+                      class="text-xs uppercase tracking-[0.3em] text-emerald-700 font-semibold"
                     >
-                      Passenger
-                    </th>
-                    <th
-                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+                      Current Trip Group
+                    </p>
+                    <h3 class="mt-2 text-2xl font-black text-slate-900">
+                      Bocaue → Marilao → Meycauayan
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-700">
+                      Current Stop:
+                      <span class="font-semibold text-slate-900">Marilao</span>
+                    </p>
+                  </div>
+                  <div
+                    class="rounded-full bg-emerald-700/10 px-4 py-2 text-sm font-semibold text-emerald-900"
+                  >
+                    Currently On Trip • 2 passengers
+                  </div>
+                </div>
+                <div class="mt-6 space-y-4">
+                  <div
+                    class="rounded-[1.25rem] border border-emerald-200 bg-white p-4 shadow-sm"
+                  >
+                    <div
+                      class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      Status
-                    </th>
-                    <th
-                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+                      <div>
+                        <p class="text-sm font-semibold text-slate-900">
+                          Aaron • ID 2381
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500">
+                          Bocaue → Marilao → Meycauayan
+                        </p>
+                      </div>
+                      <span
+                        class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700"
+                      >
+                        Tap In
+                      </span>
+                    </div>
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                      <div
+                        class="rounded-[1rem] border border-emerald-200 bg-emerald-50/80 p-4"
+                      >
+                        <p
+                          class="text-xs uppercase tracking-[0.3em] text-emerald-700 font-semibold"
+                        >
+                          Boarding
+                        </p>
+                        <p class="mt-2 text-sm font-semibold text-slate-900">
+                          Bocaue
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500">8:30 AM</p>
+                      </div>
+                      <div
+                        class="rounded-[1rem] border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <p
+                          class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                        >
+                          Tap Out
+                        </p>
+                        <p class="mt-2 text-sm font-semibold text-slate-900">
+                          In Progress
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500">
+                          Awaiting exit stop
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    class="rounded-[1.25rem] border border-emerald-200 bg-white p-4 shadow-sm"
+                  >
+                    <div
+                      class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      Route
-                    </th>
-                    <th
-                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+                      <div>
+                        <p class="text-sm font-semibold text-slate-900">
+                          Maria • ID 2479
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500">
+                          Bocaue → Marilao → Meycauayan
+                        </p>
+                      </div>
+                      <span
+                        class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700"
+                      >
+                        Tap In
+                      </span>
+                    </div>
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                      <div
+                        class="rounded-[1rem] border border-emerald-200 bg-emerald-50/80 p-4"
+                      >
+                        <p
+                          class="text-xs uppercase tracking-[0.3em] text-emerald-700 font-semibold"
+                        >
+                          Boarding
+                        </p>
+                        <p class="mt-2 text-sm font-semibold text-slate-900">
+                          Marilao
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500">8:42 AM</p>
+                      </div>
+                      <div
+                        class="rounded-[1rem] border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <p
+                          class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                        >
+                          Tap Out
+                        </p>
+                        <p class="mt-2 text-sm font-semibold text-slate-900">
+                          In Progress
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500">
+                          Awaiting exit stop
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                class="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-6"
+              >
+                <div
+                  class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+                >
+                  <div>
+                    <p
+                      class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
                     >
-                      Fare
-                    </th>
-                    <th
-                      class="px-8 py-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+                      Completed Trip History
+                    </p>
+                    <h3 class="mt-2 text-2xl font-black text-slate-900">
+                      Completed Trips
+                    </h3>
+                    <p class="mt-2 text-sm text-slate-600">
+                      Trips finished and archived for review.
+                    </p>
+                  </div>
+                  <div
+                    class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700"
+                  >
+                    2 completed trips
+                  </div>
+                </div>
+                <div class="mt-6 space-y-6">
+                  <div
+                    class="rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div
+                      class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      Timestamp
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-200">
-                  <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
-                      Aaron
-                    </td>
-                    <td
-                      class="px-8 py-5 text-sm text-emerald-700 font-semibold"
-                    >
-                      Completed
-                    </td>
-                    <td class="px-8 py-5 text-sm text-slate-700">
-                      Bocaue → Marilao
-                    </td>
-                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
-                      ₱13
-                    </td>
-                    <td class="px-8 py-5 text-sm text-slate-500">8:30 AM</td>
-                  </tr>
-                  <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
-                      Maria
-                    </td>
-                    <td class="px-8 py-5 text-sm font-semibold text-blue-700">
-                      Active
-                    </td>
-                    <td class="px-8 py-5 text-sm text-slate-700">
-                      Marilao → ?
-                    </td>
-                    <td class="px-8 py-5 text-sm text-slate-700">Est. ₱13</td>
-                    <td class="px-8 py-5 text-sm text-slate-500">8:42 AM</td>
-                  </tr>
-                  <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
-                      Jin
-                    </td>
-                    <td
-                      class="px-8 py-5 text-sm text-emerald-700 font-semibold"
-                    >
-                      Completed
-                    </td>
-                    <td class="px-8 py-5 text-sm text-slate-700">
-                      NLET → Balagtas
-                    </td>
-                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
-                      ₱20
-                    </td>
-                    <td class="px-8 py-5 text-sm text-slate-500">9:05 AM</td>
-                  </tr>
-                  <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-8 py-5 text-sm font-semibold text-slate-900">
-                      Angela
-                    </td>
-                    <td class="px-8 py-5 text-sm text-orange-600 font-semibold">
-                      Pending
-                    </td>
-                    <td class="px-8 py-5 text-sm text-slate-700">
-                      Marilao → Meycauayan
-                    </td>
-                    <td class="px-8 py-5 text-sm text-slate-700">Est. ₱18</td>
-                    <td class="px-8 py-5 text-sm text-slate-500">9:18 AM</td>
-                  </tr>
-                </tbody>
-              </table>
+                      <div>
+                        <p class="text-sm font-semibold text-slate-900">
+                          Bocaue → Marilao → Meycauayan
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500">
+                          8:00 AM – 9:05 AM
+                        </p>
+                      </div>
+                      <span
+                        class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600"
+                      >
+                        Completed batch
+                      </span>
+                    </div>
+                    <div class="mt-4 space-y-4">
+                      <div
+                        class="rounded-[1rem] border border-slate-200 bg-slate-50 p-4 shadow-sm"
+                      >
+                        <div
+                          class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div>
+                            <p class="text-sm font-semibold text-slate-900">
+                              Jin • ID 2014
+                            </p>
+                            <p class="mt-1 text-xs text-slate-500">
+                              Bocaue → Marilao → Meycauayan
+                            </p>
+                          </div>
+                          <span
+                            class="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"
+                          >
+                            Tap Out
+                          </span>
+                        </div>
+                        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                          <div
+                            class="rounded-[1rem] border border-emerald-200 bg-emerald-50/80 p-4"
+                          >
+                            <p
+                              class="text-xs uppercase tracking-[0.3em] text-emerald-700 font-semibold"
+                            >
+                              Boarding
+                            </p>
+                            <p
+                              class="mt-2 text-sm font-semibold text-slate-900"
+                            >
+                              Bocaue
+                            </p>
+                            <p class="mt-1 text-xs text-slate-500">8:00 AM</p>
+                          </div>
+                          <div
+                            class="rounded-[1rem] border border-rose-200 bg-rose-50/80 p-4"
+                          >
+                            <p
+                              class="text-xs uppercase tracking-[0.3em] text-rose-700 font-semibold"
+                            >
+                              Exit
+                            </p>
+                            <p
+                              class="mt-2 text-sm font-semibold text-slate-900"
+                            >
+                              Meycauayan
+                            </p>
+                            <p class="mt-1 text-xs text-slate-500">9:05 AM</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        class="rounded-[1rem] border border-slate-200 bg-slate-50 p-4 shadow-sm"
+                      >
+                        <div
+                          class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div>
+                            <p class="text-sm font-semibold text-slate-900">
+                              Angela • ID 2065
+                            </p>
+                            <p class="mt-1 text-xs text-slate-500">
+                              Bocaue → Marilao → Meycauayan
+                            </p>
+                          </div>
+                          <span
+                            class="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"
+                          >
+                            Tap Out
+                          </span>
+                        </div>
+                        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                          <div
+                            class="rounded-[1rem] border border-emerald-200 bg-emerald-50/80 p-4"
+                          >
+                            <p
+                              class="text-xs uppercase tracking-[0.3em] text-emerald-700 font-semibold"
+                            >
+                              Boarding
+                            </p>
+                            <p
+                              class="mt-2 text-sm font-semibold text-slate-900"
+                            >
+                              Marilao
+                            </p>
+                            <p class="mt-1 text-xs text-slate-500">8:15 AM</p>
+                          </div>
+                          <div
+                            class="rounded-[1rem] border border-rose-200 bg-rose-50/80 p-4"
+                          >
+                            <p
+                              class="text-xs uppercase tracking-[0.3em] text-rose-700 font-semibold"
+                            >
+                              Exit
+                            </p>
+                            <p
+                              class="mt-2 text-sm font-semibold text-slate-900"
+                            >
+                              Meycauayan
+                            </p>
+                            <p class="mt-1 text-xs text-slate-500">9:18 AM</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         </div>

@@ -14,6 +14,13 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
       rel="stylesheet"
     />
+    <!-- Leaflet for live map -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.10.0/dist/leaflet.css"
+      integrity="sha256-b48gk2+23GPlCGSO44BXlrwYMy9UFj+sZh1QmP4lw5w="
+      crossorigin=""
+    />
     <link
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
       rel="stylesheet"
@@ -102,6 +109,72 @@
       }
       .signature-gradient {
         background: linear-gradient(135deg, #0040a1 0%, #0056d2 100%);
+      }
+      /* Route progress tracker */
+      .route-track {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .stop-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 9999px;
+        background: #cbd5e1;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+      .stop-complete {
+        background: #22c55e;
+      }
+      .stop-current {
+        background: #0040a1;
+      }
+      .track-line {
+        height: 4px;
+        background: linear-gradient(90deg, #cbd5e1, #cbd5e1);
+        flex: 1;
+        border-radius: 9999px;
+      }
+
+      /* Passenger list accordion */
+      .passenger-item {
+        border-radius: 12px;
+        padding: 0.75rem;
+        background: transparent;
+        border: 1px solid transparent;
+      }
+      .passenger-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .passenger-body {
+        padding-top: 0.5rem;
+        color: #475569;
+      }
+      .accordion-open {
+        border-color: #e2e8f0;
+        background: #ffffff;
+      }
+
+      /* Live map card */
+      #live-map {
+        width: 100%;
+        height: 520px;
+        min-height: 420px;
+        border-radius: 1rem;
+        overflow: hidden;
+        position: relative;
+      }
+      #live-map iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        border-radius: inherit;
+        display: block;
       }
     </style>
   </head>
@@ -193,6 +266,60 @@
           </header>
           <div class="grid grid-cols-12 gap-8">
             <section class="col-span-12 xl:col-span-7 space-y-6">
+              <!-- Live Map -->
+              <article
+                class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200"
+              >
+                <p
+                  class="text-xs uppercase tracking-[0.25em] text-slate-500 font-semibold"
+                >
+                  Live Map
+                </p>
+                <div class="mt-4">
+                  <div id="live-map">
+                    <iframe
+                      id="live-map-iframe"
+                      src="https://www.openstreetmap.org/export/embed.html?bbox=120.9500%2C14.7800%2C121.0800%2C14.8900&layer=mapnik&marker=14.8400%2C121.0167"
+                      title="Live route map"
+                      loading="lazy"
+                    ></iframe>
+                  </div>
+                </div>
+              </article>
+              <!-- Live Trip Controls -->
+              <article
+                class="rounded-[1.5rem] bg-white p-4 shadow-sm border border-slate-200"
+              >
+                <p
+                  class="text-xs uppercase tracking-[0.25em] text-slate-500 font-semibold"
+                >
+                  Live Trip Controls
+                </p>
+                <div class="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    class="rounded-2xl bg-emerald-600 text-white py-2 text-xs font-semibold"
+                  >
+                    Start Trip
+                  </button>
+                  <button
+                    class="rounded-2xl bg-sky-600 text-white py-2 text-xs font-semibold"
+                  >
+                    Arrive at Stop
+                  </button>
+                  <button
+                    class="rounded-2xl bg-indigo-600 text-white py-2 text-xs font-semibold"
+                  >
+                    Depart Stop
+                  </button>
+                  <button
+                    class="rounded-2xl bg-rose-600 text-white py-2 text-xs font-semibold"
+                  >
+                    End Trip
+                  </button>
+                </div>
+              </article>
+            </section>
+            <section class="col-span-12 xl:col-span-5 space-y-6">
               <article
                 class="rounded-[1.5rem] bg-white p-8 shadow-sm border border-slate-200"
               >
@@ -204,10 +331,10 @@
                       Active Route
                     </p>
                     <h2 class="mt-3 text-3xl font-black text-slate-900">
-                      NLEX Blue Line
+                      Bocaue–Meycauayan Line
                     </h2>
                     <p class="mt-2 text-sm text-slate-600">
-                      Marilao → Balagtas Junction
+                      Bocaue → Marilao → Meycauayan
                     </p>
                   </div>
                   <span
@@ -215,63 +342,39 @@
                     >On Route</span
                   >
                 </div>
-                <div class="mt-8 grid gap-4 sm:grid-cols-2">
-                  <button
-                    class="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition"
+                <div class="mt-6">
+                  <p
+                    class="text-xs uppercase tracking-[0.25em] text-slate-500 font-semibold"
                   >
-                    Start Trip
-                  </button>
-                  <button
-                    class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-                  >
-                    End Trip
-                  </button>
-                </div>
-              </article>
-              <article
-                class="rounded-[1.5rem] bg-white p-8 shadow-sm border border-slate-200"
-              >
-                <div class="flex items-start justify-between gap-6">
-                  <div>
-                    <p
-                      class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-                    >
-                      Current Stop
-                    </p>
-                    <h2 class="mt-3 text-3xl font-black text-slate-900">
-                      Marilao
-                    </h2>
-                    <p class="mt-2 text-sm text-slate-600">
-                      Next boarding point on the active route.
-                    </p>
+                    Route Progress
+                  </p>
+                  <div class="mt-3 route-track">
+                    <div class="flex items-center gap-3 w-full">
+                      <div class="stop-dot stop-complete" title="Bocaue"></div>
+                      <div class="track-line" style="max-width: 40px"></div>
+                      <div class="stop-dot stop-current" title="Marilao"></div>
+                      <div class="track-line" style="max-width: 40px"></div>
+                      <div class="stop-dot" title="Meycauayan"></div>
+                    </div>
+                    <div class="ml-3 text-sm text-slate-600">
+                      Marilao (Current Stop)
+                    </div>
                   </div>
-                  <span
-                    class="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700"
-                    >Arriving</span
-                  >
-                </div>
-                <div class="mt-8">
-                  <button
-                    class="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition"
-                  >
-                    Update Stop
-                  </button>
                 </div>
               </article>
-            </section>
-            <section class="col-span-12 xl:col-span-5 space-y-6">
+              <!-- Onboard Passenger List (accordion) -->
               <article
-                class="rounded-[1.5rem] bg-white p-8 shadow-sm border border-slate-200"
+                class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200"
               >
                 <div class="flex items-center justify-between">
                   <div>
                     <p
                       class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
                     >
-                      Passenger Summary
+                      Onboard Passengers
                     </p>
                     <h2 class="mt-3 text-2xl font-black text-slate-900">
-                      Onboard status
+                      Passenger List
                     </h2>
                   </div>
                   <span
@@ -279,48 +382,195 @@
                     >Updated now</span
                   >
                 </div>
-                <div class="mt-8 grid gap-4">
-                  <div class="rounded-3xl bg-slate-50 p-5">
-                    <p
-                      class="text-sm font-semibold text-slate-500 uppercase tracking-[0.2em]"
-                    >
-                      Passengers Onboard
-                    </p>
-                    <p class="mt-3 text-4xl font-black text-slate-900">32</p>
+                <div class="mt-6 space-y-3" id="passenger-list">
+                  <div class="passenger-item accordion-open">
+                    <div class="passenger-header" data-toggle>
+                      <div>
+                        <div class="text-sm font-semibold text-slate-900">
+                          John Doe
+                          <span class="text-xs text-slate-500">#P1023</span>
+                        </div>
+                        <div class="text-xs text-slate-500">
+                          Boarding: Marilao
+                        </div>
+                      </div>
+                      <div class="text-sm text-slate-900 font-semibold">
+                        Tapped In ✔
+                      </div>
+                    </div>
                   </div>
-                  <div class="rounded-3xl bg-slate-50 p-5">
-                    <p
-                      class="text-sm font-semibold text-slate-500 uppercase tracking-[0.2em]"
-                    >
-                      Active Passengers
-                    </p>
-                    <p class="mt-3 text-4xl font-black text-slate-900">28</p>
+
+                  <div class="passenger-item">
+                    <div class="passenger-header" data-toggle>
+                      <div>
+                        <div class="text-sm font-semibold text-slate-900">
+                          Maria Santos
+                          <span class="text-xs text-slate-500">#P1102</span>
+                        </div>
+                      </div>
+                      <div class="text-sm text-slate-900 font-semibold">
+                        Tapped Out ✔
+                      </div>
+                    </div>
+                    <div class="passenger-body">Exit Stop: Meycauayan</div>
+                  </div>
+
+                  <div class="passenger-item">
+                    <div class="passenger-header" data-toggle>
+                      <div>
+                        <div class="text-sm font-semibold text-slate-900">
+                          Luis Ramirez
+                          <span class="text-xs text-slate-500">#P1188</span>
+                        </div>
+                        <div class="text-xs text-slate-500">
+                          Boarding: Meycauayan
+                        </div>
+                      </div>
+                      <div class="text-sm text-slate-900 font-semibold">
+                        Not Tapped ⏳
+                      </div>
+                    </div>
                   </div>
                 </div>
               </article>
-              <article
-                class="rounded-[1.5rem] bg-white p-8 shadow-sm border border-slate-200"
-              >
-                <p
-                  class="text-sm uppercase tracking-[0.3em] text-slate-500 font-semibold"
+
+              <!-- Trip Metrics & Earnings -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <article
+                  class="rounded-[1.5rem] bg-white p-4 shadow-sm border border-slate-200"
                 >
-                  Driver Notes
-                </p>
-                <div class="mt-5 text-sm leading-7 text-slate-600">
-                  <p class="mb-3">
-                    Keep the route moving and confirm each stop update before
-                    departure.
+                  <p
+                    class="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold"
+                  >
+                    Trip Metrics
                   </p>
-                  <p>
-                    Use the route controls to manage trip start/end and keep
-                    passenger information current.
+                  <div class="mt-3 text-sm text-slate-700 space-y-2">
+                    <div class="flex justify-between">
+                      <span>Trip Duration</span><strong>1h 20m</strong>
+                    </div>
+                    <div class="flex justify-between">
+                      <span>Distance Traveled</span><strong>42.5 km</strong>
+                    </div>
+                    <div class="flex justify-between">
+                      <span>Average Speed</span><strong>32 km/h</strong>
+                    </div>
+                    <div class="flex justify-between">
+                      <span>Est. Arrival</span><strong>12:40 PM</strong>
+                    </div>
+                  </div>
+                </article>
+
+                <article
+                  class="rounded-[1.5rem] bg-white p-4 shadow-sm border border-slate-200"
+                >
+                  <p
+                    class="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold"
+                  >
+                    Earnings
                   </p>
-                </div>
-              </article>
+                  <div class="mt-3 text-sm text-slate-700 space-y-2">
+                    <div class="flex justify-between">
+                      <span>Current Trip</span><strong>₱520</strong>
+                    </div>
+                    <div class="flex justify-between">
+                      <span>Collected Fares</span><strong>₱4,200</strong>
+                    </div>
+                    <div class="flex justify-between">
+                      <span>Estimated Today</span><strong>₱5,100</strong>
+                    </div>
+                  </div>
+                </article>
+              </div>
             </section>
           </div>
         </div>
       </main>
     </div>
+    <!-- Leaflet JS and UI scripts -->
+    <script
+      src="https://unpkg.com/leaflet@1.10.0/dist/leaflet.js"
+      integrity="sha256-gZOGcR9PGyS3zT8aqfD7VG4HFSYx4M0Qv2eMCyMaC5k="
+      crossorigin=""
+    ></script>
+    <script>
+      // Passenger accordion
+      document.addEventListener("DOMContentLoaded", function () {
+        document
+          .querySelectorAll("#passenger-list .passenger-item")
+          .forEach(function (item) {
+            const body = item.querySelector(".passenger-body");
+            const hdr = item.querySelector("[data-toggle]");
+            if (!item.classList.contains("accordion-open")) {
+              if (body) body.style.display = "none";
+            }
+            if (hdr) {
+              hdr.style.cursor = "pointer";
+              hdr.addEventListener("click", function () {
+                const open = item.classList.toggle("accordion-open");
+                if (body) body.style.display = open ? "block" : "none";
+              });
+            }
+          });
+
+        // Initialize Leaflet map for Bulacan route
+        const stops = [
+          { name: "Bocaue", latlng: [14.7983, 120.9742] },
+          { name: "Marilao", latlng: [14.757, 120.9588] },
+          { name: "Meycauayan", latlng: [14.735, 120.9604] },
+        ];
+
+        try {
+          const iframe = document.getElementById("live-map-iframe");
+          if (iframe) {
+            iframe.style.display = "none";
+          }
+
+          const mapEl = document.getElementById("live-map");
+          if (!mapEl) return;
+
+          const map = L.map(mapEl, {
+            attributionControl: false,
+            zoomControl: true,
+          }).setView([14.77, 120.965], 12);
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+          }).addTo(map);
+          const routeCoords = stops.map((s) => s.latlng);
+          L.polyline(routeCoords, {
+            color: "#0040a1",
+            weight: 4,
+            opacity: 0.85,
+          }).addTo(map);
+          stops.forEach((s, i) => {
+            L.circleMarker(s.latlng, {
+              radius: 7,
+              fillColor: i === 1 ? "#0040a1" : "#22c55e",
+              color: "#fff",
+              weight: 2,
+              fillOpacity: 1,
+            })
+              .addTo(map)
+              .bindPopup("<b>" + s.name + "</b>");
+          });
+          // Static bus marker
+          const busIcon = L.divIcon({
+            className: "",
+            html: '<div style="width:28px;height:28px;border-radius:14px;background:#0040a1;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px">🚌</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+          });
+          L.marker([14.778, 120.966], { icon: busIcon })
+            .addTo(map)
+            .bindPopup("<b>Your Bus</b>");
+          map.fitBounds(L.latLngBounds(routeCoords).pad(0.2));
+        } catch (e) {
+          console.warn("Leaflet init failed", e);
+          const iframe = document.getElementById("live-map-iframe");
+          if (iframe) {
+            iframe.style.display = "block";
+          }
+        }
+      });
+    </script>
   </body>
 </html>
