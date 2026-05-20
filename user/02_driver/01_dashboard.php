@@ -1,5 +1,140 @@
-<!doctype html>
+<?php
+session_start();
+require_once __DIR__ . '/../../config/db.php';
 
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'driver') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
+$driverId = (int) $_SESSION['user_id'];
+$driverName = trim($_SESSION['full_name'] ?? 'Driver');
+$activeTrip = null;
+$routeStops = [];
+$activePassengers = [];
+$activeTripCollected = 0.0;
+$activeTripTransactions = 0;
+$driverTotalEarnings = 0.0;
+$totalRouteDistance = 0.0;
+$averageSpeed = 0;
+$estimatedArrival = 'N/A';
+$routeProgressPercent = 0;
+
+if ($stmt = $conn->prepare('SELECT t.trip_id, t.route_id, r.route_name, r.display_name, b.bus_number, b.plate_number FROM trips t JOIN routes r ON t.route_id = r.route_id JOIN buses b ON t.bus_id = b.bus_id WHERE t.driver_id = ? AND t.status = ? LIMIT 1')) {
+    $status = 'active';
+    $stmt->bind_param('is', $driverId, $status);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $activeTrip = $result->fetch_assoc() ?: null;
+    $stmt->close();
+}
+
+if ($activeTrip) {
+    $routeId = (int) $activeTrip['route_id'];
+    $tripId = (int) $activeTrip['trip_id'];
+
+    if ($stmt = $conn->prepare('SELECT s.stop_name FROM route_stops rs JOIN stops s ON rs.stop_id = s.stop_id WHERE rs.route_id = ? ORDER BY rs.stop_order')) {
+        $stmt->bind_param('i', $routeId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $routeStops[] = $row['stop_name'];
+        }
+        $stmt->close();
+    }
+
+    $segmentDistances = [
+        1.2, 0.9, 0.9, 0.8, 0.9, 1.1, 1.1, 0.9, 0.8, 1.0,
+        1.0, 1.1, 1.0, 1.2, 1.4, 1.3, 1.2, 1.0, 0.9,
+    ];
+
+    $neededSegments = max(0, count($routeStops) - 1);
+    $segmentDistances = array_slice($segmentDistances, 0, $neededSegments);
+    while (count($segmentDistances) < $neededSegments) {
+        $segmentDistances[] = 1.0;
+    }
+
+    $cumulativeDistances = [0.0];
+    for ($i = 0; $i < count($segmentDistances); $i++) {
+        $cumulativeDistances[] = round($cumulativeDistances[$i] + $segmentDistances[$i], 2);
+    }
+
+    $totalRouteDistance = count($cumulativeDistances) ? end($cumulativeDistances) : 0.0;
+    $routeStopCount = count($routeStops);
+    $routeProgressIndex = $routeStopCount > 1 ? (int) floor(($routeStopCount - 1) / 2) : 0;
+    $routeProgressPercent = $routeStopCount > 1 ? round(($routeProgressIndex / ($routeStopCount - 1)) * 100) : 0;
+    $estimatedTravelHours = max(0.1, ($routeStopCount - 1) * 0.06);
+    $averageSpeed = $totalRouteDistance > 0 ? round($totalRouteDistance / $estimatedTravelHours) : 0;
+    $remainingDistance = max(0.0, $totalRouteDistance * (100 - $routeProgressPercent) / 100);
+    $arrivalTimestamp = time() + (int) round(($remainingDistance / max(1, $averageSpeed)) * 3600);
+    $estimatedArrival = date('g:i A', $arrivalTimestamp);
+
+    if ($stmt = $conn->prepare('SELECT ap.user_id, u.full_name, ap.card_id, st.stop_name AS boarding_stop FROM active_passengers ap JOIN users u ON ap.user_id = u.user_id JOIN stops st ON ap.boarding_stop_id = st.stop_id WHERE ap.trip_id = ? ORDER BY u.full_name')) {
+        $stmt->bind_param('i', $tripId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $activePassengers[] = [
+                'user_id' => $row['user_id'],
+                'full_name' => $row['full_name'],
+                'boarding_stop' => $row['boarding_stop'],
+                'status_label' => 'Onboard',
+                'footer' => 'Card ID: #' . $row['card_id'],
+            ];
+        }
+        $stmt->close();
+    }
+
+    if ($stmt = $conn->prepare('SELECT COUNT(*) AS trip_count, COALESCE(SUM(fare_amount), 0) AS total_earnings FROM trip_transactions WHERE trip_id = ?')) {
+        $stmt->bind_param('i', $tripId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $activeTripTransactions = (int) ($row['trip_count'] ?? 0);
+        $activeTripCollected = (float) ($row['total_earnings'] ?? 0);
+        $stmt->close();
+    }
+
+    if ($stmt = $conn->prepare('SELECT COALESCE(SUM(tt.fare_amount), 0) AS total_earnings FROM trip_transactions tt JOIN trips t ON tt.trip_id = t.trip_id WHERE t.driver_id = ?')) {
+        $stmt->bind_param('i', $driverId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $driverTotalEarnings = (float) ($row['total_earnings'] ?? 0);
+        $stmt->close();
+    }
+}
+
+$routeProgressStops = [];
+$routeProgressCurrent = 'N/A';
+if (!empty($routeStops)) {
+    $routeStopCount = count($routeStops);
+    $middleIndex = (int) floor(($routeStopCount - 1) / 2);
+    $routeProgressCurrent = $routeStops[$middleIndex];
+
+    $indices = [0];
+    if ($routeStopCount > 4) {
+        $indices[] = (int) floor(($routeStopCount - 1) / 4);
+        $indices[] = $middleIndex;
+        $indices[] = (int) floor(3 * ($routeStopCount - 1) / 4);
+    }
+    $indices[] = $routeStopCount - 1;
+    $indices = array_unique($indices);
+    sort($indices);
+    foreach ($indices as $index) {
+        $routeProgressStops[] = $routeStops[$index];
+    }
+}
+
+$passengerCount = count($activePassengers);
+$routeStopCount = count($routeStops);
+$tripMetricDuration = $passengerCount > 0 ? $passengerCount . ' onboard' : 'No passengers';
+$tripMetricDistance = $routeStopCount > 0 ? number_format($totalRouteDistance, 1) . ' km' : 'No route data';
+$tripMetricSpeed = $averageSpeed > 0 ? $averageSpeed . ' km/h' : 'N/A';
+$tripMetricArrival = $estimatedArrival;
+?>
+
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -136,6 +271,17 @@
         background: linear-gradient(90deg, #cbd5e1, #cbd5e1);
         flex: 1;
         border-radius: 9999px;
+      }
+      .route-progress-bar {
+        height: 8px;
+        border-radius: 9999px;
+        background: #e2e8f0;
+        overflow: hidden;
+      }
+      .route-progress-fill {
+        height: 100%;
+        border-radius: 9999px;
+        background: #0040a1;
       }
 
       /* Passenger list accordion */
@@ -331,10 +477,10 @@
                       Active Route
                     </p>
                     <h2 class="mt-3 text-3xl font-black text-slate-900">
-                      Bocaue–Meycauayan Line
+                      <?php echo htmlspecialchars($activeTrip['route_name'] ?? 'No active route'); ?>
                     </h2>
                     <p class="mt-2 text-sm text-slate-600">
-                      Bocaue → Marilao → Meycauayan
+                      <?php echo htmlspecialchars($activeTrip['display_name'] ?? 'No route details available'); ?>
                     </p>
                   </div>
                   <span
@@ -349,15 +495,16 @@
                     Route Progress
                   </p>
                   <div class="mt-3 route-track">
-                    <div class="flex items-center gap-3 w-full">
-                      <div class="stop-dot stop-complete" title="Bocaue"></div>
-                      <div class="track-line" style="max-width: 40px"></div>
-                      <div class="stop-dot stop-current" title="Marilao"></div>
-                      <div class="track-line" style="max-width: 40px"></div>
-                      <div class="stop-dot" title="Meycauayan"></div>
+                    <div class="route-progress-bar">
+                      <div class="route-progress-fill" style="width: <?php echo $routeProgressPercent; ?>%;"></div>
                     </div>
-                    <div class="ml-3 text-sm text-slate-600">
-                      Marilao (Current Stop)
+                    <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+                      <?php foreach ($routeProgressStops as $stopName): ?>
+                        <span class="max-w-[22%] truncate text-center"><?php echo htmlspecialchars($stopName); ?></span>
+                      <?php endforeach; ?>
+                    </div>
+                    <div class="mt-2 text-sm text-slate-600">
+                      <?php echo htmlspecialchars($routeProgressCurrent); ?> (Current Stop)
                     </div>
                   </div>
                 </div>
@@ -383,54 +530,38 @@
                   >
                 </div>
                 <div class="mt-6 space-y-3" id="passenger-list">
-                  <div class="passenger-item accordion-open">
-                    <div class="passenger-header" data-toggle>
-                      <div>
-                        <div class="text-sm font-semibold text-slate-900">
-                          John Doe
-                          <span class="text-xs text-slate-500">#P1023</span>
+                  <?php if (!empty($activePassengers)): ?>
+                    <?php foreach ($activePassengers as $index => $passenger): ?>
+                      <div class="passenger-item <?php echo $index === 0 ? 'accordion-open' : ''; ?>">
+                        <div class="passenger-header" data-toggle>
+                          <div>
+                            <div class="text-sm font-semibold text-slate-900">
+                              <?php echo htmlspecialchars($passenger['full_name']); ?>
+                              <span class="text-xs text-slate-500">#P<?php echo htmlspecialchars($passenger['user_id']); ?></span>
+                            </div>
+                            <div class="text-xs text-slate-500">
+                              Boarding: <?php echo htmlspecialchars($passenger['boarding_stop']); ?>
+                            </div>
+                          </div>
+                          <div class="text-sm text-slate-900 font-semibold">
+                            <?php echo htmlspecialchars($passenger['status_label']); ?>
+                          </div>
                         </div>
-                        <div class="text-xs text-slate-500">
-                          Boarding: Marilao
-                        </div>
+                        <?php if (!empty($passenger['footer'])): ?>
+                          <div class="passenger-body"><?php echo htmlspecialchars($passenger['footer']); ?></div>
+                        <?php endif; ?>
                       </div>
-                      <div class="text-sm text-slate-900 font-semibold">
-                        Tapped In ✔
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <div class="passenger-item accordion-open">
+                      <div class="passenger-header">
+                        <div>
+                          <div class="text-sm font-semibold text-slate-900">No onboard passengers</div>
+                          <div class="text-xs text-slate-500">All passengers checked out</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div class="passenger-item">
-                    <div class="passenger-header" data-toggle>
-                      <div>
-                        <div class="text-sm font-semibold text-slate-900">
-                          Maria Santos
-                          <span class="text-xs text-slate-500">#P1102</span>
-                        </div>
-                      </div>
-                      <div class="text-sm text-slate-900 font-semibold">
-                        Tapped Out ✔
-                      </div>
-                    </div>
-                    <div class="passenger-body">Exit Stop: Meycauayan</div>
-                  </div>
-
-                  <div class="passenger-item">
-                    <div class="passenger-header" data-toggle>
-                      <div>
-                        <div class="text-sm font-semibold text-slate-900">
-                          Luis Ramirez
-                          <span class="text-xs text-slate-500">#P1188</span>
-                        </div>
-                        <div class="text-xs text-slate-500">
-                          Boarding: Meycauayan
-                        </div>
-                      </div>
-                      <div class="text-sm text-slate-900 font-semibold">
-                        Not Tapped ⏳
-                      </div>
-                    </div>
-                  </div>
+                  <?php endif; ?>
                 </div>
               </article>
 
@@ -446,16 +577,16 @@
                   </p>
                   <div class="mt-3 text-sm text-slate-700 space-y-2">
                     <div class="flex justify-between">
-                      <span>Trip Duration</span><strong>1h 20m</strong>
+                      <span>Trip Duration</span><strong><?php echo htmlspecialchars($tripMetricDuration); ?></strong>
                     </div>
                     <div class="flex justify-between">
-                      <span>Distance Traveled</span><strong>42.5 km</strong>
+                      <span>Distance Traveled</span><strong><?php echo htmlspecialchars($tripMetricDistance); ?></strong>
                     </div>
                     <div class="flex justify-between">
-                      <span>Average Speed</span><strong>32 km/h</strong>
+                      <span>Average Speed</span><strong><?php echo htmlspecialchars($tripMetricSpeed); ?></strong>
                     </div>
                     <div class="flex justify-between">
-                      <span>Est. Arrival</span><strong>12:40 PM</strong>
+                      <span>Est. Arrival</span><strong><?php echo htmlspecialchars($tripMetricArrival); ?></strong>
                     </div>
                   </div>
                 </article>
@@ -470,13 +601,13 @@
                   </p>
                   <div class="mt-3 text-sm text-slate-700 space-y-2">
                     <div class="flex justify-between">
-                      <span>Current Trip</span><strong>₱520</strong>
+                      <span>Current Trip</span><strong>₱<?php echo number_format($activeTripCollected, 2); ?></strong>
                     </div>
                     <div class="flex justify-between">
-                      <span>Collected Fares</span><strong>₱4,200</strong>
+                      <span>Collected Fares</span><strong>₱<?php echo number_format($activeTripCollected, 2); ?></strong>
                     </div>
                     <div class="flex justify-between">
-                      <span>Estimated Today</span><strong>₱5,100</strong>
+                      <span>Estimated Today</span><strong>₱<?php echo number_format($driverTotalEarnings, 2); ?></strong>
                     </div>
                   </div>
                 </article>

@@ -160,3 +160,164 @@ FROM users WHERE role='driver';
 INSERT INTO trips (bus_id,route_id,driver_id,status)
 VALUES
 (1,1,2,'active');
+
+INSERT INTO active_passengers
+(trip_id,user_id,card_id,boarding_stop_id)
+VALUES
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='John Michael Gonzales'),
+    (SELECT card_id FROM nfc_cards WHERE uid='9B 4C 13 7'),
+    9
+);
+
+INSERT INTO trip_transactions
+(trip_id,user_id,card_id,boarding_stop_id,alighting_stop_id,fare_amount)
+VALUES
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='Aaron Catapang'),
+    (SELECT card_id FROM nfc_cards WHERE uid='62 BB 1D 7'),
+    5,
+    11,
+    24.25
+),
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='John Michael Gonzales'),
+    (SELECT card_id FROM nfc_cards WHERE uid='9B 4C 13 7'),
+    9,
+    15,
+    22.00
+),
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='Maria Lopez'),
+    1,
+    3,
+    10,
+    22.00
+),
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='Angela Reyes'),
+    1,
+    8,
+    14,
+    19.75
+),
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='Jin Park'),
+    1,
+    1,
+    20,
+    46.75
+),
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='Ana Garcia'),
+    1,
+    4,
+    11,
+    24.25
+),
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='Luis Santos'),
+    1,
+    10,
+    18,
+    24.25
+),
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='Miguel Torres'),
+    1,
+    6,
+    13,
+    22.00
+),
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='Rosa Fernandez'),
+    1,
+    2,
+    9,
+    19.75
+),
+
+(
+    1,
+    (SELECT user_id FROM users WHERE full_name='Carlo Ramos'),
+    1,
+    11,
+    20,
+    31.00
+);
+
+INSERT INTO trips (bus_id,route_id,driver_id,status)
+VALUES
+(2,1,3,'completed'),
+(3,1,4,'completed'),
+(4,1,5,'completed'),
+(5,1,6,'completed');
+
+INSERT INTO trip_transactions
+(trip_id,user_id,card_id,boarding_stop_id,alighting_stop_id,fare_amount)
+VALUES
+
+(2,7,1,1,10,22.00),
+(2,8,2,5,15,31.00),
+(2,9,1,3,20,42.25),
+
+(3,10,1,7,14,19.75),
+(3,11,1,1,20,46.75),
+
+(4,12,1,2,12,26.50),
+(4,13,1,6,17,33.25),
+
+(5,14,1,4,9,15.25),
+(5,15,1,10,20,28.75),
+(5,16,1,3,18,37.75);
+
+UPDATE passenger_profiles
+SET wallet_balance = 650.00
+WHERE user_id = (
+    SELECT user_id
+    FROM users
+    WHERE full_name='Aaron Catapang'
+);
+
+UPDATE passenger_profiles
+SET wallet_balance = 420.00
+WHERE user_id = (
+    SELECT user_id
+    FROM users
+    WHERE full_name='John Michael Gonzales'
+);
+
+UPDATE passenger_profiles
+SET wallet_balance = 1180.00
+WHERE user_id = (
+    SELECT user_id
+    FROM users
+    WHERE full_name='Maria Lopez'
+);
+
+INSERT INTO nfc_cards (user_id,uid)
+VALUES
+((SELECT user_id FROM users WHERE full_name='Maria Lopez'),'AA BB CC 01'),
+((SELECT user_id FROM users WHERE full_name='Angela Reyes'),'AA BB CC 02'),
+((SELECT user_id FROM users WHERE full_name='Jin Park'),'AA BB CC 03'),
+((SELECT user_id FROM users WHERE full_name='Ana Garcia'),'AA BB CC 04'),
+((SELECT user_id FROM users WHERE full_name='Luis Santos'),'AA BB CC 05');

@@ -1,3 +1,149 @@
+<?php
+session_start();
+require_once __DIR__ . '/../../config/db.php';
+
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'driver') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
+$driverId = (int) $_SESSION['user_id'];
+$driverName = trim($_SESSION['full_name'] ?? 'Driver');
+$driverEmail = trim($_SESSION['email'] ?? '');
+$busNumber = 'N/A';
+$unitStatus = 'Inactive Unit';
+$activeRouteDisplay = 'No active route';
+$currentStop = 'N/A';
+$tripsToday = 0;
+$passengersHandled = 0;
+$earnings = 0.0;
+$lastTripTime = 'N/A';
+$lastStopVisited = 'N/A';
+$lastPassengerActivity = 'No activity recorded';
+
+if ($stmt = $conn->prepare('SELECT full_name, email FROM users WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $driverId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
+    if ($user) {
+        $driverName = trim($user['full_name'] ?: $driverName);
+        $driverEmail = trim($user['email'] ?: $driverEmail);
+    }
+    $stmt->close();
+}
+
+$activeTrip = null;
+if ($stmt = $conn->prepare(
+    'SELECT t.trip_id, t.route_id, b.bus_number, r.display_name
+     FROM trips t
+     JOIN buses b ON t.bus_id = b.bus_id
+     JOIN routes r ON t.route_id = r.route_id
+     WHERE t.driver_id = ? AND t.status = ?
+     LIMIT 1'
+)) {
+    $status = 'active';
+    $stmt->bind_param('is', $driverId, $status);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $activeTrip = $result->fetch_assoc() ?: null;
+    $stmt->close();
+}
+
+if ($activeTrip) {
+    $busNumber = $activeTrip['bus_number'];
+    $activeRouteDisplay = $activeTrip['display_name'];
+    $unitStatus = 'Active Unit';
+    $routeStops = [];
+
+    if ($stmt = $conn->prepare(
+        'SELECT s.stop_name
+         FROM route_stops rs
+         JOIN stops s ON rs.stop_id = s.stop_id
+         WHERE rs.route_id = ?
+         ORDER BY rs.stop_order'
+    )) {
+        $stmt->bind_param('i', $activeTrip['route_id']);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $routeStops[] = $row['stop_name'];
+        }
+        $stmt->close();
+    }
+
+    if (!empty($routeStops)) {
+        $middleIndex = (int) floor((count($routeStops) - 1) / 2);
+        $currentStop = $routeStops[$middleIndex];
+        $lastStopVisited = $currentStop;
+        $lastTripTime = 'Active now';
+    }
+
+    $tripId = (int) $activeTrip['trip_id'];
+}
+
+if ($stmt = $conn->prepare('SELECT COUNT(*) AS count FROM trip_transactions tt JOIN trips t ON tt.trip_id = t.trip_id WHERE t.driver_id = ?')) {
+    $stmt->bind_param('i', $driverId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $passengersHandled = (int) ($row['count'] ?? 0);
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare(
+    'SELECT COUNT(*) AS total_trips, COALESCE(SUM(tt.fare_amount), 0) AS total_earnings
+     FROM trips t
+     LEFT JOIN trip_transactions tt ON t.trip_id = tt.trip_id
+     WHERE t.driver_id = ?'
+)) {
+    $stmt->bind_param('i', $driverId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    if ($row) {
+        $tripsToday = (int) ($row['total_trips'] ?? 0);
+        $earnings = (float) ($row['total_earnings'] ?? 0.0);
+    }
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare(
+    'SELECT tt.user_id, u.full_name, stb.stop_name AS boarding_stop, ste.stop_name AS alighting_stop
+     FROM trip_transactions tt
+     JOIN trips t ON tt.trip_id = t.trip_id
+     JOIN users u ON tt.user_id = u.user_id
+     JOIN stops stb ON tt.boarding_stop_id = stb.stop_id
+     JOIN stops ste ON tt.alighting_stop_id = ste.stop_id
+     WHERE t.driver_id = ?
+     ORDER BY tt.transaction_id DESC
+     LIMIT 1'
+)) {
+    $stmt->bind_param('i', $driverId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $activity = $result->fetch_assoc();
+    if ($activity) {
+        $lastPassengerActivity = sprintf(
+            '%s boarded at %s and headed to %s.',
+            $activity['full_name'],
+            $activity['boarding_stop'],
+            $activity['alighting_stop']
+        );
+        if ($lastStopVisited === 'N/A') {
+            $lastStopVisited = $activity['boarding_stop'];
+        }
+    }
+    $stmt->close();
+}
+
+if ($passengersHandled === 0 && $activeTrip) {
+    $passengersHandled = (int) ($passengersHandled);
+}
+
+$earningsFormatted = '₱' . number_format($earnings, 2);
+?>
+
 <!doctype html>
 
 <html lang="en">
@@ -208,13 +354,13 @@
                 <div class="rounded-3xl border border-slate-200 bg-white p-4">
                   <p class="text-sm text-slate-500">Current Route</p>
                   <p class="mt-2 text-base font-semibold text-slate-900">
-                    Bocaue → Marilao → Meycauayan
+                    <?php echo htmlspecialchars($activeRouteDisplay, ENT_QUOTES, 'UTF-8'); ?>
                   </p>
                 </div>
                 <div class="rounded-3xl border border-slate-200 bg-white p-4">
                   <p class="text-sm text-slate-500">Current Stop</p>
                   <p class="mt-2 text-base font-semibold text-slate-900">
-                    Marilao
+                    <?php echo htmlspecialchars($currentStop, ENT_QUOTES, 'UTF-8'); ?>
                   </p>
                 </div>
               </div>
@@ -232,7 +378,7 @@
                     <p class="text-sm font-semibold text-slate-700">
                       Bus Number
                     </p>
-                    <p class="mt-2 text-xl font-bold text-slate-900">802</p>
+                    <p class="mt-2 text-xl font-bold text-slate-900"><?php echo htmlspecialchars($busNumber, ENT_QUOTES, 'UTF-8'); ?></p>
                   </div>
                   <div
                     class="rounded-3xl border border-slate-200 bg-slate-50 p-4"
@@ -241,7 +387,7 @@
                       Unit Status
                     </p>
                     <p class="mt-2 text-xl font-bold text-slate-900">
-                      Active Unit
+                      <?php echo htmlspecialchars($unitStatus, ENT_QUOTES, 'UTF-8'); ?>
                     </p>
                   </div>
                   <div
@@ -251,7 +397,7 @@
                       Assigned Route
                     </p>
                     <p class="mt-2 text-base font-semibold text-slate-900">
-                      Bocaue → Marilao → Meycauayan
+                      <?php echo htmlspecialchars($activeRouteDisplay, ENT_QUOTES, 'UTF-8'); ?>
                     </p>
                   </div>
                 </div>
@@ -264,11 +410,11 @@
                 <div class="grid gap-4 text-sm text-slate-700">
                   <div>
                     <p class="font-semibold text-slate-900">Driver Name</p>
-                    <p class="mt-1">John Doe</p>
+                    <p class="mt-1"><?php echo htmlspecialchars($driverName, ENT_QUOTES, 'UTF-8'); ?></p>
                   </div>
                   <div>
                     <p class="font-semibold text-slate-900">Email</p>
-                    <p class="mt-1">j.doe@v-liner.ph</p>
+                    <p class="mt-1"><?php echo htmlspecialchars($driverEmail, ENT_QUOTES, 'UTF-8'); ?></p>
                   </div>
                   <div>
                     <p class="font-semibold text-slate-900">Role</p>
@@ -292,7 +438,7 @@
                     >
                       Trips Today
                     </p>
-                    <p class="mt-3 text-2xl font-bold text-slate-900">14</p>
+                    <p class="mt-3 text-2xl font-bold text-slate-900"><?php echo htmlspecialchars($tripsToday, ENT_QUOTES, 'UTF-8'); ?></p>
                   </div>
                   <div
                     class="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-center"
@@ -302,7 +448,7 @@
                     >
                       Passengers Handled
                     </p>
-                    <p class="mt-3 text-2xl font-bold text-slate-900">86</p>
+                    <p class="mt-3 text-2xl font-bold text-slate-900"><?php echo htmlspecialchars($passengersHandled, ENT_QUOTES, 'UTF-8'); ?></p>
                   </div>
                   <div
                     class="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-center"
@@ -312,7 +458,7 @@
                     >
                       Earnings
                     </p>
-                    <p class="mt-3 text-2xl font-bold text-slate-900">₱4,560</p>
+                    <p class="mt-3 text-2xl font-bold text-slate-900"><?php echo htmlspecialchars($earningsFormatted, ENT_QUOTES, 'UTF-8'); ?></p>
                   </div>
                 </div>
               </div>
@@ -324,21 +470,20 @@
                 <div class="grid gap-4 text-sm text-slate-700">
                   <div>
                     <p class="font-semibold text-slate-900">Last Trip Time</p>
-                    <p class="mt-1">5:20 PM</p>
+                    <p class="mt-1"><?php echo htmlspecialchars($lastTripTime, ENT_QUOTES, 'UTF-8'); ?></p>
                   </div>
                   <div>
                     <p class="font-semibold text-slate-900">
                       Last Stop Visited
                     </p>
-                    <p class="mt-1">Malhacan</p>
+                    <p class="mt-1"><?php echo htmlspecialchars($lastStopVisited, ENT_QUOTES, 'UTF-8'); ?></p>
                   </div>
                   <div>
                     <p class="font-semibold text-slate-900">
                       Last Passenger Activity
                     </p>
                     <p class="mt-1 text-slate-600">
-                      Passenger boarded at Marilao and is currently headed
-                      toward Meycauayan.
+                      <?php echo htmlspecialchars($lastPassengerActivity, ENT_QUOTES, 'UTF-8'); ?>
                     </p>
                   </div>
                 </div>

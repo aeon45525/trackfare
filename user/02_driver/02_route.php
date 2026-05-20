@@ -1,3 +1,110 @@
+<?php
+session_start();
+require_once __DIR__ . '/../../config/db.php';
+
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'driver') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
+$driverId = (int) $_SESSION['user_id'];
+$routeName = 'No active route';
+$routeDisplay = 'No route details available';
+$routeStops = [];
+$totalRouteDistance = 0.0;
+$averageSpeed = 0;
+$estimatedArrival = 'N/A';
+$tripDurationLabel = 'N/A';
+$tripDistanceLabel = 'N/A';
+$tripSpeedLabel = 'N/A';
+$tripArrivalLabel = 'N/A';
+$routeProgressStops = ['Bocaue', 'Marilao', 'Meycauayan'];
+$routeProgressCurrent = 'Marilao';
+
+if ($stmt = $conn->prepare(
+    'SELECT t.route_id, r.route_name, r.display_name
+     FROM trips t
+     JOIN routes r ON t.route_id = r.route_id
+     WHERE t.driver_id = ? AND t.status = ?
+     LIMIT 1'
+)) {
+    $status = 'active';
+    $stmt->bind_param('is', $driverId, $status);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $activeTrip = $result->fetch_assoc() ?: null;
+    $stmt->close();
+
+    if ($activeTrip) {
+        $routeName = $activeTrip['route_name'];
+        $routeDisplay = $activeTrip['display_name'];
+        $routeId = (int) $activeTrip['route_id'];
+
+        if ($stmt = $conn->prepare(
+            'SELECT s.stop_name
+             FROM route_stops rs
+             JOIN stops s ON rs.stop_id = s.stop_id
+             WHERE rs.route_id = ?
+             ORDER BY rs.stop_order'
+        )) {
+            $stmt->bind_param('i', $routeId);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $routeStops[] = $row['stop_name'];
+            }
+            $stmt->close();
+        }
+    }
+}
+
+$segmentDistances = [
+    1.2, 0.9, 0.9, 0.8, 0.9, 1.1, 1.1, 0.9, 0.8, 1.0,
+    1.0, 1.1, 1.0, 1.2, 1.4, 1.3, 1.2, 1.0, 0.9,
+];
+
+if (count($routeStops) > 1) {
+    $needed = count($routeStops) - 1;
+    $segmentDistances = array_slice($segmentDistances, 0, $needed);
+    while (count($segmentDistances) < $needed) {
+        $segmentDistances[] = 1.0;
+    }
+
+    $cumulativeDistances = [0.0];
+    for ($i = 0; $i < count($segmentDistances); $i++) {
+        $cumulativeDistances[] = round($cumulativeDistances[$i] + $segmentDistances[$i], 2);
+    }
+    $totalRouteDistance = end($cumulativeDistances);
+    $averageSpeed = (int) max(20, min(60, round($totalRouteDistance * 2.2)));
+    $hours = $averageSpeed > 0 ? $totalRouteDistance / $averageSpeed : 0;
+    $minutes = (int) round($hours * 60);
+    $tripDurationLabel = sprintf('%dh %02dm', intdiv($minutes, 60), $minutes % 60);
+    $tripDistanceLabel = sprintf('%.1f km', $totalRouteDistance);
+    $tripSpeedLabel = sprintf('%d km/h', $averageSpeed);
+
+    $arrivalTimestamp = time() + (int) round($hours * 3600);
+    $estimatedArrival = date('g:i A', $arrivalTimestamp);
+    $tripArrivalLabel = $estimatedArrival;
+
+    $stopCount = count($routeStops);
+    $middleIndex = (int) floor(($stopCount - 1) / 2);
+    $routeProgressCurrent = $routeStops[$middleIndex];
+    $indices = [0];
+    if ($stopCount > 4) {
+        $indices[] = (int) floor(($stopCount - 1) / 4);
+        $indices[] = $middleIndex;
+        $indices[] = (int) floor(3 * ($stopCount - 1) / 4);
+    }
+    $indices[] = $stopCount - 1;
+    $indices = array_unique($indices);
+    sort($indices);
+    $routeProgressStops = [];
+    foreach ($indices as $index) {
+        $routeProgressStops[] = $routeStops[$index];
+    }
+}
+?>
+
 <!doctype html>
 
 <html class="light" lang="en">
@@ -124,14 +231,25 @@
       /* Progress bar styles */
       .progress-bar {
         display: flex;
+        flex-wrap: nowrap;
         align-items: center;
-        gap: 12px;
+        justify-content: space-between;
+        gap: 14px;
+        overflow-x: auto;
+        padding-bottom: 6px;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      .progress-bar::-webkit-scrollbar {
+        display: none;
       }
       .progress-segment {
         display: flex;
         flex-direction: column;
         align-items: center;
-        min-width: 88px;
+        flex: 1 1 120px;
+        min-width: 0;
+        max-width: 140px;
       }
       .progress-segment .dot {
         width: 26px;
@@ -158,7 +276,8 @@
       .progress-connector {
         height: 6px;
         border-radius: 9999px;
-        flex: 1;
+        flex: 1 1 40px;
+        min-width: 40px;
       }
       .progress-connector.completed {
         background: linear-gradient(90deg, #10b981, #60a5fa);
@@ -171,6 +290,8 @@
         font-size: 0.85rem;
         color: #374151;
         text-align: center;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
       /* Current stop card emphasis */
       .current-card {
@@ -293,7 +414,7 @@
                 </div>
               </article>
             </section>
-            <section class="col-span-12 lg:col-span-3 space-y-6">
+            <section class="col-span-12 lg:col-span-5 xl:col-span-6 space-y-6">
               <article
                 class="rounded-[1.5rem] bg-white p-8 shadow-sm border border-slate-200"
               >
@@ -305,7 +426,7 @@
                       Route Progress
                     </p>
                     <h2 class="mt-3 text-2xl font-black text-slate-900">
-                      Bocaue → Marilao → Meycauayan
+                      <?php echo htmlspecialchars($routeDisplay); ?>
                     </h2>
                   </div>
                 </div>
@@ -315,25 +436,25 @@
                     role="list"
                     aria-label="Route progress"
                   >
-                    <div class="progress-segment completed" role="listitem">
-                      <div class="dot">✔</div>
-                      <div class="progress-label">Bocaue</div>
-                    </div>
-                    <div class="progress-connector completed" aria-hidden></div>
-                    <div class="progress-segment current" role="listitem">
-                      <div class="dot">●</div>
-                      <div class="progress-label">Marilao</div>
-                    </div>
-                    <div class="progress-connector upcoming" aria-hidden></div>
-                    <div class="progress-segment upcoming" role="listitem">
-                      <div class="dot">○</div>
-                      <div class="progress-label">Meycauayan</div>
-                    </div>
+                    <?php foreach ($routeProgressStops as $index => $stop): ?>
+                      <?php
+                        $state = $index === 0 ? 'completed' : ($index === 1 ? 'current' : 'upcoming');
+                        $dot = $index === 0 ? '✔' : ($index === 1 ? '●' : '○');
+                        $connectorClass = $index < 1 ? 'completed' : 'upcoming';
+                      ?>
+                      <div class="progress-segment <?php echo $state; ?>" role="listitem">
+                        <div class="dot"><?php echo $dot; ?></div>
+                        <div class="progress-label"><?php echo htmlspecialchars($stop); ?></div>
+                      </div>
+                      <?php if ($index < count($routeProgressStops) - 1): ?>
+                        <div class="progress-connector <?php echo $connectorClass; ?>" aria-hidden></div>
+                      <?php endif; ?>
+                    <?php endforeach; ?>
                   </div>
                 </div>
               </article>
             </section>
-            <section class="col-span-12 lg:col-span-3 space-y-6">
+            <section class="col-span-12 lg:col-span-5 xl:col-span-4 space-y-6">
               <article
                 class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200"
               >
@@ -344,16 +465,16 @@
                 </p>
                 <div class="mt-3 text-sm text-slate-700 space-y-2">
                   <div class="flex justify-between">
-                    <span>Trip Duration</span><strong>1h 20m</strong>
+                    <span>Trip Duration</span><strong><?php echo htmlspecialchars($tripDurationLabel); ?></strong>
                   </div>
                   <div class="flex justify-between">
-                    <span>Distance Traveled</span><strong>42.5 km</strong>
+                    <span>Distance Traveled</span><strong><?php echo htmlspecialchars($tripDistanceLabel); ?></strong>
                   </div>
                   <div class="flex justify-between">
-                    <span>Average Speed</span><strong>32 km/h</strong>
+                    <span>Average Speed</span><strong><?php echo htmlspecialchars($tripSpeedLabel); ?></strong>
                   </div>
                   <div class="flex justify-between">
-                    <span>Est. Arrival</span><strong>12:40 PM</strong>
+                    <span>Est. Arrival</span><strong><?php echo htmlspecialchars($tripArrivalLabel); ?></strong>
                   </div>
                 </div>
               </article>
