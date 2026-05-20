@@ -1,3 +1,64 @@
+<?php
+session_start();
+require_once __DIR__ . '/../config/db.php';
+
+$error = '';
+$fullName = '';
+$email = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $fullName = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $password = trim($_POST['password'] ?? '');
+    $confirmPassword = trim($_POST['confirm-password'] ?? '');
+    $role = 'passenger';
+
+    if ($fullName === '') {
+        $error = 'Please enter your full name.';
+    } elseif ($email === '') {
+        $error = 'Please enter your email address.';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = 'Please enter a valid email address.';
+    } elseif ($password === '') {
+        $error = 'Please enter a password.';
+    } elseif (strlen($password) < 6) {
+        $error = 'Password must be at least 6 characters long.';
+    } elseif ($confirmPassword === '') {
+        $error = 'Please confirm your password.';
+    } elseif ($password !== $confirmPassword) {
+        $error = 'Passwords do not match.';
+    } else {
+        $stmt = $conn->prepare('SELECT user_id FROM users WHERE email = ? LIMIT 1');
+        $stmt->bind_param('s', $email);
+        $stmt->execute();
+        $stmt->store_result();
+
+        if ($stmt->num_rows > 0) {
+            $error = 'An account with this email already exists.';
+        } else {
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+            $insert = $conn->prepare('INSERT INTO users (full_name, email, password, role, is_active) VALUES (?, ?, ?, ?, 1)');
+            $insert->bind_param('ssss', $fullName, $email, $hashedPassword, $role);
+
+            if ($insert->execute()) {
+                $userId = $conn->insert_id;
+
+                if ($role === 'passenger') {
+                    $profile = $conn->prepare('INSERT INTO passenger_profiles (user_id, wallet_balance) VALUES (?, 0.00)');
+                    $profile->bind_param('i', $userId);
+                    $profile->execute();
+                }
+
+                header('Location: login.php');
+                exit;
+            }
+
+            $error = 'Unable to create your account at this time. Please try again later.';
+        }
+    }
+}
+?>
+
 <!doctype html>
 
 <html lang="en">
@@ -81,7 +142,13 @@
         <h2 class="text-2xl font-bold leading-tight">Create Account</h2>
       </div>
       <!-- Registration Form -->
-      <form class="flex w-full max-w-md flex-col gap-6">
+      <form method="post" class="flex w-full max-w-md flex-col gap-6">
+        <?php if ($error !== '') : ?>
+          <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert" aria-live="assertive">
+            <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
+          </div>
+        <?php endif; ?>
+
         <!-- Full Name Input -->
         <div class="flex flex-col gap-2">
           <label class="text-sm font-semibold leading-none" for="name"
@@ -94,6 +161,8 @@
               name="name"
               placeholder="John Doe"
               type="text"
+              value="<?= htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') ?>"
+              required
             />
           </div>
         </div>
@@ -109,6 +178,8 @@
               name="email"
               placeholder="name@example.com"
               type="email"
+              value="<?= htmlspecialchars($email, ENT_QUOTES, 'UTF-8') ?>"
+              required
             />
           </div>
         </div>
@@ -161,6 +232,7 @@
         <!-- Sign Up Button -->
         <button
           class="mt-4 flex h-14 w-full items-center justify-center rounded-xl bg-brand-blue font-bold text-white shadow-lg hover:opacity-90 active:scale-[0.98] transition-all"
+          type="submit"
         >
           Sign Up
         </button>
@@ -169,7 +241,7 @@
       <footer class="mt-auto pt-8 text-center">
         <p class="text-sm text-gray-600">
           Already have an account?
-          <a class="font-bold text-primary hover:underline" href="#"
+          <a class="font-bold text-primary hover:underline" href="login.php"
             >Back to Login</a
           >
         </p>

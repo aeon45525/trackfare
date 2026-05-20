@@ -1,3 +1,70 @@
+<?php
+session_start();
+require_once __DIR__ . '/../../config/db.php';
+
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
+$userId = (int) $_SESSION['user_id'];
+$fullName = trim($_SESSION['full_name'] ?? 'Passenger');
+$walletBalance = 0.00;
+$tapStatus = 'Waiting';
+$tapStatusClasses = 'inline-flex rounded-full bg-surface-container-high px-3 py-1 text-xs font-semibold text-primary';
+$activeTripStatus = 'No active trip';
+$activeTripBadge = 'Idle';
+$boardedStop = '—';
+$currentStop = '—';
+$estimatedFare = '₱0.00';
+$nfcCardUid = null;
+$nfcCardStatus = 'No card linked';
+
+if ($stmt = $conn->prepare('SELECT wallet_balance FROM passenger_profiles WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $stmt->bind_result($walletBalance);
+    $stmt->fetch();
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare('SELECT uid, is_active FROM nfc_cards WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $stmt->bind_result($nfcCardUid, $nfcIsActive);
+    if ($stmt->fetch()) {
+        $nfcCardStatus = $nfcIsActive ? 'Active' : 'Inactive';
+    } else {
+        $nfcCardUid = null;
+    }
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare(
+    'SELECT t.status, bs.stop_name AS boarded_stop, r.display_name AS route_name
+     FROM active_passengers ap
+     JOIN trips t ON ap.trip_id = t.trip_id
+     LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
+     LEFT JOIN routes r ON t.route_id = r.route_id
+     WHERE ap.user_id = ?
+     LIMIT 1'
+)) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $stmt->bind_result($tripStatus, $boardedStopResult, $routeName);
+    if ($stmt->fetch()) {
+        $activeTripStatus = $tripStatus === 'active' ? 'On active trip' : ucfirst($tripStatus);
+        $activeTripBadge = $tripStatus === 'active' ? 'Active' : ucfirst($tripStatus);
+        $boardedStop = $boardedStopResult ?: '—';
+        $currentStop = $routeName ?: 'In transit';
+        $estimatedFare = '₱0.00';
+        $tapStatus = 'Active';
+        $tapStatusClasses = 'inline-flex rounded-full bg-primary-container px-3 py-1 text-xs font-semibold text-primary';
+    }
+    $stmt->close();
+}
+?>
+
 <!doctype html>
 
 <html class="light" lang="en">
@@ -118,11 +185,16 @@
             <span class="material-symbols-outlined text-primary text-2xl"
               >bus_alert</span
             >
-            <h1
-              class="font-headline font-extrabold text-xl tracking-tighter text-on-surface"
-            >
-              TrackFare
-            </h1>
+            <div>
+              <h1
+                class="font-headline font-extrabold text-xl tracking-tighter text-on-surface"
+              >
+                TrackFare
+              </h1>
+              <p class="text-xs text-on-surface-variant mt-1">
+                Welcome back, <?= htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') ?>
+              </p>
+            </div>
           </div>
           <img
             src="../../images/pfp.png"
@@ -137,7 +209,7 @@
             <div class="flex items-center justify-between gap-4">
               <div>
                 <p class="text-sm opacity-80">Wallet Balance</p>
-                <p class="mt-2 text-3xl font-extrabold">₱650.00</p>
+                <p class="mt-2 text-3xl font-extrabold">₱<?= number_format($walletBalance, 2) ?></p>
               </div>
               <div
                 class="inline-flex items-center gap-2 rounded-2xl bg-white/15 px-3 py-2 text-sm font-semibold"
@@ -168,16 +240,21 @@
                 </h2>
               </div>
               <span
-                class="inline-flex rounded-full bg-surface-container-high px-3 py-1 text-xs font-semibold text-primary"
+                class="<?= htmlspecialchars($tapStatusClasses, ENT_QUOTES, 'UTF-8') ?>"
               >
-                Waiting
+                <?= htmlspecialchars($tapStatus, ENT_QUOTES, 'UTF-8') ?>
               </span>
             </div>
-            <div class="mt-5 rounded-[1.75rem] bg-surface-container-low p-4">
+            <div class="mt-5 rounded-[1.75rem] bg-surface-container-low p-4 space-y-2">
               <p class="text-sm text-on-surface-variant">
                 Ready to start. Place your NFC card or phone over the bus reader
                 to begin your ride.
               </p>
+              <?php if ($nfcCardUid): ?>
+                <p class="text-sm text-on-surface-variant">
+                  NFC UID: <?= htmlspecialchars($nfcCardUid, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($nfcCardStatus, ENT_QUOTES, 'UTF-8') ?>
+                </p>
+              <?php endif; ?>
             </div>
           </div>
 
@@ -188,13 +265,13 @@
               <div>
                 <p class="text-sm text-on-surface-variant">Active Trip</p>
                 <h2 class="text-xl font-bold text-on-surface">
-                  No active trip
+                  <?= htmlspecialchars($activeTripStatus, ENT_QUOTES, 'UTF-8') ?>
                 </h2>
               </div>
               <span
                 class="inline-flex rounded-full bg-surface-container-high px-3 py-1 text-xs font-semibold text-on-surface-variant"
               >
-                Idle
+                <?= htmlspecialchars($activeTripBadge, ENT_QUOTES, 'UTF-8') ?>
               </span>
             </div>
             <div class="grid grid-cols-2 gap-3 mb-4">
@@ -204,7 +281,7 @@
                 >
                   Boarded stop
                 </p>
-                <p class="mt-2 font-semibold text-on-surface">—</p>
+                <p class="mt-2 font-semibold text-on-surface"><?= htmlspecialchars($boardedStop, ENT_QUOTES, 'UTF-8') ?></p>
               </div>
               <div class="rounded-3xl bg-white p-4 shadow-sm">
                 <p
@@ -212,7 +289,7 @@
                 >
                   Current stop
                 </p>
-                <p class="mt-2 font-semibold text-on-surface">—</p>
+                <p class="mt-2 font-semibold text-on-surface"><?= htmlspecialchars($currentStop, ENT_QUOTES, 'UTF-8') ?></p>
               </div>
               <div class="rounded-3xl bg-white p-4 shadow-sm col-span-2">
                 <p
@@ -220,7 +297,7 @@
                 >
                   Estimated fare
                 </p>
-                <p class="mt-2 font-semibold text-on-surface">₱0.00</p>
+                <p class="mt-2 font-semibold text-on-surface"><?= htmlspecialchars($estimatedFare, ENT_QUOTES, 'UTF-8') ?></p>
               </div>
             </div>
             <p class="text-sm text-on-surface-variant">

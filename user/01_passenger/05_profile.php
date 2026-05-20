@@ -1,3 +1,215 @@
+<?php
+session_start();
+require_once __DIR__ . '/../../config/db.php';
+
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
+$userId = (int) $_SESSION['user_id'];
+$fullName = trim($_SESSION['full_name'] ?? 'Passenger');
+$email = trim($_SESSION['email'] ?? '');
+$walletBalance = 0.00;
+$tripCount = 0;
+$fareSpent = 0.00;
+$lastTripLabel = '—';
+$nfcUid = 'N/A';
+$nfcMasked = '•••• ----';
+$nfcStatusText = 'Inactive';
+$nfcStatusClass = 'text-error';
+$recentTrips = [];
+$editProfileMessage = '';
+$changePasswordMessage = '';
+$showEditModal = false;
+$showChangePasswordModal = false;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['form_action'] ?? '';
+
+    if ($action === 'logout') {
+        session_unset();
+        session_destroy();
+        header('Location: ../../auth/login.php');
+        exit;
+    }
+
+    if ($action === 'edit_profile') {
+        $showEditModal = true;
+        $newFullName = trim($_POST['full_name'] ?? '');
+        $newEmail = trim($_POST['email'] ?? '');
+
+        if ($newFullName === '' || $newEmail === '') {
+            $editProfileMessage = 'Full name and email are required.';
+        } elseif (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+            $editProfileMessage = 'Please enter a valid email address.';
+        } else {
+            $duplicateStmt = $conn->prepare('SELECT user_id FROM users WHERE email = ? AND user_id != ? LIMIT 1');
+            $duplicateStmt->bind_param('si', $newEmail, $userId);
+            $duplicateStmt->execute();
+            $duplicateStmt->store_result();
+            if ($duplicateStmt->num_rows > 0) {
+                $editProfileMessage = 'This email is already in use.';
+            } else {
+                $duplicateStmt->close();
+                if ($updateStmt = $conn->prepare('UPDATE users SET full_name = ?, email = ? WHERE user_id = ?')) {
+                    $updateStmt->bind_param('ssi', $newFullName, $newEmail, $userId);
+                    $updateStmt->execute();
+                    $updateStmt->close();
+                    $fullName = $newFullName;
+                    $email = $newEmail;
+                    $_SESSION['full_name'] = $fullName;
+                    $_SESSION['email'] = $email;
+                    $editProfileMessage = 'Profile updated successfully.';
+                } else {
+                    $editProfileMessage = 'Unable to update profile. Please try again.';
+                }
+            }
+        }
+    }
+
+    if ($action === 'change_password') {
+        $showChangePasswordModal = true;
+        $currentPassword = trim($_POST['current_password'] ?? '');
+        $newPassword = trim($_POST['new_password'] ?? '');
+        $confirmPassword = trim($_POST['confirm_password'] ?? '');
+
+        if ($currentPassword === '' || $newPassword === '' || $confirmPassword === '') {
+            $changePasswordMessage = 'Please fill in all password fields.';
+        } elseif ($newPassword !== $confirmPassword) {
+            $changePasswordMessage = 'New password and confirmation do not match.';
+        } elseif (strlen($newPassword) < 6) {
+            $changePasswordMessage = 'New password must be at least 6 characters.';
+        } else {
+            $stmt = $conn->prepare('SELECT password FROM users WHERE user_id = ? LIMIT 1');
+            $stmt->bind_param('i', $userId);
+            $stmt->execute();
+            $stmt->bind_result($storedPassword);
+            $stmt->fetch();
+            $stmt->close();
+
+            $validCurrent = password_verify($currentPassword, $storedPassword) || $currentPassword === $storedPassword;
+            if (!$validCurrent) {
+                $changePasswordMessage = 'Current password is incorrect.';
+            } else {
+                $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
+                if ($updateStmt = $conn->prepare('UPDATE users SET password = ? WHERE user_id = ?')) {
+                    $updateStmt->bind_param('si', $passwordHash, $userId);
+                    $updateStmt->execute();
+                    $updateStmt->close();
+                    $changePasswordMessage = 'Password changed successfully.';
+                } else {
+                    $changePasswordMessage = 'Unable to update password. Please try again.';
+                }
+            }
+        }
+    }
+}
+
+if ($stmt = $conn->prepare('SELECT full_name, email FROM users WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $stmt->bind_result($dbFullName, $dbEmail);
+    if ($stmt->fetch()) {
+        $fullName = trim($dbFullName ?: $fullName);
+        $email = trim($dbEmail ?: $email);
+    }
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare('SELECT wallet_balance FROM passenger_profiles WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $stmt->bind_result($walletBalance);
+    $stmt->fetch();
+    $walletBalance = (float) $walletBalance;
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare('SELECT uid, is_active FROM nfc_cards WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $stmt->bind_result($uid, $isActive);
+    if ($stmt->fetch()) {
+        $nfcUid = trim($uid) ?: 'N/A';
+        $cleanUid = preg_replace('/[^A-Za-z0-9]/', '', $nfcUid);
+        if (strlen($cleanUid) >= 4) {
+            $nfcMasked = '•••• ' . strtoupper(substr($cleanUid, -4));
+        }
+        $nfcStatusText = $isActive ? 'Active / Ready' : 'Inactive';
+        $nfcStatusClass = $isActive ? 'text-emerald-700' : 'text-error';
+    }
+    $stmt->close();
+}
+
+$frequentRouteLabel = '—';
+
+if ($stmt = $conn->prepare('SELECT COUNT(*) AS trip_count, COALESCE(SUM(fare_amount), 0) AS fare_spent FROM trip_transactions WHERE user_id = ?')) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $stmt->bind_result($tripCount, $fareSpent);
+    $stmt->fetch();
+    $tripCount = (int) $tripCount;
+    $fareSpent = (float) $fareSpent;
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare(
+    'SELECT bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop, COUNT(*) AS route_count
+     FROM trip_transactions tt
+     LEFT JOIN stops bs ON tt.boarding_stop_id = bs.stop_id
+     LEFT JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id
+     WHERE tt.user_id = ?
+     GROUP BY tt.boarding_stop_id, tt.alighting_stop_id
+     ORDER BY route_count DESC
+     LIMIT 1'
+)) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $stmt->bind_result($freqBoarding, $freqAlighting, $routeCount);
+    if ($stmt->fetch()) {
+        if (!empty($freqBoarding) && !empty($freqAlighting)) {
+            $frequentRouteLabel = $freqBoarding . ' → ' . $freqAlighting;
+        } elseif (!empty($freqBoarding)) {
+            $frequentRouteLabel = $freqBoarding;
+        }
+    }
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare(
+    'SELECT tt.fare_amount, bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop
+     FROM trip_transactions tt
+     LEFT JOIN stops bs ON tt.boarding_stop_id = bs.stop_id
+     LEFT JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id
+     WHERE tt.user_id = ?
+     ORDER BY tt.transaction_id DESC
+     LIMIT 2'
+)) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $recentTrips[] = $row;
+    }
+    $stmt->close();
+}
+
+if (!empty($recentTrips)) {
+    $firstTrip = $recentTrips[0];
+    if (!empty($firstTrip['boarding_stop']) && !empty($firstTrip['alighting_stop'])) {
+        $lastTripLabel = $firstTrip['boarding_stop'] . ' → ' . $firstTrip['alighting_stop'];
+    } elseif (!empty($firstTrip['boarding_stop'])) {
+        $lastTripLabel = $firstTrip['boarding_stop'];
+    }
+}
+
+function escape($value)
+{
+    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+}
+?>
+
 <!doctype html>
 
 <html class="light" lang="en">
@@ -149,8 +361,8 @@
             </div>
             <div class="flex-1">
               <p class="text-sm opacity-80">TrackFare Passenger</p>
-              <h2 class="mt-2 text-2xl font-bold">John Doe</h2>
-              <p class="mt-1 text-sm text-white/80">johndoe@email.com</p>
+              <h2 class="mt-2 text-2xl font-bold"><?= escape($fullName) ?></h2>
+              <p class="mt-1 text-sm text-white/80"><?= escape($email) ?></p>
             </div>
           </div>
           <div class="mt-5 grid gap-3 sm:grid-cols-2">
@@ -158,13 +370,13 @@
               <p class="text-xs uppercase tracking-[0.25em] text-white/70">
                 Trips
               </p>
-              <p class="mt-2 text-2xl font-extrabold">24</p>
+              <p class="mt-2 text-2xl font-extrabold"><?= number_format($tripCount) ?></p>
             </div>
             <div class="rounded-3xl bg-white/10 p-4">
               <p class="text-xs uppercase tracking-[0.25em] text-white/70">
                 Wallet Balance
               </p>
-              <p class="mt-2 text-2xl font-extrabold">₱1,280</p>
+              <p class="mt-2 text-2xl font-extrabold">₱<?= number_format($walletBalance, 2) ?></p>
             </div>
           </div>
         </section>
@@ -188,20 +400,20 @@
               <p class="text-xs uppercase tracking-[0.25em] text-on-surface-variant">
                 Total Trips
               </p>
-              <p class="mt-2 text-xl font-bold text-on-surface">24</p>
+              <p class="mt-2 text-xl font-bold text-on-surface"><?= number_format($tripCount) ?></p>
             </div>
             <div class="rounded-3xl bg-surface-container-lowest p-4">
               <p class="text-xs uppercase tracking-[0.25em] text-on-surface-variant">
                 Fare Spent
               </p>
-              <p class="mt-2 text-xl font-bold text-on-surface">₱560</p>
+              <p class="mt-2 text-xl font-bold text-on-surface">₱<?= number_format($fareSpent, 2) ?></p>
             </div>
             <div class="rounded-3xl bg-surface-container-lowest p-4">
               <p class="text-xs uppercase tracking-[0.25em] text-on-surface-variant">
                 Frequent Route
               </p>
               <p class="mt-2 text-base font-semibold text-on-surface">
-                Bocaue → Marilao
+                <?= escape($frequentRouteLabel) ?>
               </p>
             </div>
             <div class="rounded-3xl bg-surface-container-lowest p-4">
@@ -209,7 +421,7 @@
                 Last Trip
               </p>
               <p class="mt-2 text-base font-semibold text-on-surface">
-                May 18, 2026
+                <?= escape($lastTripLabel) ?>
               </p>
             </div>
           </div>
@@ -222,12 +434,12 @@
             <div>
               <p class="text-sm text-on-surface-variant">NFC Card</p>
               <h2 class="mt-2 text-xl font-semibold text-on-surface">
-                •••• 4E5F
+                <?= escape($nfcMasked) ?>
               </h2>
             </div>
-            <div class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+            <div class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold <?= $nfcStatusClass ?>">
               <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-              Active / Ready
+              <?= escape($nfcStatusText) ?>
             </div>
           </div>
           <div class="mt-4 rounded-3xl bg-surface-container-lowest p-4 border border-slate-200">
@@ -237,11 +449,11 @@
                   NFC UID
                 </p>
                 <p class="mt-2 text-base font-semibold text-on-surface">
-                  0A:1B:2C:3D:4E:5F
+                  <?= escape($nfcUid) ?>
                 </p>
               </div>
               <span class="inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                Ready to tap
+                <?= $nfcStatusText === 'Active / Ready' ? 'Ready to tap' : 'Not linked' ?>
               </span>
             </div>
           </div>
@@ -267,28 +479,27 @@
             </button>
           </div>
           <div class="mt-5 space-y-3">
-            <div class="rounded-3xl bg-surface-container-lowest p-4">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-on-surface">Bocaue → Marilao</p>
-                  <p class="mt-1 text-sm text-on-surface-variant">
-                    May 18, 2026 · 07:45 AM
-                  </p>
+            <?php if (!empty($recentTrips)): ?>
+              <?php foreach ($recentTrips as $trip): ?>
+                <div class="rounded-3xl bg-surface-container-lowest p-4">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p class="font-semibold text-on-surface">
+                        <?= escape(trim(($trip['boarding_stop'] ?? '') . ' → ' . ($trip['alighting_stop'] ?? ''))) ?>
+                      </p>
+                      <p class="mt-1 text-sm text-on-surface-variant">
+                        —
+                      </p>
+                    </div>
+                    <p class="font-semibold text-on-surface">₱<?= number_format((float)$trip['fare_amount'], 2) ?></p>
+                  </div>
                 </div>
-                <p class="font-semibold text-on-surface">₱28</p>
+              <?php endforeach; ?>
+            <?php else: ?>
+              <div class="rounded-3xl bg-surface-container-lowest p-4">
+                <div class="text-sm text-on-surface-variant">No recent trips yet</div>
               </div>
-            </div>
-            <div class="rounded-3xl bg-surface-container-lowest p-4">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-on-surface">Malolos → Balanga</p>
-                  <p class="mt-1 text-sm text-on-surface-variant">
-                    May 17, 2026 · 05:20 PM
-                  </p>
-                </div>
-                <p class="font-semibold text-on-surface">₱35</p>
-              </div>
-            </div>
+            <?php endif; ?>
           </div>
         </section>
 
@@ -296,22 +507,128 @@
           class="rounded-[1.75rem] bg-surface-container-lowest p-5 shadow-sm border border-outline-variant space-y-3"
         >
           <button
+            type="button"
+            onclick="openModal('edit-profile-modal')"
             class="w-full rounded-3xl bg-primary px-4 py-4 text-sm font-semibold text-white transition hover:bg-primary/90"
           >
             Edit Profile
           </button>
           <button
+            type="button"
+            onclick="openModal('change-password-modal')"
             class="w-full rounded-3xl bg-white border border-outline-variant px-4 py-4 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high"
           >
             Change Password
           </button>
-          <button
-            class="w-full rounded-3xl border border-error text-error px-4 py-4 font-semibold transition hover:bg-error/10"
-          >
-            Logout
-          </button>
+          <form method="post" class="w-full">
+            <input type="hidden" name="form_action" value="logout" />
+            <button
+              type="submit"
+              class="w-full rounded-3xl border border-error text-error px-4 py-4 font-semibold transition hover:bg-error/10"
+            >
+              Logout
+            </button>
+          </form>
         </section>
       </main>
+
+      <div id="edit-profile-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm <?= $showEditModal ? '' : 'hidden' ?>">
+        <div class="flex h-full items-center justify-center p-4">
+          <div class="w-full max-w-[420px] rounded-[1.75rem] bg-white p-5 shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-lg font-semibold">Edit Profile</h2>
+                <p class="text-sm text-slate-500">Update your name and email.</p>
+              </div>
+              <button type="button" onclick="closeModal('edit-profile-modal')" class="text-slate-500 hover:text-slate-900">✕</button>
+            </div>
+            <?php if ($editProfileMessage !== ''): ?>
+              <div class="mb-4 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
+                <?= escape($editProfileMessage) ?>
+              </div>
+            <?php endif; ?>
+            <form method="post" class="space-y-4">
+              <input type="hidden" name="form_action" value="edit_profile" />
+              <div>
+                <label class="text-sm font-medium text-slate-700">Full Name</label>
+                <input
+                  type="text"
+                  name="full_name"
+                  value="<?= escape($fullName) ?>"
+                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                />
+              </div>
+              <div>
+                <label class="text-sm font-medium text-slate-700">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value="<?= escape($email) ?>"
+                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                />
+              </div>
+              <button
+                type="submit"
+                class="w-full rounded-3xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-primary/90"
+              >
+                Save Changes
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div id="change-password-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm <?= $showChangePasswordModal ? '' : 'hidden' ?>">
+        <div class="flex h-full items-center justify-center p-4">
+          <div class="w-full max-w-[420px] rounded-[1.75rem] bg-white p-5 shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-lg font-semibold">Change Password</h2>
+                <p class="text-sm text-slate-500">Update your account password.</p>
+              </div>
+              <button type="button" onclick="closeModal('change-password-modal')" class="text-slate-500 hover:text-slate-900">✕</button>
+            </div>
+            <?php if ($changePasswordMessage !== ''): ?>
+              <div class="mb-4 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
+                <?= escape($changePasswordMessage) ?>
+              </div>
+            <?php endif; ?>
+            <form method="post" class="space-y-4">
+              <input type="hidden" name="form_action" value="change_password" />
+              <div>
+                <label class="text-sm font-medium text-slate-700">Current Password</label>
+                <input
+                  type="password"
+                  name="current_password"
+                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                />
+              </div>
+              <div>
+                <label class="text-sm font-medium text-slate-700">New Password</label>
+                <input
+                  type="password"
+                  name="new_password"
+                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                />
+              </div>
+              <div>
+                <label class="text-sm font-medium text-slate-700">Confirm Password</label>
+                <input
+                  type="password"
+                  name="confirm_password"
+                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                />
+              </div>
+              <button
+                type="submit"
+                class="w-full rounded-3xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-primary/90"
+              >
+                Change Password
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
 
       <nav
         class="fixed bottom-0 left-0 w-full flex justify-around items-center px-2 pb-safe h-20 bg-white/95 backdrop-blur-md rounded-t-3xl z-50 border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
@@ -368,5 +685,25 @@
         </a>
       </nav>
     </div>
+    <script>
+      function openModal(id) {
+        var el = document.getElementById(id);
+        if (el) {
+          el.classList.remove('hidden');
+        }
+      }
+      function closeModal(id) {
+        var el = document.getElementById(id);
+        if (el) {
+          el.classList.add('hidden');
+        }
+      }
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+          closeModal('edit-profile-modal');
+          closeModal('change-password-modal');
+        }
+      });
+    </script>
   </body>
 </html>

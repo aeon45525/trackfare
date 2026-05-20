@@ -1,3 +1,62 @@
+<?php
+session_start();
+require_once __DIR__ . '/../../config/db.php';
+
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
+$userId = $_SESSION['user_id'];
+$walletBalance = 0.00;
+$transactions = [];
+
+// Fetch wallet balance
+if ($stmt = $conn->prepare('SELECT wallet_balance FROM passenger_profiles WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($row = $result->fetch_assoc()) {
+        $walletBalance = (float) $row['wallet_balance'];
+    }
+    $stmt->close();
+}
+
+// Handle top-up button click
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount'])) {
+    $amount = (float) $_POST['amount'];
+    if ($amount > 0) {
+        $newBalance = $walletBalance + $amount;
+        if ($stmt = $conn->prepare('UPDATE passenger_profiles SET wallet_balance = ? WHERE user_id = ?')) {
+            $stmt->bind_param('di', $newBalance, $userId);
+            $stmt->execute();
+            $stmt->close();
+            $walletBalance = $newBalance;
+        }
+    }
+}
+
+// Fetch transaction history
+if ($stmt = $conn->prepare(
+    'SELECT tt.transaction_id, tt.fare_amount, tt.boarding_stop_id, tt.alighting_stop_id, 
+            bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop
+     FROM trip_transactions tt
+     LEFT JOIN stops bs ON tt.boarding_stop_id = bs.stop_id
+     LEFT JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id
+     WHERE tt.user_id = ?
+     ORDER BY tt.transaction_id DESC
+     LIMIT 10'
+)) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $transactions[] = $row;
+    }
+    $stmt->close();
+}
+?>
+
 <!doctype html>
 
 <html class="light" lang="en">
@@ -137,7 +196,7 @@
           <div class="flex items-center justify-between gap-4">
             <div>
               <p class="text-sm opacity-80">Current balance</p>
-              <p class="mt-3 text-4xl font-extrabold">₱650.00</p>
+              <p class="mt-3 text-4xl font-extrabold">₱<?= number_format($walletBalance, 2) ?></p>
             </div>
           </div>
           <p class="mt-4 text-sm text-white/85">
@@ -161,23 +220,32 @@
               ₱50 / ₱100 / ₱200
             </span>
           </div>
-          <div class="grid grid-cols-3 gap-3">
+          <form method="POST" class="grid grid-cols-3 gap-3">
             <button
+              type="submit"
+              name="amount"
+              value="50"
               class="rounded-3xl bg-surface-container-low py-4 text-sm font-semibold text-on-surface shadow-sm hover:bg-surface-container transition"
             >
               Add ₱50
             </button>
             <button
+              type="submit"
+              name="amount"
+              value="100"
               class="rounded-3xl bg-surface-container-low py-4 text-sm font-semibold text-on-surface shadow-sm hover:bg-surface-container transition"
             >
               Add ₱100
             </button>
             <button
+              type="submit"
+              name="amount"
+              value="200"
               class="rounded-3xl bg-surface-container-low py-4 text-sm font-semibold text-on-surface shadow-sm hover:bg-surface-container transition"
             >
               Add ₱200
             </button>
-          </div>
+          </form>
         </section>
 
         <section
@@ -196,70 +264,32 @@
             >
           </div>
           <div class="space-y-3">
-            <div
-              class="rounded-3xl bg-white p-4 shadow-sm border border-surface-container-high"
-            >
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-on-surface">Top-up</p>
-                  <p class="text-xs text-on-surface-variant mt-1">
-                    ₱200 added to wallet
+            <?php if (count($transactions) > 0): ?>
+              <?php foreach ($transactions as $txn): ?>
+                <div
+                  class="rounded-3xl bg-white p-4 shadow-sm border border-surface-container-high"
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p class="font-semibold text-on-surface">Fare deduction</p>
+                      <p class="text-xs text-on-surface-variant mt-1">
+                        <?= htmlspecialchars($txn['boarding_stop'] ?? 'Unknown', ENT_QUOTES, 'UTF-8') ?> → <?= htmlspecialchars($txn['alighting_stop'] ?? 'Unknown', ENT_QUOTES, 'UTF-8') ?>
+                      </p>
+                    </div>
+                    <span class="text-sm font-bold text-error">-₱<?= number_format((float)$txn['fare_amount'], 2) ?></span>
+                  </div>
+                  <p class="mt-3 text-[11px] text-on-surface-variant">
+                    Transaction ID: <?= htmlspecialchars($txn['transaction_id'], ENT_QUOTES, 'UTF-8') ?>
                   </p>
                 </div>
-                <span class="text-sm font-bold text-[#116530]">+₱200</span>
+              <?php endforeach; ?>
+            <?php else: ?>
+              <div
+                class="rounded-3xl bg-white p-4 shadow-sm border border-surface-container-high text-center"
+              >
+                <p class="text-sm text-on-surface-variant">No transaction history yet</p>
               </div>
-              <p class="mt-3 text-[11px] text-on-surface-variant">
-                May 18, 2026 • 11:20 AM
-              </p>
-            </div>
-            <div
-              class="rounded-3xl bg-white p-4 shadow-sm border border-surface-container-high"
-            >
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-on-surface">Fare deduction</p>
-                  <p class="text-xs text-on-surface-variant mt-1">
-                    Bocaue → Marilao
-                  </p>
-                </div>
-                <span class="text-sm font-bold text-error">-₱25</span>
-              </div>
-              <p class="mt-3 text-[11px] text-on-surface-variant">
-                May 17, 2026 • 08:30 AM
-              </p>
-            </div>
-            <div
-              class="rounded-3xl bg-white p-4 shadow-sm border border-surface-container-high"
-            >
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-on-surface">Top-up</p>
-                  <p class="text-xs text-on-surface-variant mt-1">
-                    ₱100 added to wallet
-                  </p>
-                </div>
-                <span class="text-sm font-bold text-[#116530]">+₱100</span>
-              </div>
-              <p class="mt-3 text-[11px] text-on-surface-variant">
-                May 16, 2026 • 06:45 PM
-              </p>
-            </div>
-            <div
-              class="rounded-3xl bg-white p-4 shadow-sm border border-surface-container-high"
-            >
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-on-surface">Fare deduction</p>
-                  <p class="text-xs text-on-surface-variant mt-1">
-                    Marilao → Meycauayan
-                  </p>
-                </div>
-                <span class="text-sm font-bold text-error">-₱20</span>
-              </div>
-              <p class="mt-3 text-[11px] text-on-surface-variant">
-                May 15, 2026 • 05:15 PM
-              </p>
-            </div>
+            <?php endif; ?>
           </div>
         </section>
       </main>

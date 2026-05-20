@@ -1,3 +1,60 @@
+<?php
+session_start();
+require_once __DIR__ . '/../../config/db.php';
+
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
+$userId = (int) $_SESSION['user_id'];
+$tripHistory = [];
+
+if ($stmt = $conn->prepare(
+    'SELECT tt.transaction_id, tt.fare_amount, tt.boarding_stop_id, tt.alighting_stop_id,
+            bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop,
+            t.status AS trip_status, r.display_name AS route_name
+     FROM trip_transactions tt
+     LEFT JOIN trips t ON tt.trip_id = t.trip_id
+     LEFT JOIN routes r ON t.route_id = r.route_id
+     LEFT JOIN stops bs ON tt.boarding_stop_id = bs.stop_id
+     LEFT JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id
+     WHERE tt.user_id = ?
+     ORDER BY tt.transaction_id DESC
+     LIMIT 10'
+)) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $tripHistory[] = $row;
+    }
+    $stmt->close();
+}
+
+function formatTripStatus($status)
+{
+    if (empty($status) || strtolower($status) === 'completed') {
+        return 'Completed';
+    }
+
+    return strtolower($status) === 'active' ? 'Active' : ucfirst($status);
+}
+
+function formatTripRoute(array $trip)
+{
+    if (!empty($trip['boarding_stop']) && !empty($trip['alighting_stop'])) {
+        return $trip['boarding_stop'] . ' → ' . $trip['alighting_stop'];
+    }
+
+    if (!empty($trip['route_name'])) {
+        return $trip['route_name'];
+    }
+
+    return 'Trip record';
+}
+?>
+
 <!doctype html>
 
 <html class="light" lang="en">
@@ -136,121 +193,47 @@
       <!-- Main Content Canvas -->
       <main class="pt-20 pb-28 px-4 min-h-screen space-y-4">
         <section class="space-y-3">
-          <div
-            class="rounded-3xl bg-surface-container-lowest p-4 border border-surface-container-high shadow-sm"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.2em] text-on-surface-variant"
-            >
-              Route
-            </p>
-            <p class="mt-2 font-semibold text-on-surface">Bocaue → Marilao</p>
+          <?php if (!empty($tripHistory)): ?>
+            <?php foreach ($tripHistory as $trip): ?>
+              <div
+                class="rounded-3xl bg-surface-container-lowest p-4 border border-surface-container-high shadow-sm"
+              >
+                <p
+                  class="text-xs uppercase tracking-[0.2em] text-on-surface-variant"
+                >
+                  Route
+                </p>
+                <p class="mt-2 font-semibold text-on-surface">
+                  <?= htmlspecialchars(formatTripRoute($trip), ENT_QUOTES, 'UTF-8') ?>
+                </p>
+                <div
+                  class="mt-3 flex items-center justify-between text-sm text-on-surface-variant"
+                >
+                  <span>Fare</span>
+                  <span>₱<?= number_format((float)$trip['fare_amount'], 2) ?></span>
+                </div>
+                <div
+                  class="mt-2 flex items-center justify-between text-sm text-on-surface-variant"
+                >
+                  <span>Time</span>
+                  <span>—</span>
+                </div>
+                <div
+                  class="mt-3 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800"
+                >
+                  <?= htmlspecialchars(formatTripStatus($trip['trip_status']), ENT_QUOTES, 'UTF-8') ?>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          <?php else: ?>
             <div
-              class="mt-3 flex items-center justify-between text-sm text-on-surface-variant"
+              class="rounded-3xl bg-surface-container-lowest p-4 border border-surface-container-high shadow-sm"
             >
-              <span>Fare</span>
-              <span>₱25</span>
+              <p class="text-sm font-semibold text-on-surface">
+                No trips yet
+              </p>
             </div>
-            <div
-              class="mt-2 flex items-center justify-between text-sm text-on-surface-variant"
-            >
-              <span>Time</span>
-              <span>May 18, 2026 • 11:20 AM</span>
-            </div>
-            <div
-              class="mt-3 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800"
-            >
-              Completed
-            </div>
-          </div>
-
-          <div
-            class="rounded-3xl bg-surface-container-lowest p-4 border border-surface-container-high shadow-sm"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.2em] text-on-surface-variant"
-            >
-              Route
-            </p>
-            <p class="mt-2 font-semibold text-on-surface">
-              Marilao → Meycauayan
-            </p>
-            <div
-              class="mt-3 flex items-center justify-between text-sm text-on-surface-variant"
-            >
-              <span>Fare</span>
-              <span>₱20</span>
-            </div>
-            <div
-              class="mt-2 flex items-center justify-between text-sm text-on-surface-variant"
-            >
-              <span>Time</span>
-              <span>May 17, 2026 • 08:30 AM</span>
-            </div>
-            <div
-              class="mt-3 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800"
-            >
-              Completed
-            </div>
-          </div>
-
-          <div
-            class="rounded-3xl bg-surface-container-lowest p-4 border border-surface-container-high shadow-sm"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.2em] text-on-surface-variant"
-            >
-              Route
-            </p>
-            <p class="mt-2 font-semibold text-on-surface">
-              Bocaue → Meycauayan
-            </p>
-            <div
-              class="mt-3 flex items-center justify-between text-sm text-on-surface-variant"
-            >
-              <span>Fare</span>
-              <span>₱40</span>
-            </div>
-            <div
-              class="mt-2 flex items-center justify-between text-sm text-on-surface-variant"
-            >
-              <span>Time</span>
-              <span>May 16, 2026 • 06:45 PM</span>
-            </div>
-            <div
-              class="mt-3 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800"
-            >
-              Completed
-            </div>
-          </div>
-
-          <div
-            class="rounded-3xl bg-surface-container-lowest p-4 border border-surface-container-high shadow-sm"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.2em] text-on-surface-variant"
-            >
-              Route
-            </p>
-            <p class="mt-2 font-semibold text-on-surface">Bocaue → Marilao</p>
-            <div
-              class="mt-3 flex items-center justify-between text-sm text-on-surface-variant"
-            >
-              <span>Fare</span>
-              <span>₱25</span>
-            </div>
-            <div
-              class="mt-2 flex items-center justify-between text-sm text-on-surface-variant"
-            >
-              <span>Time</span>
-              <span>May 15, 2026 • 05:15 PM</span>
-            </div>
-            <div
-              class="mt-3 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800"
-            >
-              Completed
-            </div>
-          </div>
+          <?php endif; ?>
         </section>
       </main>
       <!-- BottomNavBar -->

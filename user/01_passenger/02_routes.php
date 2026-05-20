@@ -1,3 +1,101 @@
+<?php
+session_start();
+require_once __DIR__ . '/../../config/db.php';
+
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
+$routeId = 1;
+$routeName = 'Balagtas → Monumento';
+$routeStops = [];
+
+if ($stmt = $conn->prepare(
+    'SELECT s.stop_id, s.stop_name, s.municipality
+     FROM route_stops rs
+     JOIN stops s ON rs.stop_id = s.stop_id
+     WHERE rs.route_id = ?
+     ORDER BY rs.stop_order'
+)) {
+    $stmt->bind_param('i', $routeId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $routeStops[] = $row;
+    }
+    $stmt->close();
+}
+
+// Estimated consecutive distances between stops in kilometers
+$segmentDistances = [
+    1.2, 0.9, 0.9, 0.8, 0.9, 1.1, 1.1, 0.9, 0.8, 1.0,
+    1.0, 1.1, 1.0, 1.2, 1.4, 1.3, 1.2, 1.0, 0.9
+];
+
+if (count($routeStops) === 0) {
+    $routeStops = [
+        ['stop_name' => 'ULTRA MEGA', 'municipality' => 'Balagtas, Bulacan'],
+        ['stop_name' => 'BALAGTAS ARENA', 'municipality' => 'Balagtas, Bulacan'],
+        ['stop_name' => 'GOLDEN CITY', 'municipality' => 'Bocaue, Bulacan'],
+        ['stop_name' => 'DR. YANGA’S COLLEGE', 'municipality' => 'Bocaue, Bulacan'],
+        ['stop_name' => 'BOCAUE MARKET', 'municipality' => 'Bocaue, Bulacan'],
+        ['stop_name' => 'BUNLO JIL', 'municipality' => 'Bocaue, Bulacan'],
+        ['stop_name' => 'JONERS LOLOMBOY', 'municipality' => 'Bocaue, Bulacan'],
+        ['stop_name' => 'TOWN IN COUNTRY', 'municipality' => 'Bocaue, Bulacan'],
+        ['stop_name' => 'MARILAO TULAY', 'municipality' => 'Marilao, Bulacan'],
+        ['stop_name' => 'LIAS', 'municipality' => 'Marilao, Bulacan'],
+        ['stop_name' => 'SM MARILAO', 'municipality' => 'Marilao, Bulacan'],
+        ['stop_name' => 'MEDALLION HOMES', 'municipality' => 'Meycauayan, Bulacan'],
+        ['stop_name' => 'MALHACAN', 'municipality' => 'Meycauayan, Bulacan'],
+        ['stop_name' => 'BANGCAL', 'municipality' => 'Meycauayan, Bulacan'],
+        ['stop_name' => 'MALANDAY', 'municipality' => 'Valenzuela City'],
+        ['stop_name' => 'DALANDANAN', 'municipality' => 'Valenzuela City'],
+        ['stop_name' => 'BALUBARAN', 'municipality' => 'Valenzuela City'],
+        ['stop_name' => 'MALINTA', 'municipality' => 'Valenzuela City'],
+        ['stop_name' => 'KARUHATAN', 'municipality' => 'Valenzuela City'],
+        ['stop_name' => 'VICTONICA MONUMENTO', 'municipality' => 'Caloocan City'],
+    ];
+}
+
+$stopNames = array_column($routeStops, 'stop_name');
+$stopCount = count($stopNames);
+
+$cumulativeDistances = [0.0];
+for ($i = 0; $i < count($segmentDistances); $i++) {
+    $cumulativeDistances[] = round($cumulativeDistances[$i] + $segmentDistances[$i], 2);
+}
+
+function calculateFare(float $distance): float
+{
+    if ($distance <= 5.0) {
+        return 13.00;
+    }
+
+    $extraKm = (int) ceil($distance - 5.0);
+    return 13.00 + ($extraKm * 2.25);
+}
+
+function getDistanceBetweenStops(int $from, int $to, array $cumulativeDistances): float
+{
+    return round(abs($cumulativeDistances[$to] - $cumulativeDistances[$from]), 2);
+}
+
+$fareMatrix = [];
+for ($from = 0; $from < $stopCount; $from++) {
+    for ($to = 0; $to < $stopCount; $to++) {
+        $distance = getDistanceBetweenStops($from, $to, $cumulativeDistances);
+        $fareMatrix[$from][$to] = [
+            'distance' => $distance,
+            'fare' => $distance > 0 ? calculateFare($distance) : 0.00,
+        ];
+    }
+}
+
+$totalRouteDistance = end($cumulativeDistances);
+$totalStops = $stopCount;
+?>
+
 <!doctype html>
 
 <html lang="en">
@@ -205,42 +303,52 @@
             Route information
           </p>
           <h2 class="mt-3 text-2xl font-bold text-on-surface">
-            Bocaue → Marilao → Meycauayan
+            <?= htmlspecialchars($routeName, ENT_QUOTES, 'UTF-8') ?>
           </h2>
+          <div class="mt-4 text-sm text-on-surface-variant">
+            <p><?= $totalStops ?> stops · Estimated route distance <?= number_format($totalRouteDistance, 2) ?> km</p>
+            <p class="mt-2">Fare model: ₱13 minimum for 0–5 km, then ₱2.25 per additional km.</p>
+          </div>
           <div
             class="mt-6 rounded-[1.75rem] bg-white p-4 border border-surface-container-high shadow-sm"
           >
             <p
               class="text-[11px] uppercase tracking-[0.2em] text-on-surface-variant"
             >
-              Stops
+              Estimated km between stops
             </p>
-            <div class="mt-4 space-y-3 text-sm font-semibold text-on-surface">
-              <div
-                class="flex items-center justify-between rounded-3xl bg-surface-container-low p-3"
-              >
-                <span>Bocaue</span>
-                <span
-                  class="inline-flex h-2.5 w-2.5 rounded-full bg-primary"
-                ></span>
-              </div>
-              <div
-                class="flex items-center justify-between rounded-3xl bg-surface-container-low p-3"
-              >
-                <span>Marilao</span>
-                <span
-                  class="inline-flex h-2.5 w-2.5 rounded-full bg-primary"
-                ></span>
-              </div>
-              <div
-                class="flex items-center justify-between rounded-3xl bg-surface-container-low p-3"
-              >
-                <span>Meycauayan</span>
-                <span
-                  class="inline-flex h-2.5 w-2.5 rounded-full bg-primary"
-                ></span>
-              </div>
+            <div class="mt-4 divide-y divide-surface-container-high text-sm text-on-surface">
+              <?php foreach ($routeStops as $index => $stop):
+                if ($index >= 5) break;
+                $nextStop = $routeStops[$index + 1]['stop_name'] ?? null;
+                $segmentDistance = $segmentDistances[$index] ?? 0.0;
+                $cumulative = $cumulativeDistances[$index];
+              ?>
+                <div class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p class="font-semibold"><?= htmlspecialchars($stop['stop_name'], ENT_QUOTES, 'UTF-8') ?></p>
+                    <p class="text-xs text-on-surface-variant"><?= htmlspecialchars($stop['municipality'], ENT_QUOTES, 'UTF-8') ?></p>
+                  </div>
+                  <div class="text-sm text-on-surface-variant text-right">
+                    <p>KM from start: <?= number_format($cumulative, 2) ?></p>
+                    <?php if ($nextStop !== null): ?>
+                      <p>Next to <?= htmlspecialchars($nextStop, ENT_QUOTES, 'UTF-8') ?> · <?= number_format($segmentDistance, 2) ?> km</p>
+                    <?php else: ?>
+                      <p>Terminus stop</p>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              <?php endforeach; ?>
             </div>
+            <?php if ($stopCount > 5): ?>
+              <button
+                id="toggle-stops-btn"
+                class="mt-4 w-full rounded-2xl bg-primary-container text-white px-4 py-3 text-sm font-semibold hover:opacity-90 transition-opacity"
+                onclick="toggleStops()"
+              >
+                View All Stops
+              </button>
+            <?php endif; ?>
           </div>
         </section>
 
@@ -265,33 +373,56 @@
           </div>
         </section>
 
-        <!-- Fare Matrix -->
+        <!-- Fare Estimator -->
         <section
           class="rounded-3xl bg-surface-container-lowest border border-outline-variant p-5 shadow-sm"
         >
-          <h2 class="text-lg font-bold text-on-surface">Fare matrix</h2>
+          <h2 class="text-lg font-bold text-on-surface">Fare estimator</h2>
           <p class="mt-3 text-sm text-on-surface-variant">
-            Tap-in at your boarding stop and tap-out at your destination. The
-            fare is calculated based on this stop-to-stop pricing.
+            Select your boarding and destination stops to see the estimated fare.
           </p>
-          <div class="mt-5 grid gap-3 text-sm">
-            <div
-              class="rounded-3xl bg-white border border-surface-container-high p-4"
-            >
-              <p class="font-semibold text-on-surface">Bocaue → Marilao</p>
-              <p class="mt-1 text-on-surface-variant">₱25</p>
+
+          <div class="mt-5 space-y-4 rounded-3xl bg-white border border-surface-container-high p-5">
+            <div>
+              <label class="block text-sm font-semibold text-on-surface mb-2">From</label>
+              <select
+                id="from-stop"
+                class="w-full px-4 py-3 rounded-2xl border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                onchange="updateFare()"
+              >
+                <option value="-1">Select boarding stop</option>
+                <?php foreach ($stopNames as $index => $name): ?>
+                  <option value="<?= $index ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></option>
+                <?php endforeach; ?>
+              </select>
             </div>
-            <div
-              class="rounded-3xl bg-white border border-surface-container-high p-4"
-            >
-              <p class="font-semibold text-on-surface">Marilao → Meycauayan</p>
-              <p class="mt-1 text-on-surface-variant">₱20</p>
+
+            <div>
+              <label class="block text-sm font-semibold text-on-surface mb-2">To</label>
+              <select
+                id="to-stop"
+                class="w-full px-4 py-3 rounded-2xl border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                onchange="updateFare()"
+              >
+                <option value="-1">Select destination stop</option>
+                <?php foreach ($stopNames as $index => $name): ?>
+                  <option value="<?= $index ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></option>
+                <?php endforeach; ?>
+              </select>
             </div>
-            <div
-              class="rounded-3xl bg-white border border-surface-container-high p-4"
-            >
-              <p class="font-semibold text-on-surface">Bocaue → Meycauayan</p>
-              <p class="mt-1 text-on-surface-variant">₱40</p>
+
+            <div id="fare-result" class="hidden mt-5 rounded-2xl bg-primary-fixed p-4">
+              <p class="text-sm text-on-surface-variant mb-3">Estimated trip details</p>
+              <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-on-surface-variant">Distance</span>
+                  <span id="result-distance" class="font-semibold text-on-surface">0.00 km</span>
+                </div>
+                <div class="flex justify-between items-center pt-3 border-t border-primary-container">
+                  <span class="font-semibold text-on-surface">Estimated Fare</span>
+                  <span id="result-fare" class="text-2xl font-bold text-primary">₱0.00</span>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -353,6 +484,112 @@
         </a>
       </nav>
     </div>
+
+    <!-- All Stops Modal -->
+    <div id="stops-modal" class="hidden fixed inset-0 z-50 flex items-end bg-black/30 backdrop-blur-sm">
+      <div class="w-full max-w-[420px] mx-auto bg-white rounded-t-3xl shadow-lg max-h-[80dvh] overflow-y-auto animate-slide-up">
+        <div class="sticky top-0 bg-white border-b border-outline-variant px-4 py-4 flex items-center justify-between">
+          <h2 class="text-lg font-bold text-on-surface">All <?= $stopCount ?> Stops</h2>
+          <button onclick="closeStopsModal()" class="text-on-surface-variant hover:text-on-surface transition-colors">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div class="px-4 py-4 divide-y divide-surface-container-high text-sm text-on-surface space-y-0">
+          <?php foreach ($routeStops as $index => $stop):
+            $nextStop = $routeStops[$index + 1]['stop_name'] ?? null;
+            $segmentDistance = $segmentDistances[$index] ?? 0.0;
+            $cumulative = $cumulativeDistances[$index];
+          ?>
+            <div class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="font-semibold"><?= htmlspecialchars($stop['stop_name'], ENT_QUOTES, 'UTF-8') ?></p>
+                <p class="text-xs text-on-surface-variant"><?= htmlspecialchars($stop['municipality'], ENT_QUOTES, 'UTF-8') ?></p>
+              </div>
+              <div class="text-sm text-on-surface-variant text-right">
+                <p>KM from start: <?= number_format($cumulative, 2) ?></p>
+                <?php if ($nextStop !== null): ?>
+                  <p>Next to <?= htmlspecialchars($nextStop, ENT_QUOTES, 'UTF-8') ?> · <?= number_format($segmentDistance, 2) ?> km</p>
+                <?php else: ?>
+                  <p>Terminus stop</p>
+                <?php endif; ?>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      @keyframes slide-up {
+        from {
+          transform: translateY(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      .animate-slide-up {
+        animation: slide-up 0.3s ease-out;
+      }
+    </style>
+
+    <script>
+      // Fare calculation data from PHP
+      const stopNames = <?= json_encode($stopNames) ?>;
+      const cumulativeDistances = <?= json_encode($cumulativeDistances) ?>;
+
+      function calculateFare(distance) {
+        if (distance <= 5.0) {
+          return 13.00;
+        }
+        const extraKm = Math.ceil(distance - 5.0);
+        return 13.00 + (extraKm * 2.25);
+      }
+
+      function getDistance(fromIndex, toIndex) {
+        if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+          return 0.0;
+        }
+        return Math.round(Math.abs(cumulativeDistances[toIndex] - cumulativeDistances[fromIndex]) * 100) / 100;
+      }
+
+      function updateFare() {
+        const fromIndex = parseInt(document.getElementById('from-stop').value, 10);
+        const toIndex = parseInt(document.getElementById('to-stop').value, 10);
+        const resultDiv = document.getElementById('fare-result');
+
+        if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+          resultDiv.classList.add('hidden');
+          return;
+        }
+
+        const distance = getDistance(fromIndex, toIndex);
+        const fare = distance > 0 ? calculateFare(distance) : 0.0;
+
+        document.getElementById('result-distance').textContent = distance.toFixed(2) + ' km';
+        document.getElementById('result-fare').textContent = '₱' + fare.toFixed(2);
+        resultDiv.classList.remove('hidden');
+      }
+
+      function toggleStops() {
+        const modal = document.getElementById('stops-modal');
+        modal.classList.remove('hidden');
+      }
+
+      function closeStopsModal() {
+        const modal = document.getElementById('stops-modal');
+        modal.classList.add('hidden');
+      }
+
+      // Close modal when clicking outside
+      document.getElementById('stops-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+          closeStopsModal();
+        }
+      });
+    </script>
 
     <!-- Leaflet JS -->
     <script>
