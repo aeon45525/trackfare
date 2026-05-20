@@ -197,10 +197,10 @@
               <h1
                 class="text-4xl font-extrabold tracking-tight text-on-surface font-headline"
               >
-                Driver Management
+                Driver Operations
               </h1>
               <p class="mt-2 text-slate-600">
-                Manage fleet drivers, route assignments, and availability.
+                Manage fleet drivers, route assignments, and operational status.
               </p>
             </div>
             <div class="flex items-center gap-3">
@@ -229,10 +229,11 @@
               <p
                 class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
               >
-                Driver roster
+                Driver Operations Panel
               </p>
               <p class="mt-2 text-sm text-slate-600">
-                Live overview of driver status and route assignments.
+                Operational overview of driver routes, bus assignments, and
+                status.
               </p>
             </div>
             <button
@@ -280,7 +281,12 @@
                     <th
                       class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                     >
-                      Status
+                      Operational Status
+                    </th>
+                    <th
+                      class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Bus Assignment
                     </th>
                     <th
                       class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 text-right"
@@ -295,23 +301,29 @@
                       John Doe
                     </td>
                     <td class="px-6 py-5 text-sm text-slate-700">
-                      NLEX Express
+                      <div class="font-semibold text-slate-900">
+                        Bocaue → Marilao
+                      </div>
+                      <div class="mt-1 text-xs text-slate-500">
+                        Current stop: Barangay Mabolo
+                      </div>
                     </td>
                     <td
                       class="px-6 py-5 text-sm font-semibold text-emerald-700"
                     >
-                      Active
+                      On Route
                     </td>
+                    <td class="px-6 py-5 text-sm text-slate-900">BUS 18</td>
                     <td class="px-6 py-5 text-sm text-right">
                       <button
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Edit
+                        View Driver
                       </button>
                       <button
-                        class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                        class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Disable
+                        Update Status
                       </button>
                     </td>
                   </tr>
@@ -320,21 +332,27 @@
                       Ricardo Gomez
                     </td>
                     <td class="px-6 py-5 text-sm text-slate-700">
-                      MacArthur Route
+                      <div class="font-semibold text-slate-900">
+                        Marilao → Meycauayan
+                      </div>
+                      <div class="mt-1 text-xs text-slate-500">
+                        Currently idle off route
+                      </div>
                     </td>
                     <td class="px-6 py-5 text-sm font-semibold text-slate-700">
-                      Offline
+                      Idle
                     </td>
+                    <td class="px-6 py-5 text-sm text-slate-900">BUS 07</td>
                     <td class="px-6 py-5 text-sm text-right">
                       <button
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Edit
+                        View Driver
                       </button>
                       <button
-                        class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                        class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Disable
+                        Assign Route
                       </button>
                     </td>
                   </tr>
@@ -343,23 +361,29 @@
                       Elena Santos
                     </td>
                     <td class="px-6 py-5 text-sm text-slate-700">
-                      NLEX Express
+                      <div class="font-semibold text-slate-900">
+                        Bocaue → Meycauayan
+                      </div>
+                      <div class="mt-1 text-xs text-slate-500">
+                        Current stop: Pulilan Junction
+                      </div>
                     </td>
                     <td
                       class="px-6 py-5 text-sm font-semibold text-emerald-700"
                     >
-                      Active
+                      On Route
                     </td>
+                    <td class="px-6 py-5 text-sm text-slate-900">BUS 27</td>
                     <td class="px-6 py-5 text-sm text-right">
                       <button
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Edit
+                        View Driver
                       </button>
                       <button
-                        class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                        class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Disable
+                        Update Status
                       </button>
                     </td>
                   </tr>
@@ -409,7 +433,7 @@
                 <div>
                   <label
                     class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
-                    >Name</label
+                    >Driver Name</label
                   >
                   <input
                     type="text"
@@ -444,22 +468,47 @@
                 <div>
                   <label
                     class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
-                    >Route Assignment</label
+                    >Assigned Route</label
                   >
                   <select
                     class="mt-2 w-full rounded-2xl border border-slate-200 bg-surface-container-low px-4 py-3 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <option>Choose Route</option>
-                    <option>NLEX Express</option>
-                    <option>MacArthur Route</option>
-                    <option>Santa Maria Loop</option>
+                    <option>Bocaue → Marilao</option>
+                    <option>Marilao → Meycauayan</option>
+                    <option>Bocaue → Meycauayan</option>
+                  </select>
+                </div>
+              </div>
+              <div class="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label
+                    class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    >Assigned Bus Number</label
+                  >
+                  <input
+                    type="text"
+                    class="mt-2 w-full rounded-2xl border border-slate-200 bg-surface-container-low px-4 py-3 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g. BUS 15"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    >Driver Status</label
+                  >
+                  <select
+                    class="mt-2 w-full rounded-2xl border border-slate-200 bg-surface-container-low px-4 py-3 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option selected>Idle</option>
+                    <option>On Route</option>
                   </select>
                 </div>
               </div>
               <button
                 class="w-full rounded-2xl bg-blue-600 px-5 py-4 text-sm font-semibold text-white hover:bg-blue-700 transition"
               >
-                Create Driver
+                Add Driver to Fleet
               </button>
             </form>
           </section>

@@ -213,7 +213,7 @@
               >
                 Analytics Dashboard
               </h1>
-              <p class="mt-2 text-slate-600">AI-Powered Transport Insights</p>
+              <p class="mt-2 text-slate-600">Transport Operations Insights</p>
             </div>
             <div class="flex items-center gap-3">
               <div class="relative w-full max-w-md">
@@ -261,68 +261,92 @@
           </div>
         </header>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <!-- TOP: KPI Snapshot Grid -->
+        <section
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6"
+        >
           <div
-            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200"
+            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200 flex flex-col justify-between"
           >
-            <p
-              class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-            >
-              Peak Hour
-            </p>
-            <h2 class="mt-4 text-3xl font-black text-on-surface">8:00 AM</h2>
-            <p class="mt-3 text-sm text-slate-600">
-              Highest boardings across the network.
-            </p>
+            <div>
+              <p
+                class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+              >
+                Peak Hour
+              </p>
+              <h2 class="mt-4 text-3xl font-black text-on-surface">7–9 AM</h2>
+            </div>
+            <p class="mt-3 text-sm text-slate-600">Highest boarding window</p>
           </div>
-          <div
-            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-            >
-              Most Active Stop
-            </p>
-            <h2 class="mt-4 text-3xl font-black text-on-surface">Marilao</h2>
-            <p class="mt-3 text-sm text-slate-600">
-              Stop with the largest passenger flow.
-            </p>
-          </div>
-          <div
-            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-            >
-              Average Fare
-            </p>
-            <h2 class="mt-4 text-3xl font-black text-on-surface">₱14</h2>
-            <p class="mt-3 text-sm text-slate-600">
-              Average ticket value this shift.
-            </p>
-          </div>
-          <div
-            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-            >
-              Trips Today
-            </p>
-            <h2 class="mt-4 text-3xl font-black text-on-surface">48</h2>
-            <p class="mt-3 text-sm text-slate-600">
-              Completed and active trips today.
-            </p>
-          </div>
-        </div>
 
-        <div class="grid gap-4 xl:grid-cols-2 mb-6">
-          <section
-            class="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200"
+          <div
+            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200 flex flex-col justify-between"
           >
-            <div
-              class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-5"
-            >
+            <div>
+              <p
+                class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+              >
+                Most Active Stop
+              </p>
+              <h2 class="mt-4 text-3xl font-black text-on-surface">Marilao</h2>
+            </div>
+            <p class="mt-3 text-sm text-slate-600">Largest passenger flow</p>
+          </div>
+
+          <div
+            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200 flex flex-col justify-between"
+          >
+            <div>
+              <p
+                class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+              >
+                Average Fare
+              </p>
+              <h2 class="mt-4 text-3xl font-black text-on-surface">₱14</h2>
+            </div>
+            <p class="mt-3 text-sm text-slate-600">
+              Average ticket value this shift
+            </p>
+          </div>
+
+          <div
+            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200 flex flex-col justify-between"
+          >
+            <div>
+              <p
+                class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+              >
+                Daily Trips
+              </p>
+              <h2 class="mt-4 text-3xl font-black text-on-surface">48</h2>
+            </div>
+            <p class="mt-3 text-sm text-slate-600">
+              Completed and active trips today
+            </p>
+          </div>
+
+          <div
+            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200 flex flex-col justify-between"
+          >
+            <div>
+              <p
+                class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+              >
+                Revenue
+              </p>
+              <h2 class="mt-4 text-3xl font-black text-on-surface">₱2,350</h2>
+            </div>
+            <p class="mt-3 text-sm text-slate-600">Projected weekly revenue</p>
+          </div>
+        </section>
+
+        <!-- MIDDLE: Visual Data Section (3 columns) -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <!-- Daily Trips chart -->
+          <article
+            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200"
+          >
+            <div class="flex items-center justify-between mb-4">
               <div>
                 <h2 class="text-lg font-bold text-on-surface">Daily Trips</h2>
                 <p class="text-sm text-slate-600">
@@ -335,11 +359,11 @@
                 <span class="material-symbols-outlined text-sm"
                   >trending_up</span
                 >
-                6% growth vs yesterday
+                6% vs yesterday
               </div>
             </div>
             <div
-              class="h-72 rounded-[1.5rem] bg-surface-container p-5 overflow-hidden"
+              class="h-60 rounded-[1rem] bg-surface-container p-4 overflow-hidden"
             >
               <div class="h-full w-full relative">
                 <div
@@ -359,24 +383,18 @@
               </div>
             </div>
             <div
-              class="mt-4 grid grid-cols-7 gap-2 text-[10px] uppercase tracking-[0.25em] text-slate-500 font-bold"
+              class="mt-3 grid grid-cols-7 gap-2 text-[10px] uppercase tracking-[0.25em] text-slate-500 font-bold"
             >
-              <span>Mon</span>
-              <span>Tue</span>
-              <span>Wed</span>
-              <span>Thu</span>
-              <span>Fri</span>
-              <span>Sat</span>
-              <span>Sun</span>
+              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span
+              ><span>Fri</span><span>Sat</span><span>Sun</span>
             </div>
-          </section>
+          </article>
 
-          <section
-            class="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200"
+          <!-- Revenue Trend chart -->
+          <article
+            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200"
           >
-            <div
-              class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-5"
-            >
+            <div class="flex items-center justify-between mb-4">
               <div>
                 <h2 class="text-lg font-bold text-on-surface">Revenue Trend</h2>
                 <p class="text-sm text-slate-600">
@@ -387,19 +405,19 @@
                 class="flex items-center gap-3 text-xs font-semibold text-slate-500"
               >
                 <span class="inline-flex items-center gap-2"
-                  ><span class="w-2 h-2 rounded-full bg-primary"></span>
-                  Cash</span
+                  ><span class="w-2 h-2 rounded-full bg-primary"></span> Cash
+                  Payments</span
                 >
                 <span class="inline-flex items-center gap-2"
                   ><span
                     class="w-2 h-2 rounded-full bg-secondary-fixed-dim"
                   ></span>
-                  NFC</span
+                  NFC Payments</span
                 >
               </div>
             </div>
             <div
-              class="relative h-72 rounded-[1.5rem] bg-surface-container p-5 overflow-hidden"
+              class="relative h-60 rounded-[1rem] bg-surface-container p-4 overflow-hidden"
             >
               <svg
                 class="absolute inset-0 h-full w-full"
@@ -429,152 +447,73 @@
                   stroke-linecap="round"
                 />
               </svg>
-              <div class="absolute bottom-5 right-5 text-right">
+              <div class="absolute bottom-4 right-4 text-right">
                 <p
                   class="text-[10px] uppercase tracking-[0.3em] text-primary font-semibold"
                 >
-                  Projected weekly
+                  Projected Weekly
                 </p>
-                <p class="mt-2 text-2xl font-black text-on-surface">₱2.35k</p>
+                <p class="mt-2 text-2xl font-black text-on-surface">₱2,350</p>
               </div>
             </div>
-          </section>
-        </div>
-
-        <section class="grid gap-4 xl:grid-cols-4 mb-6">
-          <article
-            class="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200"
-          >
-            <div class="flex items-center justify-between gap-4 mb-4">
-              <div class="rounded-2xl bg-blue-50 p-3 text-blue-700">
-                <span class="material-symbols-outlined">schedule</span>
-              </div>
-              <span
-                class="text-xs uppercase tracking-[0.35em] text-slate-500 font-semibold"
-                >Peak Hour</span
-              >
-            </div>
-            <h3 class="text-xl font-bold text-on-surface">7AM–9AM</h3>
-            <p class="mt-3 text-sm text-slate-600">
-              Peak demand occurs during the morning commute.
-            </p>
           </article>
 
+          <!-- Route Utilization -->
           <article
-            class="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200"
+            class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200"
           >
-            <div class="flex items-center justify-between gap-4 mb-4">
-              <div class="rounded-2xl bg-blue-50 p-3 text-blue-700">
-                <span class="material-symbols-outlined">place</span>
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-lg font-bold text-on-surface">
+                  Route Utilization
+                </h2>
+                <p class="text-sm text-slate-600">
+                  Route-level capacity and utilization.
+                </p>
               </div>
-              <span
-                class="text-xs uppercase tracking-[0.35em] text-slate-500 font-semibold"
-                >Stop Popularity</span
-              >
-            </div>
-            <h3 class="text-xl font-bold text-on-surface">Marilao</h3>
-            <p class="mt-3 text-sm text-slate-600">
-              Highest traffic stop for boarding and transfers.
-            </p>
-          </article>
-
-          <article
-            class="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200"
-          >
-            <div class="flex items-center justify-between gap-4 mb-4">
-              <div class="rounded-2xl bg-blue-50 p-3 text-blue-700">
-                <span class="material-symbols-outlined">trending_up</span>
-              </div>
-              <span
-                class="text-xs uppercase tracking-[0.35em] text-slate-500 font-semibold"
-                >Revenue Forecast</span
-              >
-            </div>
-            <h3 class="text-xl font-bold text-on-surface">₱2,350</h3>
-            <p class="mt-3 text-sm text-slate-600">
-              Forecasted peak revenue for the current shift.
-            </p>
-          </article>
-
-          <article
-            class="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200"
-          >
-            <div class="flex items-center justify-between gap-4 mb-4">
               <div class="rounded-2xl bg-blue-50 p-3 text-blue-700">
                 <span class="material-symbols-outlined">bolt</span>
               </div>
-              <span
-                class="text-xs uppercase tracking-[0.35em] text-slate-500 font-semibold"
-                >Route Utilization</span
-              >
             </div>
-            <h3 class="text-xl font-bold text-on-surface">Bocaue Loop +12%</h3>
-            <p class="mt-3 text-sm text-slate-600">
-              Utilization above the network average.
-            </p>
+            <div class="mt-2">
+              <h3 class="text-xl font-bold text-on-surface">
+                Balagtas → Monumento +12%
+              </h3>
+              <p class="mt-2 text-sm text-slate-600">
+                Utilization above the route average, indicating higher morning
+                demand on Balagtas → Monumento.
+              </p>
+            </div>
           </article>
         </section>
 
+        <!-- BOTTOM: Unified Insights Panel -->
         <section
-          class="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200"
+          class="bg-white p-6 rounded-[1.25rem] shadow-sm border border-slate-200 mb-8"
         >
-          <div
-            class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6"
-          >
+          <h2 class="text-xl font-bold text-on-surface mb-3">
+            Operational Insights
+          </h2>
+          <div class="space-y-3 text-sm text-slate-700">
             <div>
-              <h2 class="text-xl font-bold text-on-surface">
-                TrackFare AI Insights
-              </h2>
-              <p class="mt-2 text-sm text-slate-600">
-                Actionable intelligence from transport analytics and passenger
-                behavior.
+              <p class="font-semibold text-slate-900">Demand Window</p>
+              <p class="mt-1">
+                Passenger boarding peaks at Marilao between 7AM–9AM. Morning
+                tap-ins increase approximately 22% on core routes.
               </p>
             </div>
-            <div
-              class="rounded-full bg-secondary-fixed px-4 py-2 text-xs font-semibold text-on-secondary"
-            >
-              Analytics only • Decision support
-            </div>
-          </div>
-          <div class="grid gap-4 lg:grid-cols-2">
-            <div
-              class="rounded-[1.25rem] border border-slate-200 bg-surface-container p-5"
-            >
-              <p class="text-sm font-semibold text-slate-900">Demand Window</p>
-              <p class="mt-3 text-slate-600">
-                Peak demand occurs from 7AM–9AM, with a 22% increase in tap-ins
-                across key routes.
+            <div>
+              <p class="font-semibold text-slate-900">Top Stop</p>
+              <p class="mt-1">
+                Marilao accounts for ~18% of boarding volume and is the primary
+                transfer point for the Balagtas → Monumento corridor.
               </p>
             </div>
-            <div
-              class="rounded-[1.25rem] border border-slate-200 bg-surface-container p-5"
-            >
-              <p class="text-sm font-semibold text-slate-900">Top Stop</p>
-              <p class="mt-3 text-slate-600">
-                Marilao remains the highest traffic stop, accounting for nearly
-                18% of boarding volume.
-              </p>
-            </div>
-            <div
-              class="rounded-[1.25rem] border border-slate-200 bg-surface-container p-5"
-            >
-              <p class="text-sm font-semibold text-slate-900">
-                Revenue Estimate
-              </p>
-              <p class="mt-3 text-slate-600">
-                Estimated revenue for the current period is ₱2,350, supporting
-                optimized dispatch decisions.
-              </p>
-            </div>
-            <div
-              class="rounded-[1.25rem] border border-slate-200 bg-surface-container p-5"
-            >
-              <p class="text-sm font-semibold text-slate-900">
-                Route Utilization
-              </p>
-              <p class="mt-3 text-slate-600">
-                Bocaue Loop utilization is above average, signaling a strong
-                recovery in demand for this line.
+            <div>
+              <p class="font-semibold text-slate-900">Revenue Estimate</p>
+              <p class="mt-1">
+                Estimated revenue for the current period is ₱2,350, consistent
+                with increased morning trip volume and NFC usage.
               </p>
             </div>
           </div>

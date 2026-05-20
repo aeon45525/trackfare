@@ -4,7 +4,7 @@
   <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>Transactions - TrackFare Admin</title>
+    <title>Fare Transactions - TrackFare Admin</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap"
@@ -197,10 +197,11 @@
               <h1
                 class="text-4xl font-extrabold tracking-tight text-on-surface font-headline"
               >
-                Transactions
+                Fare Transactions
               </h1>
               <p class="mt-2 text-slate-600">
-                View and monitor all passenger tap-in/tap-out transactions.
+                Monitor completed NFC tap-in/tap-out journeys on the Balagtas ↔
+                Monumento line.
               </p>
             </div>
             <div class="flex items-center gap-3">
@@ -211,7 +212,7 @@
                 >
                 <input
                   class="w-full bg-surface-container-low border-none rounded-xl py-3 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
-                  placeholder="Search passenger or transaction ID"
+                  placeholder="Search passenger or NFC tag ID"
                   type="text"
                 />
               </div>
@@ -229,10 +230,10 @@
               <p
                 class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
               >
-                Transaction History
+                Fare Transaction Logs
               </p>
               <p class="mt-2 text-sm text-slate-600">
-                Complete record of all passenger fare transactions.
+                Complete NFC tap records for Balagtas ↔ Monumento operations.
               </p>
             </div>
             <button
@@ -252,10 +253,10 @@
           >
             <div>
               <h2 class="text-lg font-bold text-on-surface">
-                All Transactions
+                Completed Passenger Trips
               </h2>
               <p class="text-sm text-slate-600">
-                Passenger name, route taken, fare charged, and timestamp.
+                NFC journey records showing tap-in, tap-out, distance and fare.
               </p>
             </div>
             <div
@@ -277,17 +278,12 @@
                   <th
                     class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
-                    Tap In
+                    Tap Journey
                   </th>
                   <th
                     class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
-                    Tap Out
-                  </th>
-                  <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
-                  >
-                    Route
+                    Distance
                   </th>
                   <th
                     class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
@@ -299,6 +295,11 @@
                   >
                     Timestamp
                   </th>
+                  <th
+                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                  >
+                    Route Direction
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-200 bg-white">
@@ -306,90 +307,240 @@
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
                     Aaron
                   </td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Bocaue</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Marilao</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Bocaue Loop</td>
+                  <td class="px-6 py-5">
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Balagtas</span
+                      >
+                      <span class="material-symbols-outlined text-blue-600"
+                        >arrow_forward</span
+                      >
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Monumento</span
+                      >
+                    </div>
+                    <div
+                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Tap In → Tap Out
+                    </div>
+                  </td>
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱13
+                    18 km
+                  </td>
+                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
+                    ₱54
                   </td>
                   <td class="px-6 py-5 text-sm text-slate-600">
                     2024-05-18 08:32 AM
+                  </td>
+                  <td class="px-6 py-5">
+                    <span
+                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+                      >Balagtas → Monumento</span
+                    >
                   </td>
                 </tr>
                 <tr class="hover:bg-slate-50 transition-colors">
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
                     Maria Santos
                   </td>
-                  <td class="px-6 py-5 text-sm text-slate-700">
-                    NLET Terminal
+                  <td class="px-6 py-5">
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Bocaue</span
+                      >
+                      <span class="material-symbols-outlined text-blue-600"
+                        >arrow_forward</span
+                      >
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Monumento</span
+                      >
+                    </div>
+                    <div
+                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Tap In → Tap Out
+                    </div>
                   </td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Balagtas</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">NLEX Express</td>
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱16
+                    15 km
+                  </td>
+                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
+                    ₱45
                   </td>
                   <td class="px-6 py-5 text-sm text-slate-600">
                     2024-05-18 08:15 AM
+                  </td>
+                  <td class="px-6 py-5">
+                    <span
+                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+                      >Balagtas → Monumento</span
+                    >
                   </td>
                 </tr>
                 <tr class="hover:bg-slate-50 transition-colors">
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
                     Juan Dela Cruz
                   </td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Santa Maria</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Plaridel</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">
-                    MacArthur Highway
+                  <td class="px-6 py-5">
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Marilao</span
+                      >
+                      <span class="material-symbols-outlined text-blue-600"
+                        >arrow_forward</span
+                      >
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Monumento</span
+                      >
+                    </div>
+                    <div
+                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Tap In → Tap Out
+                    </div>
                   </td>
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱16
+                    12 km
+                  </td>
+                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
+                    ₱36
                   </td>
                   <td class="px-6 py-5 text-sm text-slate-600">
                     2024-05-18 07:50 AM
+                  </td>
+                  <td class="px-6 py-5">
+                    <span
+                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+                      >Balagtas → Monumento</span
+                    >
                   </td>
                 </tr>
                 <tr class="hover:bg-slate-50 transition-colors">
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
                     Rosa Fernandez
                   </td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Bocaue</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Meycauayan</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Bocaue Loop</td>
+                  <td class="px-6 py-5">
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Meycauayan</span
+                      >
+                      <span class="material-symbols-outlined text-blue-600"
+                        >arrow_forward</span
+                      >
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Monumento</span
+                      >
+                    </div>
+                    <div
+                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Tap In → Tap Out
+                    </div>
+                  </td>
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱16
+                    8 km
+                  </td>
+                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
+                    ₱24
                   </td>
                   <td class="px-6 py-5 text-sm text-slate-600">
                     2024-05-18 07:42 AM
+                  </td>
+                  <td class="px-6 py-5">
+                    <span
+                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+                      >Balagtas → Monumento</span
+                    >
                   </td>
                 </tr>
                 <tr class="hover:bg-slate-50 transition-colors">
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
                     Miguel Torres
                   </td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Balagtas</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Bulacan</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">NLEX Express</td>
+                  <td class="px-6 py-5">
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Monumento</span
+                      >
+                      <span class="material-symbols-outlined text-blue-600"
+                        >arrow_forward</span
+                      >
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Bocaue</span
+                      >
+                    </div>
+                    <div
+                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Tap In → Tap Out
+                    </div>
+                  </td>
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱13
+                    15 km
+                  </td>
+                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
+                    ₱45
                   </td>
                   <td class="px-6 py-5 text-sm text-slate-600">
                     2024-05-18 07:28 AM
+                  </td>
+                  <td class="px-6 py-5">
+                    <span
+                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+                      >Monumento → Balagtas</span
+                    >
                   </td>
                 </tr>
                 <tr class="hover:bg-slate-50 transition-colors">
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
                     Ana Garcia
                   </td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Marilao</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">Plaridel</td>
-                  <td class="px-6 py-5 text-sm text-slate-700">
-                    MacArthur Highway
+                  <td class="px-6 py-5">
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Monumento</span
+                      >
+                      <span class="material-symbols-outlined text-blue-600"
+                        >arrow_forward</span
+                      >
+                      <span
+                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
+                        >Marilao</span
+                      >
+                    </div>
+                    <div
+                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Tap In → Tap Out
+                    </div>
                   </td>
                   <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱13
+                    12 km
+                  </td>
+                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
+                    ₱36
                   </td>
                   <td class="px-6 py-5 text-sm text-slate-600">
                     2024-05-18 07:15 AM
+                  </td>
+                  <td class="px-6 py-5">
+                    <span
+                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+                      >Monumento → Balagtas</span
+                    >
                   </td>
                 </tr>
               </tbody>

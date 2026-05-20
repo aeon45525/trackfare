@@ -95,10 +95,6 @@
         background: rgba(0, 64, 161, 0.12);
         color: #0040a1;
       }
-      .status-maintenance {
-        background: rgba(255, 168, 0, 0.16);
-        color: #b36f00;
-      }
       .status-inactive {
         background: rgba(107, 114, 128, 0.16);
         color: #4b5563;
@@ -209,10 +205,10 @@
               <h1
                 class="text-4xl font-extrabold tracking-tight text-on-surface font-headline"
               >
-                Fleet Management
+                Fleet Operations
               </h1>
               <p class="mt-2 text-slate-600">
-                Manage buses, vehicle assignments, and fleet operations
+                Monitor active buses and operational route assignments.
               </p>
             </div>
             <button
@@ -235,7 +231,7 @@
             </p>
             <h2 class="mt-4 text-3xl font-black text-on-surface">8</h2>
             <p class="mt-3 text-sm text-slate-600">
-              All buses configured in the fleet system.
+              Total fleet units active in the TrackFare system.
             </p>
           </div>
           <div
@@ -248,7 +244,7 @@
             </p>
             <h2 class="mt-4 text-3xl font-black text-on-surface">6</h2>
             <p class="mt-3 text-sm text-slate-600">
-              Vehicles currently assigned to routes.
+              Vehicles currently operating on active routes.
             </p>
           </div>
           <div
@@ -257,11 +253,11 @@
             <p
               class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
             >
-              Under Maintenance
+              Active Routes
             </p>
-            <h2 class="mt-4 text-3xl font-black text-on-surface">1</h2>
+            <h2 class="mt-4 text-3xl font-black text-on-surface">3</h2>
             <p class="mt-3 text-sm text-slate-600">
-              Buses undergoing service or inspection.
+              Currently monitored TrackFare route assignments.
             </p>
           </div>
           <div
@@ -274,7 +270,7 @@
             </p>
             <h2 class="mt-4 text-3xl font-black text-on-surface">6</h2>
             <p class="mt-3 text-sm text-slate-600">
-              Drivers assigned to active fleet vehicles.
+              Drivers assigned to operational fleet vehicles.
             </p>
           </div>
         </div>
@@ -288,10 +284,10 @@
             >
               <div>
                 <h2 class="text-lg font-bold text-on-surface">
-                  Vehicle Inventory
+                  Fleet Operations Overview
                 </h2>
                 <p class="mt-1 text-sm text-slate-600">
-                  Manage the current fleet and review vehicle statuses.
+                  Monitor active buses and operational route assignments.
                 </p>
               </div>
               <div
@@ -300,7 +296,7 @@
                 <span class="material-symbols-outlined text-sm"
                   >directions_bus</span
                 >
-                8 Vehicles
+                8 Fleet Units
               </div>
             </div>
 
@@ -311,8 +307,9 @@
                     <th class="px-4 py-3">Vehicle ID</th>
                     <th class="px-4 py-3">Plate Number</th>
                     <th class="px-4 py-3">Assigned Driver</th>
-                    <th class="px-4 py-3">Route</th>
-                    <th class="px-4 py-3">Status</th>
+                    <th class="px-4 py-3">Current Route</th>
+                    <th class="px-4 py-3">Operational Status</th>
+                    <th class="px-4 py-3">Current Stop</th>
                     <th class="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
@@ -323,13 +320,14 @@
                     </td>
                     <td class="px-4 py-4">ABC-1234</td>
                     <td class="px-4 py-4">Juan Dela Cruz</td>
-                    <td class="px-4 py-4">Bocaue Loop</td>
+                    <td class="px-4 py-4">Bocaue → Marilao</td>
                     <td class="px-4 py-4">
                       <span
                         class="inline-flex rounded-full px-3 py-1 text-xs font-semibold status-active"
                         >Active</span
                       >
                     </td>
+                    <td class="px-4 py-4">Bocaue Terminal</td>
                     <td class="px-4 py-4">
                       <div class="inline-flex gap-2">
                         <button
@@ -351,13 +349,14 @@
                     </td>
                     <td class="px-4 py-4">DEF-5678</td>
                     <td class="px-4 py-4">Maria Santos</td>
-                    <td class="px-4 py-4">Balagtas Express</td>
+                    <td class="px-4 py-4">Marilao → Meycauayan</td>
                     <td class="px-4 py-4">
                       <span
                         class="inline-flex rounded-full px-3 py-1 text-xs font-semibold status-active"
                         >Active</span
                       >
                     </td>
+                    <td class="px-4 py-4">Marilao Town Center</td>
                     <td class="px-4 py-4">
                       <div class="inline-flex gap-2">
                         <button
@@ -379,13 +378,14 @@
                     </td>
                     <td class="px-4 py-4">GHI-9012</td>
                     <td class="px-4 py-4">Alvin Reyes</td>
-                    <td class="px-4 py-4">Dau Corridor</td>
+                    <td class="px-4 py-4">Bocaue → Meycauayan</td>
                     <td class="px-4 py-4">
                       <span
-                        class="inline-flex rounded-full px-3 py-1 text-xs font-semibold status-maintenance"
-                        >Maintenance</span
+                        class="inline-flex rounded-full px-3 py-1 text-xs font-semibold status-active"
+                        >Active</span
                       >
                     </td>
+                    <td class="px-4 py-4">Meycauayan West</td>
                     <td class="px-4 py-4">
                       <div class="inline-flex gap-2">
                         <button
@@ -407,13 +407,14 @@
                     </td>
                     <td class="px-4 py-4">JKL-3456</td>
                     <td class="px-4 py-4">Rhea Concepcion</td>
-                    <td class="px-4 py-4">Meycauayan Shuttle</td>
+                    <td class="px-4 py-4">Bocaue → Marilao</td>
                     <td class="px-4 py-4">
                       <span
                         class="inline-flex rounded-full px-3 py-1 text-xs font-semibold status-inactive"
                         >Inactive</span
                       >
                     </td>
+                    <td class="px-4 py-4">-</td>
                     <td class="px-4 py-4">
                       <div class="inline-flex gap-2">
                         <button
@@ -443,54 +444,68 @@
                   <p
                     class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
                   >
-                    Vehicle Details
+                    Vehicle Information
                   </p>
                   <h3 class="mt-2 text-lg font-bold text-on-surface">
                     Bus 001
                   </h3>
+                  <p class="mt-1 text-sm text-slate-600">
+                    Live operation summary for the selected fleet vehicle.
+                  </p>
                 </div>
                 <span
                   class="inline-flex rounded-full px-3 py-1 text-xs font-semibold status-active"
                   >Active</span
                 >
               </div>
-              <div class="space-y-4 text-sm text-slate-600">
+              <div class="grid gap-4 text-sm text-slate-600">
                 <div class="rounded-3xl bg-surface-container p-4">
-                  <p class="font-semibold text-slate-900">Route Assignment</p>
-                  <p class="mt-2">Bocaue Loop</p>
+                  <p
+                    class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                  >
+                    Vehicle ID
+                  </p>
+                  <p class="mt-2 font-semibold text-slate-900">Bus 001</p>
                 </div>
                 <div class="rounded-3xl bg-surface-container p-4">
-                  <p class="font-semibold text-slate-900">Driver</p>
-                  <p class="mt-2">Juan Dela Cruz</p>
+                  <p
+                    class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                  >
+                    Plate Number
+                  </p>
+                  <p class="mt-2 font-semibold text-slate-900">ABC-1234</p>
                 </div>
                 <div class="rounded-3xl bg-surface-container p-4">
-                  <p class="font-semibold text-slate-900">Next Service</p>
-                  <p class="mt-2">May 26, 2026</p>
+                  <p
+                    class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                  >
+                    Assigned Route
+                  </p>
+                  <p class="mt-2 font-semibold text-slate-900">
+                    Bocaue → Marilao
+                  </p>
+                </div>
+                <div class="rounded-3xl bg-surface-container p-4">
+                  <p
+                    class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                  >
+                    Assigned Driver
+                  </p>
+                  <p class="mt-2 font-semibold text-slate-900">
+                    Juan Dela Cruz
+                  </p>
+                </div>
+                <div class="rounded-3xl bg-surface-container p-4">
+                  <p
+                    class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
+                  >
+                    Current Stop
+                  </p>
+                  <p class="mt-2 font-semibold text-slate-900">
+                    Bocaue Terminal
+                  </p>
                 </div>
               </div>
-            </div>
-            <div
-              class="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200"
-            >
-              <p
-                class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-              >
-                Fleet Notes
-              </p>
-              <ul class="mt-5 space-y-4 text-sm text-slate-600">
-                <li class="rounded-3xl bg-surface-container p-4">
-                  <p class="font-semibold text-on-surface">Service Reminder</p>
-                  <p class="mt-2">
-                    Bus 003 scheduled for maintenance tomorrow at 10:00 AM.
-                  </p>
-                </li>
-                <li class="rounded-3xl bg-surface-container p-4">
-                  <p class="font-semibold text-on-surface">Route Review</p>
-                  <p class="mt-2">
-                    Bocaue Loop has maintained 92% on-time departures.
-                  </p>
-                </li>
-              </ul>
             </div>
           </aside>
         </div>
