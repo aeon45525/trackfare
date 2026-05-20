@@ -269,7 +269,7 @@
       >
         <a
           class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="01_home.html"
+          href="01_home.php"
         >
           <span class="material-symbols-outlined">home</span>
           <span
@@ -279,7 +279,7 @@
         </a>
         <a
           class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="02_routes.html"
+          href="02_routes.php"
         >
           <span class="material-symbols-outlined">directions_bus</span>
           <span
@@ -289,7 +289,7 @@
         </a>
         <a
           class="flex flex-col items-center justify-center text-white bg-primary rounded-3xl px-4 py-2 shadow-lg"
-          href="03_wallet.html"
+          href="03_wallet.php"
         >
           <span class="material-symbols-outlined">account_balance_wallet</span>
           <span
@@ -299,7 +299,7 @@
         </a>
         <a
           class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="04_trips.html"
+          href="04_trips.php"
         >
           <span class="material-symbols-outlined">history</span>
           <span
@@ -309,7 +309,7 @@
         </a>
         <a
           class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="05_profile.html"
+          href="05_profile.php"
         >
           <span class="material-symbols-outlined">person</span>
           <span

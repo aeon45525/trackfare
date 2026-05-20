@@ -1,10 +1,10 @@
 <!doctype html>
 
-<html lang="en">
+<html class="light" lang="en">
   <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>TrackFare - Create Account</title>
+    <title>TrackFare - Login</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&amp;display=swap"
@@ -78,25 +78,10 @@
       </div>
       <!-- Heading -->
       <div class="w-full max-w-md text-left mb-8">
-        <h2 class="text-2xl font-bold leading-tight">Create Account</h2>
+        <h2 class="text-2xl font-bold leading-tight">Welcome Back</h2>
       </div>
-      <!-- Registration Form -->
+      <!-- Login Form -->
       <form class="flex w-full max-w-md flex-col gap-6">
-        <!-- Full Name Input -->
-        <div class="flex flex-col gap-2">
-          <label class="text-sm font-semibold leading-none" for="name"
-            >Full Name</label
-          >
-          <div class="relative">
-            <input
-              class="flex h-14 w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-base ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              id="name"
-              name="name"
-              placeholder="John Doe"
-              type="text"
-            />
-          </div>
-        </div>
         <!-- Email Input -->
         <div class="flex flex-col gap-2">
           <label class="text-sm font-semibold leading-none" for="email"
@@ -114,9 +99,14 @@
         </div>
         <!-- Password Input -->
         <div class="flex flex-col gap-2">
-          <label class="text-sm font-semibold leading-none" for="password"
-            >Password</label
-          >
+          <div class="flex items-center justify-between">
+            <label class="text-sm font-semibold leading-none" for="password"
+              >Password</label
+            >
+            <a class="text-xs font-medium text-primary hover:underline" href="#"
+              >Forgot password?</a
+            >
+          </div>
           <div class="relative flex items-center">
             <input
               class="flex h-14 w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-base ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pr-12"
@@ -134,44 +124,21 @@
             </button>
           </div>
         </div>
-        <!-- Confirm Password Input -->
-        <div class="flex flex-col gap-2">
-          <label
-            class="text-sm font-semibold leading-none"
-            for="confirm-password"
-            >Confirm Password</label
-          >
-          <div class="relative flex items-center">
-            <input
-              class="flex h-14 w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-base ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pr-12"
-              id="confirm-password"
-              name="confirm-password"
-              placeholder="••••••••"
-              type="password"
-            />
-            <button
-              class="absolute right-4 text-gray-400 hover:text-gray-600"
-              data-icon="visibility"
-              type="button"
-            >
-              <span class="material-symbols-outlined">visibility</span>
-            </button>
-          </div>
-        </div>
-        <!-- Sign Up Button -->
+        <!-- Login Button -->
         <button
           class="mt-4 flex h-14 w-full items-center justify-center rounded-xl bg-brand-blue font-bold text-white shadow-lg hover:opacity-90 active:scale-[0.98] transition-all"
         >
-          Sign Up
+          Login
         </button>
+        <!-- Role Note -->
       </form>
+      <!-- Social/Alternative Login Divider -->
+      <!-- Social Login Buttons -->
       <!-- Footer Sign Up -->
       <footer class="mt-auto pt-8 text-center">
         <p class="text-sm text-gray-600">
-          Already have an account?
-          <a class="font-bold text-primary hover:underline" href="#"
-            >Back to Login</a
-          >
+          Don't have an account?
+          <a class="font-bold text-primary hover:underline" href="#">Sign Up</a>
         </p>
       </footer>
     </div>

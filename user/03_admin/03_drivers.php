@@ -109,56 +109,56 @@
         <nav class="flex-1 px-3 py-6 space-y-1">
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="01_dashboard.html"
+            href="01_dashboard.php"
           >
             <span class="material-symbols-outlined">dashboard</span>
             <span>Dashboard</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="02_passengers.html"
+            href="02_passengers.php"
           >
             <span class="material-symbols-outlined">group</span>
             <span>Passengers</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full bg-blue-50 text-blue-700 font-semibold border-r-4 border-blue-700 transition"
-            href="03_drivers.html"
+            href="03_drivers.php"
           >
             <span class="material-symbols-outlined">badge</span>
             <span>Drivers</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="04_fleet.html"
+            href="04_fleet.php"
           >
             <span class="material-symbols-outlined">local_shipping</span>
             <span>Fleet</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="05_routes_fares.html"
+            href="05_routes_fares.php"
           >
             <span class="material-symbols-outlined">alt_route</span>
             <span>Routes &amp; Fares</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="06_transactions.html"
+            href="06_transactions.php"
           >
             <span class="material-symbols-outlined">payments</span>
             <span>Transactions</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="07_analytics.html"
+            href="07_analytics.php"
           >
             <span class="material-symbols-outlined">insights</span>
             <span>Analytics</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="08_profile.html"
+            href="08_profile.php"
           >
             <span class="material-symbols-outlined">person</span>
             <span>Profile</span>
@@ -305,7 +305,7 @@
                         Bocaue → Marilao
                       </div>
                       <div class="mt-1 text-xs text-slate-500">
-                        Current stop: Barangay Mabolo
+                        7:15 AM - 10:30 AM
                       </div>
                     </td>
                     <td
@@ -318,12 +318,12 @@
                       <button
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        View Driver
+                        View Details
                       </button>
                       <button
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Update Status
+                        Contact
                       </button>
                     </td>
                   </tr>
@@ -336,7 +336,7 @@
                         Marilao → Meycauayan
                       </div>
                       <div class="mt-1 text-xs text-slate-500">
-                        Currently idle off route
+                        10:45 AM - 1:20 PM
                       </div>
                     </td>
                     <td class="px-6 py-5 text-sm font-semibold text-slate-700">
@@ -347,25 +347,25 @@
                       <button
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        View Driver
+                        View Details
                       </button>
                       <button
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Assign Route
+                        Contact
                       </button>
                     </td>
                   </tr>
                   <tr class="hover:bg-slate-50 transition-colors">
                     <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                      Elena Santos
+                      Jane Santos
                     </td>
                     <td class="px-6 py-5 text-sm text-slate-700">
                       <div class="font-semibold text-slate-900">
                         Bocaue → Meycauayan
                       </div>
                       <div class="mt-1 text-xs text-slate-500">
-                        Current stop: Pulilan Junction
+                        1:45 PM - 4:00 PM
                       </div>
                     </td>
                     <td
@@ -378,12 +378,12 @@
                       <button
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        View Driver
+                        View Details
                       </button>
                       <button
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Update Status
+                        Contact
                       </button>
                     </td>
                   </tr>

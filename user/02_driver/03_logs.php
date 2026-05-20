@@ -125,28 +125,28 @@
           <nav class="flex-1 px-4 py-6 space-y-1">
             <a
               class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-              href="01_dashboard.html"
+              href="01_dashboard.php"
             >
               <span class="material-symbols-outlined">dashboard</span>
               <span>Dashboard</span>
             </a>
             <a
               class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-              href="02_route.html"
+              href="02_route.php"
             >
               <span class="material-symbols-outlined">alt_route</span>
               <span>Route</span>
             </a>
             <a
               class="flex items-center gap-3 px-5 py-3 rounded-r-full bg-blue-50 text-blue-700 border-r-4 border-blue-700 font-semibold transition"
-              href="03_logs.html"
+              href="03_logs.php"
             >
               <span class="material-symbols-outlined">receipt_long</span>
               <span>Logs</span>
             </a>
             <a
               class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-              href="04_profile.html"
+              href="04_profile.php"
             >
               <span class="material-symbols-outlined">person</span>
               <span>Profile</span>

@@ -116,56 +116,56 @@
         <nav class="flex-1 px-3 py-6 space-y-1">
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="01_dashboard.html"
+            href="01_dashboard.php"
           >
             <span class="material-symbols-outlined">dashboard</span>
             <span>Dashboard</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="02_passengers.html"
+            href="02_passengers.php"
           >
             <span class="material-symbols-outlined">group</span>
             <span>Passengers</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="03_drivers.html"
+            href="03_drivers.php"
           >
             <span class="material-symbols-outlined">badge</span>
             <span>Drivers</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full bg-blue-50 text-blue-700 font-semibold border-r-4 border-blue-700 transition"
-            href="04_fleet.html"
+            href="04_fleet.php"
           >
             <span class="material-symbols-outlined">local_shipping</span>
             <span>Fleet</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="05_routes_fares.html"
+            href="05_routes_fares.php"
           >
             <span class="material-symbols-outlined">alt_route</span>
             <span>Routes &amp; Fares</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="06_transactions.html"
+            href="06_transactions.php"
           >
             <span class="material-symbols-outlined">payments</span>
             <span>Transactions</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="07_analytics.html"
+            href="07_analytics.php"
           >
             <span class="material-symbols-outlined">insights</span>
             <span>Analytics</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="08_profile.html"
+            href="08_profile.php"
           >
             <span class="material-symbols-outlined">person</span>
             <span>Profile</span>
@@ -333,12 +333,12 @@
                         <button
                           class="rounded-2xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
                         >
-                          Edit
+                          View
                         </button>
                         <button
                           class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-surface-container transition"
                         >
-                          Disable
+                          Track
                         </button>
                       </div>
                     </td>
@@ -362,12 +362,12 @@
                         <button
                           class="rounded-2xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
                         >
-                          Edit
+                          View
                         </button>
                         <button
                           class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-surface-container transition"
                         >
-                          Disable
+                          Track
                         </button>
                       </div>
                     </td>
@@ -391,12 +391,12 @@
                         <button
                           class="rounded-2xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
                         >
-                          Edit
+                          View
                         </button>
                         <button
                           class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-surface-container transition"
                         >
-                          Disable
+                          Track
                         </button>
                       </div>
                     </td>
@@ -420,12 +420,12 @@
                         <button
                           class="rounded-2xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
                         >
-                          Edit
+                          View
                         </button>
                         <button
                           class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-surface-container transition"
                         >
-                          Disable
+                          Edit
                         </button>
                       </div>
                     </td>
