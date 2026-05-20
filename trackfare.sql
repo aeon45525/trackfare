@@ -113,10 +113,10 @@ INSERT INTO users (full_name,email,password,role) VALUES
 INSERT INTO passenger_profiles (user_id,wallet_balance)
 SELECT user_id, 100 FROM users WHERE role='passenger';
 
-INSERT INTO nfc_cards (user_id,uid)
-VALUES
-((SELECT user_id FROM users WHERE full_name='Aaron Catapang'),'62 BB 1D 7'),
-((SELECT user_id FROM users WHERE full_name='John Michael Gonzales'),'9B 4C 13 7');
+	INSERT INTO nfc_cards (user_id,uid)
+	VALUES
+	((SELECT user_id FROM users WHERE full_name='Aaron Catapang'),'62 BB 1D 07'),
+	((SELECT user_id FROM users WHERE full_name='John Michael Gonzales'),'9B 4C 13 07');
 
 INSERT INTO routes (route_name,display_name) VALUES
 ('Balagtas-Monumento','Balagtas → Monumento');
@@ -167,7 +167,7 @@ VALUES
 (
     1,
     (SELECT user_id FROM users WHERE full_name='John Michael Gonzales'),
-    (SELECT card_id FROM nfc_cards WHERE uid='9B 4C 13 7'),
+    (SELECT card_id FROM nfc_cards WHERE uid='9B 4C 13 07'),
     9
 );
 
@@ -178,7 +178,7 @@ VALUES
 (
     1,
     (SELECT user_id FROM users WHERE full_name='Aaron Catapang'),
-    (SELECT card_id FROM nfc_cards WHERE uid='62 BB 1D 7'),
+    (SELECT card_id FROM nfc_cards WHERE uid='62 BB 1D 07'),
     5,
     11,
     24.25
@@ -187,7 +187,7 @@ VALUES
 (
     1,
     (SELECT user_id FROM users WHERE full_name='John Michael Gonzales'),
-    (SELECT card_id FROM nfc_cards WHERE uid='9B 4C 13 7'),
+    (SELECT card_id FROM nfc_cards WHERE uid='9B 4C 13 07'),
     9,
     15,
     22.00
@@ -321,3 +321,14 @@ VALUES
 ((SELECT user_id FROM users WHERE full_name='Jin Park'),'AA BB CC 03'),
 ((SELECT user_id FROM users WHERE full_name='Ana Garcia'),'AA BB CC 04'),
 ((SELECT user_id FROM users WHERE full_name='Luis Santos'),'AA BB CC 05');
+
+ALTER TABLE trips
+ADD current_stop_index INT NOT NULL DEFAULT 0,
+ADD start_time DATETIME NULL,
+ADD end_time DATETIME NULL;
+
+ALTER TABLE active_passengers
+ADD tap_state ENUM('in','out') DEFAULT 'in';
+
+-- UPDATE nfc_cards SET uid = '62 BB 1D 07' WHERE user_id = 1;
+-- UPDATE nfc_cards SET uid = '9B 4C 13 07' WHERE user_id = 2;

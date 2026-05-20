@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/fare.php';
 
 if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'driver') {
     header('Location: ../../auth/login.php');
@@ -20,7 +21,7 @@ $averageSpeed = 0;
 $estimatedArrival = 'N/A';
 $routeProgressPercent = 0;
 
-if ($stmt = $conn->prepare('SELECT t.trip_id, t.route_id, r.route_name, r.display_name, b.bus_number, b.plate_number FROM trips t JOIN routes r ON t.route_id = r.route_id JOIN buses b ON t.bus_id = b.bus_id WHERE t.driver_id = ? AND t.status = ? LIMIT 1')) {
+if ($stmt = $conn->prepare('SELECT t.trip_id, t.route_id, t.current_stop_index, t.start_time, t.end_time, r.route_name, r.display_name, b.bus_number, b.plate_number FROM trips t JOIN routes r ON t.route_id = r.route_id JOIN buses b ON t.bus_id = b.bus_id WHERE t.driver_id = ? AND t.status = ? LIMIT 1')) {
     $status = 'active';
     $stmt->bind_param('is', $driverId, $status);
     $stmt->execute();
@@ -33,15 +34,22 @@ if ($activeTrip) {
     $routeId = (int) $activeTrip['route_id'];
     $tripId = (int) $activeTrip['trip_id'];
 
-    if ($stmt = $conn->prepare('SELECT s.stop_name FROM route_stops rs JOIN stops s ON rs.stop_id = s.stop_id WHERE rs.route_id = ? ORDER BY rs.stop_order')) {
-        $stmt->bind_param('i', $routeId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        while ($row = $result->fetch_assoc()) {
-            $routeStops[] = $row['stop_name'];
-        }
-        $stmt->close();
+    if ($stmt = $conn->prepare('SELECT rs.stop_order, s.stop_id, s.stop_name FROM route_stops rs JOIN stops s ON rs.stop_id = s.stop_id WHERE rs.route_id = ? ORDER BY rs.stop_order')) {
+      $stmt->bind_param('i', $routeId);
+      $stmt->execute();
+      $result = $stmt->get_result();
+      while ($row = $result->fetch_assoc()) {
+        $routeStops[] = [
+          'stop_order' => (int) $row['stop_order'],
+          'stop_id' => (int) $row['stop_id'],
+          'stop_name' => $row['stop_name'],
+        ];
+      }
+      $stmt->close();
     }
+
+    $routeStopCount = count($routeStops);
+    $currentStopIndex = max(0, min($routeStopCount - 1, (int) ($activeTrip['current_stop_index'] ?? 0)));
 
     $segmentDistances = [
         1.2, 0.9, 0.9, 0.8, 0.9, 1.1, 1.1, 0.9, 0.8, 1.0,
@@ -60,27 +68,40 @@ if ($activeTrip) {
     }
 
     $totalRouteDistance = count($cumulativeDistances) ? end($cumulativeDistances) : 0.0;
-    $routeStopCount = count($routeStops);
-    $routeProgressIndex = $routeStopCount > 1 ? (int) floor(($routeStopCount - 1) / 2) : 0;
-    $routeProgressPercent = $routeStopCount > 1 ? round(($routeProgressIndex / ($routeStopCount - 1)) * 100) : 0;
+    $routeProgressPercent = $routeStopCount > 1 ? round(($currentStopIndex / ($routeStopCount - 1)) * 100) : 0;
     $estimatedTravelHours = max(0.1, ($routeStopCount - 1) * 0.06);
     $averageSpeed = $totalRouteDistance > 0 ? round($totalRouteDistance / $estimatedTravelHours) : 0;
     $remainingDistance = max(0.0, $totalRouteDistance * (100 - $routeProgressPercent) / 100);
     $arrivalTimestamp = time() + (int) round(($remainingDistance / max(1, $averageSpeed)) * 3600);
     $estimatedArrival = date('g:i A', $arrivalTimestamp);
 
-    if ($stmt = $conn->prepare('SELECT ap.user_id, u.full_name, ap.card_id, st.stop_name AS boarding_stop FROM active_passengers ap JOIN users u ON ap.user_id = u.user_id JOIN stops st ON ap.boarding_stop_id = st.stop_id WHERE ap.trip_id = ? ORDER BY u.full_name')) {
+    if ($stmt = $conn->prepare('SELECT ap.user_id, u.full_name, ap.card_id, ap.boarding_stop_id, st.stop_name AS boarding_stop FROM active_passengers ap JOIN users u ON ap.user_id = u.user_id JOIN stops st ON ap.boarding_stop_id = st.stop_id WHERE ap.trip_id = ? ORDER BY u.full_name')) {
         $stmt->bind_param('i', $tripId);
         $stmt->execute();
         $result = $stmt->get_result();
         while ($row = $result->fetch_assoc()) {
-            $activePassengers[] = [
-                'user_id' => $row['user_id'],
-                'full_name' => $row['full_name'],
-                'boarding_stop' => $row['boarding_stop'],
-                'status_label' => 'Onboard',
-                'footer' => 'Card ID: #' . $row['card_id'],
-            ];
+        $boardingStopId = (int) $row['boarding_stop_id'];
+        $boardingOrder = null;
+        foreach ($routeStops as $r) {
+          if ($r['stop_id'] === $boardingStopId) {
+            $boardingOrder = $r['stop_order'];
+            break;
+          }
+        }
+        $distanceOnboard = null;
+        if ($boardingOrder !== null) {
+          $distanceOnboard = getDistanceBetweenIndices($boardingOrder, $currentStopIndex, $cumulativeDistances);
+        }
+
+        $activePassengers[] = [
+          'user_id' => $row['user_id'],
+          'full_name' => $row['full_name'],
+          'boarding_stop' => $row['boarding_stop'],
+          'boarding_stop_id' => $boardingStopId,
+          'distance_km' => $distanceOnboard !== null ? $distanceOnboard : 0.0,
+          'status_label' => 'Onboard',
+          'footer' => 'Card ID: #' . $row['card_id'],
+        ];
         }
         $stmt->close();
     }
@@ -107,10 +128,11 @@ if ($activeTrip) {
 
 $routeProgressStops = [];
 $routeProgressCurrent = 'N/A';
+$routeNextStop = 'N/A';
 if (!empty($routeStops)) {
     $routeStopCount = count($routeStops);
-    $middleIndex = (int) floor(($routeStopCount - 1) / 2);
-    $routeProgressCurrent = $routeStops[$middleIndex];
+    $routeProgressCurrent = ($routeStops[$currentStopIndex]['stop_name'] ?? $routeStops[0]['stop_name']);
+    $routeNextStop = $currentStopIndex < $routeStopCount - 1 ? $routeStops[$currentStopIndex + 1]['stop_name'] : 'End of route';
 
     $indices = [0];
     if ($routeStopCount > 4) {
@@ -122,7 +144,7 @@ if (!empty($routeStops)) {
     $indices = array_unique($indices);
     sort($indices);
     foreach ($indices as $index) {
-        $routeProgressStops[] = $routeStops[$index];
+      $routeProgressStops[] = $routeStops[$index]['stop_name'];
     }
 }
 
@@ -273,7 +295,7 @@ $tripMetricArrival = $estimatedArrival;
         border-radius: 9999px;
       }
       .route-progress-bar {
-        height: 8px;
+        height: 10px;
         border-radius: 9999px;
         background: #e2e8f0;
         overflow: hidden;
@@ -282,6 +304,25 @@ $tripMetricArrival = $estimatedArrival;
         height: 100%;
         border-radius: 9999px;
         background: #0040a1;
+        transition: width 0.3s ease;
+      }
+      .progress-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 3rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        background: #0040a1;
+        color: #ffffff;
+        font-weight: 700;
+      }
+      .progress-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        background: #f8fafc;
+        padding: 1rem;
+        min-height: 84px;
       }
 
       /* Passenger list accordion */
@@ -389,6 +430,7 @@ $tripMetricArrival = $estimatedArrival;
             </div>
             <button
               class="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+              onclick="window.location.href='../../auth/logout.php'"
               title="Logout"
             >
               <span class="material-symbols-outlined">logout</span>
@@ -443,22 +485,29 @@ $tripMetricArrival = $estimatedArrival;
                 </p>
                 <div class="mt-3 grid grid-cols-2 gap-2">
                   <button
+                    id="start-trip-btn"
                     class="rounded-2xl bg-emerald-600 text-white py-2 text-xs font-semibold"
                   >
                     Start Trip
                   </button>
                   <button
+                    id="arrive-stop-btn"
                     class="rounded-2xl bg-sky-600 text-white py-2 text-xs font-semibold"
+                    disabled
                   >
                     Arrive at Stop
                   </button>
                   <button
+                    id="depart-stop-btn"
                     class="rounded-2xl bg-indigo-600 text-white py-2 text-xs font-semibold"
+                    disabled
                   >
                     Depart Stop
                   </button>
                   <button
+                    id="end-trip-btn"
                     class="rounded-2xl bg-rose-600 text-white py-2 text-xs font-semibold"
+                    disabled
                   >
                     End Trip
                   </button>
@@ -499,12 +548,21 @@ $tripMetricArrival = $estimatedArrival;
                       <div class="route-progress-fill" style="width: <?php echo $routeProgressPercent; ?>%;"></div>
                     </div>
                     <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
-                      <?php foreach ($routeProgressStops as $stopName): ?>
-                        <span class="max-w-[22%] truncate text-center"><?php echo htmlspecialchars($stopName); ?></span>
-                      <?php endforeach; ?>
+                      <span>Progress</span>
+                      <span id="route-progress-label" class="progress-badge"><?php echo $routeProgressPercent; ?>%</span>
                     </div>
-                    <div class="mt-2 text-sm text-slate-600">
-                      <?php echo htmlspecialchars($routeProgressCurrent); ?> (Current Stop)
+                    <div class="grid gap-3 sm:grid-cols-2 mt-4">
+                      <div class="progress-card">
+                        <p class="text-[0.65rem] uppercase tracking-[0.25em] text-slate-500 font-semibold">Current Stop</p>
+                        <p id="route-current-stop" class="mt-2 text-base font-semibold text-slate-900"><?php echo htmlspecialchars($routeProgressCurrent); ?></p>
+                      </div>
+                      <div class="progress-card">
+                        <p class="text-[0.65rem] uppercase tracking-[0.25em] text-slate-500 font-semibold">Next Stop</p>
+                        <p id="route-next-stop" class="mt-2 text-base font-semibold text-slate-900"><?php echo htmlspecialchars($routeNextStop); ?></p>
+                      </div>
+                    </div>
+                    <div id="route-status" class="mt-4 text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
+                      Trip not started
                     </div>
                   </div>
                 </div>
@@ -577,16 +635,16 @@ $tripMetricArrival = $estimatedArrival;
                   </p>
                   <div class="mt-3 text-sm text-slate-700 space-y-2">
                     <div class="flex justify-between">
-                      <span>Trip Duration</span><strong><?php echo htmlspecialchars($tripMetricDuration); ?></strong>
+                      <span>Trip Duration</span><strong id="metric-duration"><?php echo htmlspecialchars($tripMetricDuration); ?></strong>
                     </div>
                     <div class="flex justify-between">
-                      <span>Distance Traveled</span><strong><?php echo htmlspecialchars($tripMetricDistance); ?></strong>
+                      <span>Distance Traveled</span><strong id="metric-distance"><?php echo htmlspecialchars($tripMetricDistance); ?></strong>
                     </div>
                     <div class="flex justify-between">
-                      <span>Average Speed</span><strong><?php echo htmlspecialchars($tripMetricSpeed); ?></strong>
+                      <span>Average Speed</span><strong id="metric-speed"><?php echo htmlspecialchars($tripMetricSpeed); ?></strong>
                     </div>
                     <div class="flex justify-between">
-                      <span>Est. Arrival</span><strong><?php echo htmlspecialchars($tripMetricArrival); ?></strong>
+                      <span>Est. Arrival</span><strong id="metric-arrival"><?php echo htmlspecialchars($tripMetricArrival); ?></strong>
                     </div>
                   </div>
                 </article>
@@ -701,6 +759,166 @@ $tripMetricArrival = $estimatedArrival;
             iframe.style.display = "block";
           }
         }
+
+        // Trip progress simulation
+        const routeStopNames = <?php echo json_encode(array_column($routeStops, 'stop_name')); ?>;
+        const routeCumulativeDistances = <?php echo json_encode($cumulativeDistances ?? [0.0]); ?>;
+        const routeTotalDistance = <?php echo $totalRouteDistance; ?>;
+        const avgSpeedStatic = <?php echo $averageSpeed; ?>;
+        const onboardCount = <?php echo (int) $passengerCount; ?>;
+        const startBtn = document.getElementById('start-trip-btn');
+        const arriveBtn = document.getElementById('arrive-stop-btn');
+        const departBtn = document.getElementById('depart-stop-btn');
+        const endBtn = document.getElementById('end-trip-btn');
+        const statusEl = document.getElementById('route-status');
+        const currentStopEl = document.getElementById('route-current-stop');
+        const nextStopEl = document.getElementById('route-next-stop');
+        const progressFill = document.querySelector('.route-progress-fill');
+        const progressLabelEl = document.getElementById('route-progress-label');
+        const metricDurationEl = document.getElementById('metric-duration');
+        const metricDistanceEl = document.getElementById('metric-distance');
+        const metricSpeedEl = document.getElementById('metric-speed');
+        const metricArrivalEl = document.getElementById('metric-arrival');
+
+        let tripState = 'idle';
+        let currentStopIndex = <?php echo max(0, (int)($currentStopIndex ?? 0)); ?>;
+        let tripTimer = null;
+        const stepMs = 3000;
+
+        const totalStops = routeStopNames.length;
+
+        function setStatus(text) {
+          if (statusEl) statusEl.textContent = text;
+        }
+
+        function formatDistance(value) {
+          return `${value.toFixed(1)} km`;
+        }
+
+        function formatTime(date) {
+          const options = { hour: 'numeric', minute: '2-digit' };
+          return date.toLocaleTimeString([], options);
+        }
+
+        function updateProgress() {
+          if (!progressFill) return;
+          const percent = totalStops > 1 ? Math.round((currentStopIndex / (totalStops - 1)) * 100) : 0;
+          progressFill.style.width = percent + '%';
+          if (progressLabelEl) {
+            progressLabelEl.textContent = percent + '%';
+          }
+          if (currentStopEl) {
+            currentStopEl.textContent = routeStopNames[currentStopIndex] || 'N/A';
+          }
+          if (nextStopEl) {
+            nextStopEl.textContent = currentStopIndex < totalStops - 1 ? routeStopNames[currentStopIndex + 1] : 'End of route';
+          }
+
+          const currentDistance = routeCumulativeDistances[currentStopIndex] || 0;
+          const remainingDistance = Math.max(0, routeTotalDistance - currentDistance);
+          const estimatedArrival = avgSpeedStatic > 0
+            ? new Date(Date.now() + (remainingDistance / avgSpeedStatic) * 3600 * 1000)
+            : null;
+
+          if (metricDistanceEl) {
+            metricDistanceEl.textContent = formatDistance(currentDistance);
+          }
+          if (metricSpeedEl) {
+            metricSpeedEl.textContent = `${avgSpeedStatic} km/h`;
+          }
+          if (metricArrivalEl) {
+            metricArrivalEl.textContent = estimatedArrival ? formatTime(estimatedArrival) : 'N/A';
+          }
+          if (metricDurationEl) {
+            metricDurationEl.textContent = onboardCount > 0 ? `${onboardCount} onboard` : 'No passengers';
+          }
+        }
+
+        function clearTimer() {
+          if (tripTimer) {
+            clearInterval(tripTimer);
+            tripTimer = null;
+          }
+        }
+
+        function startTimer() {
+          clearTimer();
+          tripTimer = setInterval(() => {
+            if (currentStopIndex < totalStops - 1) {
+              currentStopIndex += 1;
+              updateProgress();
+              setStatus(`Arrived at ${routeStopNames[currentStopIndex]}`);
+              if (currentStopIndex >= totalStops - 1) {
+                finishTrip();
+              }
+            }
+          }, stepMs);
+        }
+
+        function setButtonState(state) {
+          tripState = state;
+          startBtn.disabled = state !== 'idle';
+          arriveBtn.disabled = state !== 'running';
+          departBtn.disabled = state !== 'paused';
+          endBtn.disabled = state === 'idle' || state === 'complete';
+        }
+
+        function beginTrip() {
+          if (totalStops < 2 || tripState === 'running' || tripState === 'complete') return;
+          currentStopIndex = 0;
+          updateProgress();
+          setStatus(`Departing from ${routeStopNames[0]}`);
+          setButtonState('running');
+          startTimer();
+        }
+
+        function arriveAtStop() {
+          if (tripState !== 'running') return;
+          clearTimer();
+          setStatus(`Arrived at ${routeStopNames[currentStopIndex]}`);
+          setButtonState('paused');
+        }
+
+        function departFromStop() {
+          if (tripState !== 'paused') return;
+          if (currentStopIndex >= totalStops - 1) {
+            finishTrip();
+            return;
+          }
+          setStatus(`Departing from ${routeStopNames[currentStopIndex]}`);
+          setButtonState('running');
+          startTimer();
+        }
+
+        function finishTrip() {
+          clearTimer();
+          currentStopIndex = totalStops - 1;
+          updateProgress();
+          setStatus(`Trip complete at ${routeStopNames[currentStopIndex]}`);
+          setButtonState('complete');
+        }
+
+        if (totalStops < 2) {
+          setStatus('No route stops available');
+          if (startBtn) startBtn.disabled = true;
+        } else {
+          updateProgress();
+          if (currentStopIndex > 0 && currentStopIndex < totalStops - 1) {
+            setStatus(`Ready at ${routeStopNames[currentStopIndex]}`);
+            setButtonState('paused');
+          } else if (currentStopIndex >= totalStops - 1) {
+            setStatus(`Trip complete at ${routeStopNames[totalStops - 1]}`);
+            setButtonState('complete');
+          } else {
+            setStatus('Trip not started');
+            setButtonState('idle');
+          }
+        }
+
+        if (startBtn) startBtn.addEventListener('click', beginTrip);
+        if (arriveBtn) arriveBtn.addEventListener('click', arriveAtStop);
+        if (departBtn) departBtn.addEventListener('click', departFromStop);
+        if (endBtn) endBtn.addEventListener('click', finishTrip);
       });
     </script>
   </body>

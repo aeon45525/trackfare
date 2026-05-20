@@ -324,6 +324,7 @@ unset($trip);
             </div>
             <button
               class="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+              onclick="window.location.href='../../auth/logout.php'"
               title="Logout"
             >
               <span class="material-symbols-outlined">logout</span>
