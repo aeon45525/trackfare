@@ -158,7 +158,8 @@ INSERT INTO nfc_cards (user_id, uid) VALUES
 -- ============================================================
 
 INSERT INTO routes (route_name, display_name) VALUES
-('Balagtas-Monumento', 'Balagtas → Monumento');
+('Balagtas-Monumento', 'Balagtas → Monumento'),
+('Monumento-Balagtas', 'Monumento → Balagtas');
 
 -- ============================================================
 -- SEED DATA — STOPS (with decimal-degree coordinates)
@@ -194,8 +195,13 @@ INSERT INTO stops (stop_name, municipality, lat, lng) VALUES
 -- SEED DATA — ROUTE STOPS
 -- ============================================================
 
+-- Route 1: Balagtas → Monumento (stop_id ascending)
 INSERT INTO route_stops (route_id, stop_id, stop_order)
-SELECT 1, stop_id, ROW_NUMBER() OVER () FROM stops;
+SELECT 1, stop_id, ROW_NUMBER() OVER (ORDER BY stop_id ASC) FROM stops;
+
+-- Route 2: Monumento → Balagtas (reverse)
+INSERT INTO route_stops (route_id, stop_id, stop_order)
+SELECT 2, stop_id, ROW_NUMBER() OVER (ORDER BY stop_id DESC) FROM stops;
 
 -- ============================================================
 -- SEED DATA — BUSES
@@ -300,3 +306,20 @@ INSERT INTO nfc_cards (user_id, uid) VALUES
 ((SELECT user_id FROM users WHERE full_name = 'Jin Park'),      'AA BB CC 03'),
 ((SELECT user_id FROM users WHERE full_name = 'Ana Garcia'),    'AA BB CC 04'),
 ((SELECT user_id FROM users WHERE full_name = 'Luis Santos'),   'AA BB CC 05');
+
+-- ============================================================
+-- UPGRADE (existing DBs only — skip on fresh import)
+-- Adds return leg: Monumento → Balagtas (reverse stop order of route 1).
+-- Run once if End Trip still shows Balagtas → Monumento after finishing a leg:
+--
+-- INSERT INTO routes (route_name, display_name)
+-- SELECT 'Monumento-Balagtas', 'Monumento → Balagtas'
+-- WHERE NOT EXISTS (SELECT 1 FROM routes WHERE route_name = 'Monumento-Balagtas');
+--
+-- INSERT INTO route_stops (route_id, stop_id, stop_order)
+-- SELECT r.route_id, s.stop_id, ROW_NUMBER() OVER (ORDER BY s.stop_id DESC)
+-- FROM routes r
+-- CROSS JOIN stops s
+-- WHERE r.route_name = 'Monumento-Balagtas'
+--   AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.route_id = r.route_id);
+-- ============================================================

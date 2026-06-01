@@ -298,10 +298,10 @@ $routeStopsForMap = array_map(static fn($s) => [
             <div class="flex items-start justify-between gap-4">
               <div>
                 <p class="text-xs uppercase tracking-[.3em] text-slate-500 font-semibold">Active Route</p>
-                <h2 class="mt-3 text-2xl font-black text-slate-900">
+                <h2 id="ui-route-name" class="mt-3 text-2xl font-black text-slate-900">
                   <?php echo htmlspecialchars($activeTrip['route_name'] ?? 'No active route'); ?>
                 </h2>
-                <p class="mt-1 text-sm text-slate-500">
+                <p id="ui-route-display" class="mt-1 text-sm text-slate-500">
                   <?php echo htmlspecialchars($activeTrip['display_name'] ?? ''); ?>
                 </p>
               </div>
@@ -404,6 +404,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   var GPS_URL        = '../../config/gps.php';
   var STOPS_FALLBACK = <?php echo json_encode($routeStopsForMap, JSON_UNESCAPED_UNICODE); ?>;
   var TOTAL_KM       = <?php echo (float)$totalRouteDistance; ?>;
+  var ROUTE_ID       = <?php echo (int)($activeTrip['route_id'] ?? 1); ?>;
   var AVG_SPEED      = <?php echo max(1, (int)$averageSpeed); ?>;
   var INIT_IDX       = <?php echo (int)$currentStopIndex; ?>;
   var MAP_CENTER     = { lat: <?php echo $mapCenterLat; ?>, lng: <?php echo $mapCenterLng; ?> };
@@ -430,6 +431,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   var legRoutesCache = {};
   var traveledTrail = [];
   var currentLegPath = null;
+  var lastGpsSave = 0;
 
   /* ── DOM ── */
   var btnStart  = document.getElementById('btn-start');
@@ -604,6 +606,52 @@ $routeStopsForMap = array_map(static fn($s) => [
 
   function fmtTime(ms) {
     return new Date(Date.now() + ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function recalcRouteMetrics() {
+    if (stops.length < 2) return;
+    var cum = 0;
+    for (var i = 1; i < stops.length; i++) {
+      cum += haversineKm(stops[i - 1], stops[i]);
+    }
+    TOTAL_KM = cum;
+  }
+
+  function updateRouteHeader(data) {
+    if (data.routeName) {
+      var el = document.getElementById('ui-route-name');
+      if (el) el.textContent = data.routeName;
+    }
+    if (data.displayName) {
+      var el2 = document.getElementById('ui-route-display');
+      if (el2) el2.textContent = data.displayName;
+    }
+    if (typeof data.totalKm === 'number' && data.totalKm > 0) {
+      TOTAL_KM = data.totalKm;
+    } else {
+      recalcRouteMetrics();
+    }
+    if (typeof data.routeId === 'number') ROUTE_ID = data.routeId;
+    if (mDist) mDist.textContent = TOTAL_KM.toFixed(1) + ' km';
+    if (stops.length) {
+      if (uiCur) uiCur.textContent = stops[0].name;
+      if (uiNxt) {
+        uiNxt.textContent = stops.length > 1 ? stops[1].name : 'End of route';
+      }
+    }
+  }
+
+  function applyGpsRoute(data) {
+    if (data.stops && data.stops.length) {
+      stops = data.stops;
+      STOPS_FALLBACK = data.stops;
+      MAP_CENTER = { lat: stops[0].lat, lng: stops[0].lng };
+    }
+    updateRouteHeader(data);
+    legRoutesCache = {};
+    curIdx = 0;
+    if (pbar) pbar.style.width = '0%';
+    if (plabel) plabel.textContent = '0%';
   }
 
   /* ══ GOOGLE MAPS ═════════════════════════════════════ */
@@ -864,7 +912,7 @@ $routeStopsForMap = array_map(static fn($s) => [
     if (legTimer) { clearInterval(legTimer); legTimer = null; }
   }
 
-  function startLeg(from, to) {
+  function startLeg(from, to, resumeAt) {
     stopLeg();
     if (!stops[from] || !stops[to]) return;
 
@@ -874,17 +922,19 @@ $routeStopsForMap = array_map(static fn($s) => [
     setBtns('running');
 
     var st = stops[to];
+    var resumeT = Math.max(0, Math.min(1, resumeAt || 0));
     setChip('running', 'Routing \u2192 ' + st.name);
     renderStopList(to);
     refreshStops(to);
     prefetchLegRoute(to, to + 1);
+    if (resumeT <= 0) gpsCall('depart').catch(function () {});
 
     fetchOsrmRoute(from, to).then(function (path) {
       if (legFrom !== from || legTo !== to) return;
 
       currentLegPath = path;
       var cumDist = buildCumulativeDistances(path);
-      legStartTs = Date.now();
+      legStartTs = Date.now() - resumeT * LEG_MS;
 
       setChip('running', 'En route \u2192 ' + st.name);
 
@@ -901,6 +951,7 @@ $routeStopsForMap = array_map(static fn($s) => [
         followBus(pos.point.lat, pos.point.lng);
         rebuildLines(partial, remain, to);
         updateUI(raw, from, to);
+        if (raw < 1) persistGps(pos.point.lat, pos.point.lng, from, to, raw);
 
         if (raw >= 1) {
           stopLeg();
@@ -927,8 +978,13 @@ $routeStopsForMap = array_map(static fn($s) => [
             setBtns('paused');
             btnDepart.disabled = true;
             setChip('ended', 'Route complete \u2713');
+            gpsCall('update', {
+              lat: endPos.lat,
+              lng: endPos.lng,
+              index: curIdx,
+              status: 'ended',
+            }).catch(function () {});
           } else {
-            gpsCall('depart').catch(function () {});
             startLeg(curIdx, curIdx + 1);
           }
         }
@@ -951,8 +1007,101 @@ $routeStopsForMap = array_map(static fn($s) => [
     });
   }
 
+  function persistGps(lat, lng, from, to, progress) {
+    var now = Date.now();
+    if (now - lastGpsSave < 350) return;
+    lastGpsSave = now;
+    gpsCall('update', {
+      lat: lat,
+      lng: lng,
+      index: from,
+      legFrom: from,
+      legTo: to,
+      legProgress: progress,
+      status: 'running',
+    }).catch(function () {});
+  }
+
+  function buildTraveledTrailTo(stopIndex) {
+    traveledTrail = [{ lat: stops[0].lat, lng: stops[0].lng }];
+    if (stopIndex <= 0) return Promise.resolve();
+    var chain = Promise.resolve();
+    for (var i = 0; i < stopIndex; i++) {
+      (function (leg) {
+        chain = chain.then(function () {
+          return fetchOsrmRoute(leg, leg + 1).then(function (path) {
+            traveledTrail = appendPathPoints(traveledTrail, path);
+          });
+        });
+      })(i);
+    }
+    return chain;
+  }
+
+  function restoreTripView(data) {
+    curIdx = data.currentStopIndex || 0;
+    var bus = data.busPosition || { lat: stops[0].lat, lng: stops[0].lng };
+    var fromLeg = data.legFrom;
+    var toLeg = data.legTo;
+    var prog = parseFloat(data.legProgress) || 0;
+    var midLeg = fromLeg != null && toLeg != null && toLeg > fromLeg && prog > 0 && prog < 1;
+
+    return buildTraveledTrailTo(curIdx).then(function () {
+      prefetchAllLegRoutes();
+
+      function finishRestore(pos, heading, aheadFrom) {
+        setBusPosition(pos.lat, pos.lng, heading);
+        followBus(pos.lat, pos.lng);
+        rebuildLines(null, null, aheadFrom);
+        updateUI(0, curIdx, Math.min(curIdx + 1, stops.length - 1));
+        renderStopList(Math.min(curIdx + 1, stops.length - 1));
+        refreshStops(Math.min(curIdx + 1, stops.length - 1));
+      }
+
+      if (midLeg) {
+        return fetchOsrmRoute(fromLeg, toLeg).then(function (path) {
+          var cum = buildCumulativeDistances(path);
+          var partial = partialPathAlong(path, cum, prog);
+          var pos = positionAtFraction(path, cum, prog);
+          var deg = headingOnPath(path, cum, prog);
+          var remain = remainderPathFrom(path, cum, prog);
+
+          setBusPosition(pos.point.lat, pos.point.lng, deg);
+          followBus(pos.point.lat, pos.point.lng);
+          rebuildLines(partial, remain, toLeg);
+          updateUI(prog, fromLeg, toLeg);
+          renderStopList(toLeg);
+          refreshStops(toLeg);
+
+          if (data.status === 'running') {
+            state = 'running';
+            setBtns('running');
+            setChip('running', 'En route \u2192 ' + stops[toLeg].name);
+            startLeg(fromLeg, toLeg, prog);
+          } else {
+            state = 'paused';
+            setBtns('paused');
+            setChip('paused', 'En route \u2192 ' + stops[toLeg].name);
+          }
+        });
+      }
+
+      var nxt = stops[Math.min(curIdx + 1, stops.length - 1)];
+      var h = nxt && curIdx < stops.length - 1
+        ? bearing(bus.lat, bus.lng, nxt.lat, nxt.lng)
+        : 0;
+      finishRestore(bus, h, curIdx + 1);
+    });
+  }
+
   function startTrip() {
     if (!mapsReady || stops.length < 2) return;
+    if (state === 'paused') {
+      departStop();
+      return;
+    }
+    if (state !== 'idle') return;
+
     gpsCall('start').catch(function () {});
     curIdx = 0;
     state  = 'running';
@@ -971,22 +1120,32 @@ $routeStopsForMap = array_map(static fn($s) => [
 
   function endTrip() {
     stopLeg();
-    state  = 'idle';
-    curIdx = 0;
     traveledTrail = [];
     currentLegPath = null;
-    gpsCall('end').catch(function () {});
 
-    if (stops[0]) {
-      setBusPosition(stops[0].lat, stops[0].lng, 0);
-      rebuildLines(null, null, 1);
-    }
-    fitOverview();
-    refreshStops(-1);
-    renderStopList(-1);
-    updateUI(0, 0, 1);
-    setBtns('idle');
-    setChip('idle', 'Trip ended');
+    var endParams = { flip: 1 };
+
+    var prevRouteId = ROUTE_ID;
+    gpsCall('end', endParams).then(function (data) {
+      if (data.error) throw new Error(data.error);
+      var flipped = data.routeFlipped || (data.routeId && data.routeId !== prevRouteId);
+      applyGpsRoute(data);
+      state  = 'idle';
+      curIdx = 0;
+      drawOverview();
+      setBtns('idle');
+      if (flipped) {
+        setChip('idle', 'Next: ' + (data.displayName || data.routeName || 'return route'));
+      } else {
+        setChip('idle', 'Trip ended');
+      }
+    }).catch(function () {
+      state  = 'idle';
+      curIdx = 0;
+      drawOverview();
+      setBtns('idle');
+      setChip('idle', 'Trip ended');
+    });
   }
 
   function arriveStop() {
@@ -1034,22 +1193,43 @@ $routeStopsForMap = array_map(static fn($s) => [
 
   function bootTripState() {
     return gpsCall().then(function (data) {
-      stops  = (data.stops && data.stops.length) ? data.stops : STOPS_FALLBACK;
-      curIdx = data.currentStopIndex || INIT_IDX;
-      drawOverview();
+      stops = (data.stops && data.stops.length) ? data.stops : STOPS_FALLBACK;
+      if (data.routeId && data.routeId !== ROUTE_ID) applyGpsRoute(data);
+      else updateRouteHeader(data);
 
-      if (data.status === 'running' || data.status === 'paused') {
-        state = 'paused';
-        setChip('paused', 'Trip in progress');
-        setBtns('paused');
-      } else {
+      if (!data.status || data.status === 'idle') {
         state = 'idle';
+        curIdx = data.currentStopIndex || INIT_IDX;
+        drawOverview();
         setChip('idle', 'Trip not started');
         setBtns('idle');
+        return;
       }
+
+      if (data.status === 'ended') {
+        state = 'ended';
+        setBtns('paused');
+        btnDepart.disabled = true;
+        setChip('ended', 'Route complete \u2713');
+        return restoreTripView(data);
+      }
+
+      state = data.status === 'running' ? 'running' : 'paused';
+      return restoreTripView(data).then(function () {
+        if (data.status === 'running') {
+          setBtns('running');
+        } else {
+          setBtns('paused');
+          var stopName = stops[data.currentStopIndex]
+            ? stops[data.currentStopIndex].name
+            : 'stop';
+          setChip('paused', 'At ' + stopName);
+        }
+      });
     }).catch(function () {
       stops  = STOPS_FALLBACK;
       curIdx = INIT_IDX;
+      state  = 'idle';
       drawOverview();
       setChip('idle', 'Trip not started');
       setBtns('idle');
