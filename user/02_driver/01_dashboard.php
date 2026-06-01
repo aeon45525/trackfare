@@ -413,6 +413,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   var TICK_MS  = 16;
   var NAV_ZOOM = 17;
   var OV_ZOOM  = 12;
+  var OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
 
   /* ── state ── */
   var stops = [];
@@ -426,6 +427,9 @@ $routeStopsForMap = array_map(static fn($s) => [
   var legStartTs = 0;
   var busHeading = 0;
   var mapsReady = false;
+  var legRoutesCache = {};
+  var traveledTrail = [];
+  var currentLegPath = null;
 
   /* ── DOM ── */
   var btnStart  = document.getElementById('btn-start');
@@ -460,6 +464,142 @@ $routeStopsForMap = array_map(static fn($s) => [
 
   function ease(t) {
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+
+  function haversineKm(a, b) {
+    var R = 6371;
+    var dLat = (b.lat - a.lat) * Math.PI / 180;
+    var dLng = (b.lng - a.lng) * Math.PI / 180;
+    var p1 = a.lat * Math.PI / 180;
+    var p2 = b.lat * Math.PI / 180;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+      + Math.cos(p1) * Math.cos(p2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  }
+
+  function legCacheKey(from, to) { return from + '-' + to; }
+
+  function straightPath(from, to) {
+    return [
+      { lat: from.lat, lng: from.lng },
+      { lat: to.lat, lng: to.lng },
+    ];
+  }
+
+  function fetchOsrmRoute(fromIdx, toIdx) {
+    var key = legCacheKey(fromIdx, toIdx);
+    if (legRoutesCache[key]) {
+      return Promise.resolve(legRoutesCache[key]);
+    }
+    var a = stops[fromIdx];
+    var b = stops[toIdx];
+    var url = OSRM_URL + '/'
+      + a.lng + ',' + a.lat + ';' + b.lng + ',' + b.lat
+      + '?overview=full&geometries=geojson';
+
+    return fetch(url, { headers: { Accept: 'application/json' } })
+      .then(function (r) {
+        if (!r.ok) throw new Error('OSRM HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        var path;
+        if (data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry) {
+          path = data.routes[0].geometry.coordinates.map(function (c) {
+            return { lat: c[1], lng: c[0] };
+          });
+        } else {
+          path = straightPath(a, b);
+        }
+        legRoutesCache[key] = path;
+        return path;
+      })
+      .catch(function () {
+        var path = straightPath(a, b);
+        legRoutesCache[key] = path;
+        return path;
+      });
+  }
+
+  function prefetchLegRoute(fromIdx, toIdx) {
+    if (fromIdx < 0 || toIdx >= stops.length) return;
+    fetchOsrmRoute(fromIdx, toIdx).catch(function () {});
+  }
+
+  function prefetchAllLegRoutes() {
+    var i = 0;
+    function next() {
+      if (i >= stops.length - 1) return;
+      fetchOsrmRoute(i, i + 1).finally(function () {
+        i += 1;
+        setTimeout(next, 150);
+      });
+    }
+    next();
+  }
+
+  function buildCumulativeDistances(path) {
+    var cum = [0];
+    for (var i = 1; i < path.length; i++) {
+      cum.push(cum[i - 1] + haversineKm(path[i - 1], path[i]));
+    }
+    return cum;
+  }
+
+  function positionAtFraction(path, cumDist, t) {
+    if (!path.length) return { point: { lat: 0, lng: 0 }, index: 0 };
+    if (path.length === 1 || t <= 0) return { point: path[0], index: 0 };
+    var total = cumDist[cumDist.length - 1];
+    if (t >= 1 || total <= 0) {
+      return { point: path[path.length - 1], index: path.length - 1 };
+    }
+    var target = t * total;
+    for (var i = 1; i < cumDist.length; i++) {
+      if (cumDist[i] >= target) {
+        var segLen = cumDist[i] - cumDist[i - 1];
+        var segT = segLen > 0 ? (target - cumDist[i - 1]) / segLen : 0;
+        return {
+          point: {
+            lat: lerp(path[i - 1].lat, path[i].lat, segT),
+            lng: lerp(path[i - 1].lng, path[i].lng, segT),
+          },
+          index: i - 1,
+        };
+      }
+    }
+    return { point: path[path.length - 1], index: path.length - 1 };
+  }
+
+  function partialPathAlong(path, cumDist, t) {
+    var pos = positionAtFraction(path, cumDist, t);
+    var out = path.slice(0, pos.index + 1);
+    out.push(pos.point);
+    return out;
+  }
+
+  function remainderPathFrom(path, cumDist, t) {
+    var pos = positionAtFraction(path, cumDist, t);
+    var out = [pos.point];
+    for (var i = pos.index + 1; i < path.length; i++) out.push(path[i]);
+    return out;
+  }
+
+  function headingOnPath(path, cumDist, t) {
+    var pos = positionAtFraction(path, cumDist, t);
+    var ahead = positionAtFraction(path, cumDist, Math.min(1, t + 0.03));
+    return bearing(pos.point.lat, pos.point.lng, ahead.point.lat, ahead.point.lng);
+  }
+
+  function appendPathPoints(base, extra) {
+    if (!extra || !extra.length) return base.slice();
+    var out = base.slice();
+    var start = out.length ? 1 : 0;
+    for (var i = start; i < extra.length; i++) out.push(extra[i]);
+    return out;
+  }
+
+  function pathToLatLngs(pts) {
+    return pts.map(function (p) { return latLng(p.lat, p.lng); });
   }
 
   function fmtTime(ms) {
@@ -601,20 +741,17 @@ $routeStopsForMap = array_map(static fn($s) => [
     });
   }
 
-  function rebuildLines(busLat, busLng) {
+  function rebuildLines(activePartial, legRemainder, nextLegFrom) {
     if (lineTaken) { lineTaken.setMap(null); lineTaken = null; }
     if (lineAhead) { lineAhead.setMap(null); lineAhead = null; }
     if (!stops.length) return;
 
-    var taken = stops.slice(0, curIdx + 1).map(function (s) {
-      return latLng(s.lat, s.lng);
-    });
-    if (busLat !== null) taken.push(latLng(busLat, busLng));
+    var takenPts = appendPathPoints(traveledTrail, activePartial || []);
 
-    if (taken.length > 1) {
+    if (takenPts.length > 1) {
       lineTaken = new google.maps.Polyline({
-        path: taken,
-        geodesic: true,
+        path: pathToLatLngs(takenPts),
+        geodesic: false,
         strokeColor: '#16a34a',
         strokeOpacity: 0.92,
         strokeWeight: 6,
@@ -623,17 +760,21 @@ $routeStopsForMap = array_map(static fn($s) => [
       });
     }
 
-    var ahead = busLat !== null
-      ? [latLng(busLat, busLng)]
-      : [latLng(stops[curIdx].lat, stops[curIdx].lng)];
-    for (var j = curIdx + 1; j < stops.length; j++) {
-      ahead.push(latLng(stops[j].lat, stops[j].lng));
+    var aheadPts = legRemainder ? legRemainder.slice() : [];
+    var fromLeg = typeof nextLegFrom === 'number' ? nextLegFrom : curIdx + 1;
+    for (var j = fromLeg; j < stops.length - 1; j++) {
+      var key = legCacheKey(j, j + 1);
+      if (legRoutesCache[key]) {
+        aheadPts = appendPathPoints(aheadPts, legRoutesCache[key]);
+      } else {
+        aheadPts = appendPathPoints(aheadPts, straightPath(stops[j], stops[j + 1]));
+      }
     }
 
-    if (ahead.length > 1) {
+    if (aheadPts.length > 1) {
       lineAhead = new google.maps.Polyline({
-        path: ahead,
-        geodesic: true,
+        path: pathToLatLngs(aheadPts),
+        geodesic: false,
         strokeColor: '#60a5fa',
         strokeOpacity: 0,
         strokeWeight: 5,
@@ -727,57 +868,72 @@ $routeStopsForMap = array_map(static fn($s) => [
     stopLeg();
     if (!stops[from] || !stops[to]) return;
 
-    legFrom    = from;
-    legTo      = to;
-    legStartTs = Date.now();
-    state      = 'running';
+    legFrom = from;
+    legTo   = to;
+    state   = 'running';
     setBtns('running');
 
-    var sf  = stops[from];
-    var st  = stops[to];
-    var deg = bearing(sf.lat, sf.lng, st.lat, st.lng);
-
-    setChip('running', 'En route \u2192 ' + st.name);
+    var st = stops[to];
+    setChip('running', 'Routing \u2192 ' + st.name);
     renderStopList(to);
     refreshStops(to);
+    prefetchLegRoute(to, to + 1);
 
-    legTimer = setInterval(function () {
-      var elapsed = Date.now() - legStartTs;
-      var raw     = Math.min(1, elapsed / LEG_MS);
-      var t       = ease(raw);
-      var lat     = lerp(sf.lat, st.lat, t);
-      var lng     = lerp(sf.lng, st.lng, t);
+    fetchOsrmRoute(from, to).then(function (path) {
+      if (legFrom !== from || legTo !== to) return;
 
-      setBusPosition(lat, lng, deg);
-      followBus(lat, lng);
-      rebuildLines(lat, lng);
-      updateUI(raw, from, to);
+      currentLegPath = path;
+      var cumDist = buildCumulativeDistances(path);
+      legStartTs = Date.now();
 
-      if (raw >= 1) {
-        stopLeg();
-        curIdx = to;
-        var pos = stops[curIdx];
+      setChip('running', 'En route \u2192 ' + st.name);
 
-        setBusPosition(pos.lat, pos.lng, deg);
-        followBus(pos.lat, pos.lng);
-        rebuildLines(pos.lat, pos.lng);
-        updateUI(0, curIdx, Math.min(curIdx + 1, stops.length - 1));
-        renderStopList(curIdx + 1);
-        refreshStops(curIdx + 1);
+      legTimer = setInterval(function () {
+        var elapsed = Date.now() - legStartTs;
+        var raw     = Math.min(1, elapsed / LEG_MS);
+        var t       = ease(raw);
+        var pos     = positionAtFraction(path, cumDist, t);
+        var deg     = headingOnPath(path, cumDist, t);
+        var partial = partialPathAlong(path, cumDist, t);
+        var remain  = remainderPathFrom(path, cumDist, t);
 
-        gpsCall('arrive', { index: curIdx }).catch(function () {});
+        setBusPosition(pos.point.lat, pos.point.lng, deg);
+        followBus(pos.point.lat, pos.point.lng);
+        rebuildLines(partial, remain, to);
+        updateUI(raw, from, to);
 
-        if (curIdx >= stops.length - 1) {
-          state = 'ended';
-          setBtns('paused');
-          btnDepart.disabled = true;
-          setChip('ended', 'Route complete \u2713');
-        } else {
-          gpsCall('depart').catch(function () {});
-          startLeg(curIdx, curIdx + 1);
+        if (raw >= 1) {
+          stopLeg();
+          curIdx = to;
+          traveledTrail = appendPathPoints(traveledTrail, path);
+          currentLegPath = null;
+
+          var endPos = stops[curIdx];
+          var endDeg = curIdx < stops.length - 1
+            ? headingOnPath(path, cumDist, 1)
+            : deg;
+
+          setBusPosition(endPos.lat, endPos.lng, endDeg);
+          followBus(endPos.lat, endPos.lng);
+          rebuildLines(null, null, curIdx + 1);
+          updateUI(0, curIdx, Math.min(curIdx + 1, stops.length - 1));
+          renderStopList(curIdx + 1);
+          refreshStops(curIdx + 1);
+
+          gpsCall('arrive', { index: curIdx }).catch(function () {});
+
+          if (curIdx >= stops.length - 1) {
+            state = 'ended';
+            setBtns('paused');
+            btnDepart.disabled = true;
+            setChip('ended', 'Route complete \u2713');
+          } else {
+            gpsCall('depart').catch(function () {});
+            startLeg(curIdx, curIdx + 1);
+          }
         }
-      }
-    }, TICK_MS);
+      }, TICK_MS);
+    });
   }
 
   function gpsCall(action, extra) {
@@ -801,14 +957,15 @@ $routeStopsForMap = array_map(static fn($s) => [
     curIdx = 0;
     state  = 'running';
     setBtns('running');
+    traveledTrail = [{ lat: stops[0].lat, lng: stops[0].lng }];
+    currentLegPath = null;
+    legRoutesCache = {};
 
     var p0 = stops[0];
-    var h0 = stops.length > 1
-      ? bearing(p0.lat, p0.lng, stops[1].lat, stops[1].lng)
-      : 0;
-    setBusPosition(p0.lat, p0.lng, h0);
-    rebuildLines(p0.lat, p0.lng);
+    setBusPosition(p0.lat, p0.lng, 0);
+    rebuildLines(null, null, 1);
     followBus(p0.lat, p0.lng);
+    prefetchAllLegRoutes();
     startLeg(0, 1);
   }
 
@@ -816,11 +973,13 @@ $routeStopsForMap = array_map(static fn($s) => [
     stopLeg();
     state  = 'idle';
     curIdx = 0;
+    traveledTrail = [];
+    currentLegPath = null;
     gpsCall('end').catch(function () {});
 
     if (stops[0]) {
       setBusPosition(stops[0].lat, stops[0].lng, 0);
-      rebuildLines(stops[0].lat, stops[0].lng);
+      rebuildLines(null, null, 1);
     }
     fitOverview();
     refreshStops(-1);
@@ -833,13 +992,17 @@ $routeStopsForMap = array_map(static fn($s) => [
   function arriveStop() {
     if (state !== 'running') return;
     stopLeg();
+    if (currentLegPath) {
+      traveledTrail = appendPathPoints(traveledTrail, currentLegPath);
+      currentLegPath = null;
+    }
     curIdx = legTo;
     var pos = stops[curIdx];
     var nxt = stops[Math.min(curIdx + 1, stops.length - 1)];
     var h   = nxt ? bearing(pos.lat, pos.lng, nxt.lat, nxt.lng) : busHeading;
     setBusPosition(pos.lat, pos.lng, h);
     followBus(pos.lat, pos.lng);
-    rebuildLines(pos.lat, pos.lng);
+    rebuildLines(null, null, curIdx + 1);
     updateUI(0, curIdx, Math.min(curIdx + 1, stops.length - 1));
     renderStopList(curIdx + 1);
     refreshStops(curIdx + 1);
@@ -857,16 +1020,16 @@ $routeStopsForMap = array_map(static fn($s) => [
 
   function drawOverview() {
     if (!stops.length) return;
+    traveledTrail = [];
+    currentLegPath = null;
     var p0 = stops[0];
-    var h0 = stops.length > 1
-      ? bearing(p0.lat, p0.lng, stops[1].lat, stops[1].lng)
-      : 0;
-    setBusPosition(p0.lat, p0.lng, h0);
-    rebuildLines(p0.lat, p0.lng);
+    setBusPosition(p0.lat, p0.lng, 0);
+    rebuildLines(null, null, 1);
     fitOverview();
     refreshStops(1);
     renderStopList(1);
     updateUI(0, 0, 1);
+    if (stops.length > 1) prefetchLegRoute(0, 1);
   }
 
   function bootTripState() {
