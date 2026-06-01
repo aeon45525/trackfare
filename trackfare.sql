@@ -85,15 +85,16 @@ CREATE TABLE buses (
 -- ============================================================
 
 CREATE TABLE trips (
-    trip_id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    bus_id            INT UNSIGNED NOT NULL,
-    route_id          INT UNSIGNED NOT NULL,
-    driver_id         INT UNSIGNED NOT NULL,
-    status            VARCHAR(20) NOT NULL,
+    trip_id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    bus_id             INT UNSIGNED NOT NULL,
+    route_id           INT UNSIGNED NOT NULL,
+    driver_id          INT UNSIGNED NOT NULL,
+    status             VARCHAR(20) NOT NULL,  -- active | completed
     current_stop_index INT NOT NULL DEFAULT 0,
-    start_time        DATETIME NULL,
-    end_time          DATETIME NULL,
-    PRIMARY KEY (trip_id)
+    start_time         DATETIME NULL,
+    end_time           DATETIME NULL,
+    PRIMARY KEY (trip_id),
+    KEY idx_trips_driver_status (driver_id, status)
 );
 
 CREATE TABLE active_passengers (
@@ -114,7 +115,7 @@ CREATE TABLE trip_transactions (
     card_id          INT UNSIGNED NOT NULL,
     boarding_stop_id INT UNSIGNED NOT NULL,
     alighting_stop_id INT UNSIGNED NOT NULL,
-    fare_amount      DECIMAL(10,2) NOT NULL,
+    fare_amount      DECIMAL(10,2) NOT NULL,  -- PHP15 first km + PHP2.50/km after (config/fare.php)
     PRIMARY KEY (transaction_id)
 );
 
@@ -263,11 +264,11 @@ VALUES
 -- SEED DATA — MORE TRIPS (completed)
 -- ============================================================
 
-INSERT INTO trips (bus_id, route_id, driver_id, status) VALUES
-(2, 1, 3, 'completed'),
-(3, 1, 4, 'completed'),
-(4, 1, 5, 'completed'),
-(5, 1, 6, 'completed');
+INSERT INTO trips (bus_id, route_id, driver_id, status, start_time, end_time) VALUES
+(2, 1, 3, 'completed', '2026-06-01 06:00:00', '2026-06-01 08:30:00'),
+(3, 1, 4, 'completed', '2026-06-01 07:00:00', '2026-06-01 09:15:00'),
+(4, 1, 5, 'completed', '2026-06-01 08:00:00', '2026-06-01 10:00:00'),
+(5, 1, 6, 'completed', '2026-06-01 09:00:00', '2026-06-01 11:30:00');
 
 INSERT INTO trip_transactions
     (trip_id, user_id, card_id, boarding_stop_id, alighting_stop_id, fare_amount)
@@ -322,4 +323,6 @@ INSERT INTO nfc_cards (user_id, uid) VALUES
 -- CROSS JOIN stops s
 -- WHERE r.route_name = 'Monumento-Balagtas'
 --   AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.route_id = r.route_id);
+--
+-- ALTER TABLE trips ADD KEY idx_trips_driver_status (driver_id, status);
 -- ============================================================

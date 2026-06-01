@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/fare.php';
 
 if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
     header('Location: ../../auth/login.php');
@@ -12,7 +13,7 @@ $routeName = 'Balagtas → Monumento';
 $routeStops = [];
 
 if ($stmt = $conn->prepare(
-    'SELECT s.stop_id, s.stop_name, s.municipality
+    'SELECT s.stop_id, s.stop_name, s.municipality, s.lat, s.lng
      FROM route_stops rs
      JOIN stops s ON rs.stop_id = s.stop_id
      WHERE rs.route_id = ?
@@ -22,16 +23,16 @@ if ($stmt = $conn->prepare(
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
-        $routeStops[] = $row;
+        $routeStops[] = [
+            'stop_id'      => (int) $row['stop_id'],
+            'stop_name'    => $row['stop_name'],
+            'municipality' => $row['municipality'],
+            'lat'          => (float) $row['lat'],
+            'lng'          => (float) $row['lng'],
+        ];
     }
     $stmt->close();
 }
-
-// Estimated consecutive distances between stops in kilometers
-$segmentDistances = [
-    1.2, 0.9, 0.9, 0.8, 0.9, 1.1, 1.1, 0.9, 0.8, 1.0,
-    1.0, 1.1, 1.0, 1.2, 1.4, 1.3, 1.2, 1.0, 0.9
-];
 
 if (count($routeStops) === 0) {
     $routeStops = [
@@ -61,24 +62,15 @@ if (count($routeStops) === 0) {
 $stopNames = array_column($routeStops, 'stop_name');
 $stopCount = count($stopNames);
 
-$cumulativeDistances = [0.0];
-for ($i = 0; $i < count($segmentDistances); $i++) {
-    $cumulativeDistances[] = round($cumulativeDistances[$i] + $segmentDistances[$i], 2);
-}
-
-function calculateFare(float $distance): float
-{
-    if ($distance <= 5.0) {
-        return 13.00;
-    }
-
-    $extraKm = (int) ceil($distance - 5.0);
-    return 13.00 + ($extraKm * 2.25);
-}
+$coordsForFare = array_map(static fn($s) => [
+    'lat' => $s['lat'] ?? 0.0,
+    'lng' => $s['lng'] ?? 0.0,
+], $routeStops);
+$cumulativeDistances = build_cumulative_from_route_stops($coordsForFare);
 
 function getDistanceBetweenStops(int $from, int $to, array $cumulativeDistances): float
 {
-    return round(abs($cumulativeDistances[$to] - $cumulativeDistances[$from]), 2);
+    return getDistanceBetweenIndices($from, $to, $cumulativeDistances);
 }
 
 $fareMatrix = [];
@@ -539,13 +531,14 @@ $totalStops = $stopCount;
       // Fare calculation data from PHP
       const stopNames = <?= json_encode($stopNames) ?>;
       const cumulativeDistances = <?= json_encode($cumulativeDistances) ?>;
+      const FARE_FIRST_KM = <?= FARE_FIRST_KM_PHP ?>;
+      const FARE_PER_KM_AFTER = <?= FARE_PER_KM_AFTER_PHP ?>;
+      const FARE_INCLUDED_KM = <?= FARE_INCLUDED_KM ?>;
 
       function calculateFare(distance) {
-        if (distance <= 5.0) {
-          return 13.00;
-        }
-        const extraKm = Math.ceil(distance - 5.0);
-        return 13.00 + (extraKm * 2.25);
+        if (distance <= 0) return 0;
+        if (distance <= FARE_INCLUDED_KM) return FARE_FIRST_KM;
+        return Math.round((FARE_FIRST_KM + (distance - FARE_INCLUDED_KM) * FARE_PER_KM_AFTER) * 100) / 100;
       }
 
       function getDistance(fromIndex, toIndex) {

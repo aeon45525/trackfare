@@ -24,15 +24,7 @@ $cumulativeDistances   = [0.0];
 $mapCenterLat          = 14.821028;
 $mapCenterLng          = 120.902972;
 
-function haversine_km(float $lat1, float $lng1, float $lat2, float $lng2): float
-{
-    $R    = 6371.0;
-    $dLat = deg2rad($lat2 - $lat1);
-    $dLng = deg2rad($lng2 - $lng1);
-    $a    = sin($dLat / 2) ** 2
-          + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
-    return $R * 2 * atan2(sqrt($a), sqrt(1 - $a));
-}
+$farePolicyLabel = fare_policy_label();
 
 /* active trip */
 if ($stmt = $conn->prepare(
@@ -82,13 +74,7 @@ if ($activeTrip) {
         $mapCenterLng = $routeStops[0]['lng'];
     }
 
-    $cumulativeDistances = [0.0];
-    for ($i = 1; $i < $routeStopCount; $i++) {
-        $prev = $routeStops[$i - 1];
-        $curr = $routeStops[$i];
-        $cumulativeDistances[] = round($cumulativeDistances[$i - 1]
-            + haversine_km($prev['lat'], $prev['lng'], $curr['lat'], $curr['lng']), 4);
-    }
+    $cumulativeDistances = build_cumulative_from_route_stops($routeStops);
     $totalRouteDistance   = end($cumulativeDistances);
     $routeProgressPercent = $routeStopCount > 1
         ? round(($currentStopIndex / ($routeStopCount - 1)) * 100)
@@ -111,6 +97,21 @@ if ($activeTrip) {
             $activePassengers[] = $row;
         }
         $stmt->close();
+    }
+
+    if ($routeStopCount > 0) {
+        $lastStopId         = (int) $routeStops[$routeStopCount - 1]['stop_id'];
+        $currentStopIdFare  = (int) $routeStops[$currentStopIndex]['stop_id'];
+        foreach ($activePassengers as &$paxRow) {
+            $boardId = (int) $paxRow['boarding_stop_id'];
+            $nowEst  = fare_estimate_for_active_passenger($conn, $routeId, $boardId, $currentStopIdFare);
+            $maxEst  = fare_estimate_for_active_passenger($conn, $routeId, $boardId, $lastStopId);
+            $paxRow['fare_now'] = $nowEst['fare'];
+            $paxRow['fare_max'] = $maxEst['fare'];
+            $paxRow['km_now']   = $nowEst['distance_km'];
+            $paxRow['km_max']   = $maxEst['distance_km'];
+        }
+        unset($paxRow);
     }
 
     /* earnings */
@@ -137,6 +138,8 @@ if ($activeTrip) {
 
 $routeStopCount   = count($routeStops);
 $passengerCount   = count($activePassengers);
+$paxPreviewLimit  = 3;
+$paxPreview       = array_slice($activePassengers, 0, $paxPreviewLimit);
 $routeProgressCurrent = $routeStops[$currentStopIndex]['stop_name'] ?? 'N/A';
 $routeNextStop = ($currentStopIndex < $routeStopCount - 1)
     ? $routeStops[$currentStopIndex + 1]['stop_name']
@@ -155,6 +158,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>TrackFare — Driver Dashboard</title>
+  <link rel="icon" type="image/png" href="../../images/logo.png"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -175,33 +179,39 @@ $routeStopsForMap = array_map(static fn($s) => [
   <style>
     .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;vertical-align:middle}
 
-    #live-map{width:100%;height:480px;border-radius:1rem;overflow:hidden;position:relative;z-index:0;background:#e2e8f0}
+    #live-map{width:100%;height:100%;min-height:280px;border-radius:.75rem;overflow:hidden;position:relative;z-index:0;background:#e2e8f0}
 
     /* progress */
-    .pbar-outer{height:8px;border-radius:9999px;background:#e2e8f0;overflow:hidden}
+    .pbar-outer{height:6px;border-radius:9999px;background:#e2e8f0;overflow:hidden}
     .pbar-inner{height:100%;border-radius:9999px;background:#0040a1;transition:width .35s ease}
-    .pbadge{display:inline-flex;align-items:center;justify-content:center;min-width:3rem;padding:.2rem .75rem;border-radius:9999px;background:#0040a1;color:#fff;font-weight:700;font-size:.85rem}
-    .pcard{border:1px solid #e2e8f0;border-radius:1rem;background:#f8fafc;padding:1rem;min-height:80px}
+    .pbadge{display:inline-flex;align-items:center;justify-content:center;min-width:2.5rem;padding:.1rem .5rem;border-radius:9999px;background:#0040a1;color:#fff;font-weight:700;font-size:.75rem}
+    .pcard{border:1px solid #e2e8f0;border-radius:.75rem;background:#f8fafc;padding:.5rem .65rem;min-height:0}
 
     /* stop list */
-    .stop-row{display:flex;align-items:center;gap:.6rem;padding:.35rem 0;font-size:.875rem;color:#64748b;border-bottom:1px solid #f1f5f9}
+    .stop-row{display:flex;align-items:center;gap:.45rem;padding:.2rem 0;font-size:.75rem;color:#64748b;border-bottom:1px solid #f1f5f9}
     .stop-row:last-child{border:none}
-    .sdot{width:10px;height:10px;border-radius:50%;background:#cbd5e1;flex-shrink:0}
+    .sdot{width:8px;height:8px;border-radius:50%;background:#cbd5e1;flex-shrink:0}
     .stop-row.done .sdot{background:#16a34a}
     .stop-row.done{color:#16a34a}
-    .stop-row.cur .sdot{background:#0040a1;box-shadow:0 0 0 3px rgba(0,64,161,.2)}
+    .stop-row.cur .sdot{background:#0040a1;box-shadow:0 0 0 2px rgba(0,64,161,.2)}
     .stop-row.cur{color:#0040a1;font-weight:700}
     .stop-row.nxt .sdot{background:#2563eb}
     .stop-row.nxt{color:#2563eb;font-weight:600}
 
-    /* passenger accordion */
-    .pax-item{border-radius:12px;padding:.75rem;border:1px solid transparent;transition:all .15s}
-    .pax-item.open{border-color:#e2e8f0;background:#fff}
-    .pax-body{padding-top:.5rem;color:#475569;display:none}
-    .pax-item.open .pax-body{display:block}
+    /* passenger preview */
+    .pax-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.35rem .5rem;border-radius:.5rem;background:#f8fafc;font-size:.75rem}
+    .pax-row + .pax-row{margin-top:.25rem}
+
+    /* modal */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50;display:none;align-items:center;justify-content:center;padding:1.5rem}
+    .modal-backdrop.open{display:flex}
+    .modal-panel{width:100%;max-width:32rem;max-height:min(85vh,720px);background:#fff;border-radius:1rem;border:1px solid #e2e8f0;box-shadow:0 25px 50px -12px rgba(0,0,0,.2);display:flex;flex-direction:column}
+    .modal-body{overflow-y:auto;padding:0 1rem 1rem}
+    .modal-pax-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding:.65rem 0;border-bottom:1px solid #f1f5f9;font-size:.8125rem}
+    .modal-pax-row:last-child{border:none}
 
     /* trip control buttons */
-    .tb{border-radius:1rem;padding:.55rem 0;font-size:.8rem;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:opacity .15s}
+    .tb{border-radius:.75rem;padding:.4rem 0;font-size:.75rem;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:opacity .15s}
     .tb:disabled{opacity:.3;cursor:not-allowed}
 
     /* status chip */
@@ -256,143 +266,169 @@ $routeStopsForMap = array_map(static fn($s) => [
   </aside>
 
   <!-- Main -->
-  <main class="ml-[260px] flex-1 min-h-screen bg-slate-100 p-10">
-    <div class="max-w-full">
-      <header class="mb-10">
-        <h1 class="text-4xl font-extrabold tracking-tight text-slate-900 font-headline">Dashboard</h1>
-        <p class="mt-2 text-sm text-slate-500">Driver overview — current route &amp; onboard passengers.</p>
-      </header>
-
-      <div class="grid grid-cols-12 gap-8">
-
-        <!-- LEFT -->
-        <section class="col-span-12 xl:col-span-7 space-y-6">
-
-          <!-- Live Map -->
-          <article class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200">
-            <div class="flex items-center justify-between mb-4">
-              <p class="text-xs uppercase tracking-[.25em] text-slate-500 font-semibold">Live Map</p>
-              <span id="status-chip" class="idle"><span class="chipdot"></span><span id="chip-label">Trip not started</span></span>
-            </div>
-            <div id="live-map" role="application" aria-label="Live route map"></div>
-          </article>
-
-          <!-- Controls -->
-          <article class="rounded-[1.5rem] bg-white p-5 shadow-sm border border-slate-200">
-            <p class="text-xs uppercase tracking-[.25em] text-slate-500 font-semibold mb-3">Trip Controls</p>
-            <div class="grid grid-cols-4 gap-3">
-              <button id="btn-start"  class="tb bg-emerald-600 text-white">&#9654; Start</button>
-              <button id="btn-arrive" class="tb bg-sky-600    text-white" disabled>&#9646; Arrive</button>
-              <button id="btn-depart" class="tb bg-indigo-600 text-white" disabled>&#9654; Depart</button>
-              <button id="btn-end"    class="tb bg-rose-600   text-white" disabled>&#9632; End Trip</button>
-            </div>
-          </article>
-
-        </section>
-
-        <!-- RIGHT -->
-        <section class="col-span-12 xl:col-span-5 space-y-6">
-
-          <!-- Route card -->
-          <article class="rounded-[1.5rem] bg-white p-8 shadow-sm border border-slate-200">
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <p class="text-xs uppercase tracking-[.3em] text-slate-500 font-semibold">Active Route</p>
-                <h2 id="ui-route-name" class="mt-3 text-2xl font-black text-slate-900">
-                  <?php echo htmlspecialchars($activeTrip['route_name'] ?? 'No active route'); ?>
-                </h2>
-                <p id="ui-route-display" class="mt-1 text-sm text-slate-500">
-                  <?php echo htmlspecialchars($activeTrip['display_name'] ?? ''); ?>
-                </p>
-              </div>
-              <span class="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700 whitespace-nowrap">On Route</span>
-            </div>
-
-            <div class="mt-6">
-              <p class="text-xs uppercase tracking-[.25em] text-slate-500 font-semibold mb-2">Progress</p>
-              <div class="pbar-outer">
-                <div id="pbar" class="pbar-inner" style="width:<?php echo $routeProgressPercent; ?>%"></div>
-              </div>
-              <div class="mt-2 flex items-center justify-between text-xs text-slate-500">
-                <span>Route progress</span>
-                <span id="plabel" class="pbadge"><?php echo $routeProgressPercent; ?>%</span>
-              </div>
-            </div>
-
-            <div class="grid gap-3 sm:grid-cols-2 mt-4">
-              <div class="pcard">
-                <p class="text-[.65rem] uppercase tracking-[.25em] text-slate-500 font-semibold">Current Stop</p>
-                <p id="ui-cur" class="mt-2 text-base font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($routeProgressCurrent); ?></p>
-              </div>
-              <div class="pcard">
-                <p class="text-[.65rem] uppercase tracking-[.25em] text-slate-500 font-semibold">Next Stop</p>
-                <p id="ui-nxt" class="mt-2 text-base font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($routeNextStop); ?></p>
-              </div>
-            </div>
-
-            <ul id="stop-list" class="mt-4 max-h-56 overflow-y-auto pr-1"></ul>
-          </article>
-
-          <!-- Passengers -->
-          <article class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <p class="text-xs uppercase tracking-[.3em] text-slate-500 font-semibold">Onboard Passengers</p>
-                <h2 class="mt-1 text-xl font-black text-slate-900">Passenger List</h2>
-              </div>
-              <span class="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600"><?php echo $passengerCount; ?> onboard</span>
-            </div>
-            <div class="space-y-2" id="pax-list">
-              <?php if (!empty($activePassengers)): ?>
-                <?php foreach ($activePassengers as $i => $p): ?>
-                  <div class="pax-item <?php echo $i === 0 ? 'open' : ''; ?>">
-                    <div class="flex items-center justify-between cursor-pointer" data-toggle>
-                      <div>
-                        <p class="text-sm font-semibold text-slate-900">
-                          <?php echo htmlspecialchars($p['full_name']); ?>
-                          <span class="text-xs text-slate-400 font-normal ml-1">#P<?php echo (int)$p['user_id']; ?></span>
-                        </p>
-                        <p class="text-xs text-slate-500">Boarded at <?php echo htmlspecialchars($p['boarding_stop']); ?></p>
-                      </div>
-                      <span class="text-xs font-semibold text-emerald-600">Onboard</span>
-                    </div>
-                    <div class="pax-body text-xs">Card ID: #<?php echo (int)$p['card_id']; ?></div>
-                  </div>
-                <?php endforeach; ?>
-              <?php else: ?>
-                <div class="pax-item open">
-                  <p class="text-sm font-semibold text-slate-900">No onboard passengers</p>
-                  <p class="text-xs text-slate-400">All passengers checked out</p>
-                </div>
-              <?php endif; ?>
-            </div>
-          </article>
-
-          <!-- Metrics + Earnings -->
-          <div class="grid grid-cols-2 gap-4">
-            <article class="rounded-[1.5rem] bg-white p-5 shadow-sm border border-slate-200">
-              <p class="text-xs uppercase tracking-[.2em] text-slate-500 font-semibold mb-3">Trip Metrics</p>
-              <div class="space-y-2 text-sm text-slate-700">
-                <div class="flex justify-between"><span>Passengers</span><strong id="m-pax"><?php echo $passengerCount; ?> onboard</strong></div>
-                <div class="flex justify-between"><span>Distance</span><strong id="m-dist"><?php echo number_format($totalRouteDistance, 1); ?> km</strong></div>
-                <div class="flex justify-between"><span>Avg Speed</span><strong id="m-speed"><?php echo $averageSpeed > 0 ? $averageSpeed . ' km/h' : 'N/A'; ?></strong></div>
-                <div class="flex justify-between"><span>Est. Arrival</span><strong id="m-eta">N/A</strong></div>
-              </div>
-            </article>
-            <article class="rounded-[1.5rem] bg-white p-5 shadow-sm border border-slate-200">
-              <p class="text-xs uppercase tracking-[.2em] text-slate-500 font-semibold mb-3">Earnings</p>
-              <div class="space-y-2 text-sm text-slate-700">
-                <div class="flex justify-between"><span>This Trip</span><strong>&#8369;<?php echo number_format($activeTripCollected, 2); ?></strong></div>
-                <div class="flex justify-between"><span>Fares (trip)</span><strong>&#8369;<?php echo number_format($activeTripCollected, 2); ?></strong></div>
-                <div class="flex justify-between"><span>All-time</span><strong>&#8369;<?php echo number_format($driverTotalEarnings, 2); ?></strong></div>
-              </div>
-            </article>
-          </div>
-
-        </section>
+  <main class="ml-[260px] flex-1 h-screen overflow-hidden bg-slate-100 p-5 flex flex-col">
+    <header class="shrink-0 mb-3 flex items-baseline justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 font-headline">Dashboard</h1>
+        <p class="text-xs text-slate-500">Route &amp; onboard passengers</p>
       </div>
+      <span id="status-chip" class="idle shrink-0"><span class="chipdot"></span><span id="chip-label">Trip not started</span></span>
+    </header>
+
+    <div class="grid grid-cols-12 gap-4 flex-1 min-h-0">
+
+      <!-- LEFT: map + controls -->
+      <section class="col-span-12 xl:col-span-7 flex flex-col gap-3 min-h-0">
+        <article class="rounded-xl bg-white p-4 shadow-sm border border-slate-200 flex flex-col flex-1 min-h-0">
+          <p class="text-[10px] uppercase tracking-[.2em] text-slate-500 font-semibold mb-2 shrink-0">Live Map</p>
+          <div id="live-map" class="flex-1 min-h-[280px]" role="application" aria-label="Live route map"></div>
+        </article>
+        <article class="rounded-xl bg-white px-4 py-3 shadow-sm border border-slate-200 shrink-0">
+          <div class="grid grid-cols-4 gap-2">
+            <button id="btn-start"  class="tb bg-emerald-600 text-white">&#9654; Start</button>
+            <button id="btn-arrive" class="tb bg-sky-600    text-white" disabled>&#9646; Arrive</button>
+            <button id="btn-depart" class="tb bg-indigo-600 text-white" disabled>&#9654; Depart</button>
+            <button id="btn-end"    class="tb bg-rose-600   text-white" disabled>&#9632; End Trip</button>
+          </div>
+        </article>
+      </section>
+
+      <!-- RIGHT: route, passengers, metrics -->
+      <section class="col-span-12 xl:col-span-5 flex flex-col gap-3 min-h-0 overflow-y-auto pr-0.5">
+
+        <article class="rounded-xl bg-white p-4 shadow-sm border border-slate-200 shrink-0">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] uppercase tracking-[.2em] text-slate-500 font-semibold">Active Route</p>
+              <h2 id="ui-route-name" class="mt-1 text-lg font-black text-slate-900 truncate">
+                <?php echo htmlspecialchars($activeTrip['route_name'] ?? 'No active route'); ?>
+              </h2>
+              <p id="ui-route-display" class="text-xs text-slate-500 truncate">
+                <?php echo htmlspecialchars($activeTrip['display_name'] ?? ''); ?>
+              </p>
+            </div>
+            <span class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 whitespace-nowrap">On Route</span>
+          </div>
+          <div class="mt-3">
+            <div class="pbar-outer">
+              <div id="pbar" class="pbar-inner" style="width:<?php echo $routeProgressPercent; ?>%"></div>
+            </div>
+            <div class="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+              <span>Progress</span>
+              <span id="plabel" class="pbadge"><?php echo $routeProgressPercent; ?>%</span>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <div class="pcard">
+              <p class="text-[10px] uppercase tracking-[.15em] text-slate-500 font-semibold">Current</p>
+              <p id="ui-cur" class="mt-0.5 text-xs font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($routeProgressCurrent); ?></p>
+            </div>
+            <div class="pcard">
+              <p class="text-[10px] uppercase tracking-[.15em] text-slate-500 font-semibold">Next</p>
+              <p id="ui-nxt" class="mt-0.5 text-xs font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($routeNextStop); ?></p>
+            </div>
+          </div>
+          <ul id="stop-list" class="mt-2 max-h-24 overflow-y-auto pr-1"></ul>
+        </article>
+
+        <article class="rounded-xl bg-white p-4 shadow-sm border border-slate-200 shrink-0">
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <p class="text-[10px] uppercase tracking-[.2em] text-slate-500 font-semibold">Onboard</p>
+            <span id="pax-count-badge" class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600"><?php echo $passengerCount; ?> onboard</span>
+          </div>
+          <p class="text-[10px] text-slate-400 mb-2"><?php echo htmlspecialchars($farePolicyLabel); ?> · tap out at stop, or charged to last stop if trip ends</p>
+          <div id="pax-list">
+            <?php if (!empty($activePassengers)): ?>
+              <?php foreach ($paxPreview as $p): ?>
+                <div class="pax-row">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($p['full_name']); ?></p>
+                    <p class="text-[10px] text-slate-500 truncate"><?php echo htmlspecialchars($p['boarding_stop']); ?></p>
+                    <?php if (isset($p['fare_now'])): ?>
+                    <p class="text-[10px] text-primary font-semibold mt-0.5">Est. now &#8369;<?php echo number_format((float) $p['fare_now'], 2); ?></p>
+                    <?php endif; ?>
+                  </div>
+                  <span class="text-[10px] font-semibold text-emerald-600 shrink-0">Onboard</span>
+                </div>
+              <?php endforeach; ?>
+              <?php if ($passengerCount > $paxPreviewLimit): ?>
+                <p class="mt-1.5 text-[10px] text-slate-400">+<?php echo $passengerCount - $paxPreviewLimit; ?> more not shown</p>
+              <?php endif; ?>
+            <?php else: ?>
+              <p class="text-xs text-slate-500">No passengers onboard</p>
+            <?php endif; ?>
+          </div>
+          <?php if ($passengerCount > 0): ?>
+          <button type="button" id="btn-pax-modal" class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 text-xs font-semibold text-primary hover:bg-blue-50 transition">
+            View all passengers (<?php echo $passengerCount; ?>)
+          </button>
+          <?php endif; ?>
+        </article>
+
+        <div class="grid grid-cols-2 gap-3 shrink-0">
+          <article class="rounded-xl bg-white p-3 shadow-sm border border-slate-200">
+            <p class="text-[10px] uppercase tracking-[.15em] text-slate-500 font-semibold mb-2">Trip Metrics</p>
+            <div class="space-y-1 text-xs text-slate-700">
+              <div class="flex justify-between gap-1"><span>Passengers</span><strong id="m-pax" class="text-right"><?php echo $passengerCount; ?></strong></div>
+              <div class="flex justify-between gap-1"><span>Distance</span><strong id="m-dist" class="text-right"><?php echo number_format($totalRouteDistance, 1); ?> km</strong></div>
+              <div class="flex justify-between gap-1"><span>Avg Speed</span><strong id="m-speed" class="text-right"><?php echo $averageSpeed > 0 ? $averageSpeed . ' km/h' : 'N/A'; ?></strong></div>
+              <div class="flex justify-between gap-1"><span>Est. ETA</span><strong id="m-eta" class="text-right">N/A</strong></div>
+            </div>
+          </article>
+          <article class="rounded-xl bg-white p-3 shadow-sm border border-slate-200">
+            <p class="text-[10px] uppercase tracking-[.15em] text-slate-500 font-semibold mb-2">Earnings</p>
+            <div class="space-y-1 text-xs text-slate-700">
+              <div class="flex justify-between gap-1"><span>This trip</span><strong>&#8369;<?php echo number_format($activeTripCollected, 2); ?></strong></div>
+              <div class="flex justify-between gap-1"><span>All-time</span><strong>&#8369;<?php echo number_format($driverTotalEarnings, 2); ?></strong></div>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100"><?php echo htmlspecialchars($farePolicyLabel); ?></p>
+          </article>
+        </div>
+
+      </section>
     </div>
   </main>
+</div>
+
+<!-- All passengers modal -->
+<div id="pax-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="pax-modal-title" hidden>
+  <div class="modal-panel">
+    <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100 shrink-0">
+      <h2 id="pax-modal-title" class="text-base font-bold text-slate-900">Passengers on board</h2>
+      <button type="button" id="pax-modal-close" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100" aria-label="Close">
+        <span class="material-symbols-outlined text-xl">close</span>
+      </button>
+    </div>
+    <div class="modal-body">
+      <?php if (!empty($activePassengers)): ?>
+        <?php foreach ($activePassengers as $p): ?>
+          <div class="modal-pax-row">
+            <div>
+              <p class="font-semibold text-slate-900">
+                <?php echo htmlspecialchars($p['full_name']); ?>
+                <span class="text-slate-400 font-normal">#P<?php echo (int)$p['user_id']; ?></span>
+              </p>
+              <p class="text-xs text-slate-500 mt-0.5">Boarded at <?php echo htmlspecialchars($p['boarding_stop']); ?></p>
+              <p class="text-xs text-slate-400 mt-0.5">Card #<?php echo (int)$p['card_id']; ?></p>
+              <?php if (isset($p['fare_now'], $p['fare_max'])): ?>
+              <p class="text-xs text-slate-600 mt-1">
+                If alight now: <strong>&#8369;<?php echo number_format((float) $p['fare_now'], 2); ?></strong>
+                (<?php echo number_format((float) $p['km_now'], 2); ?> km)
+              </p>
+              <p class="text-xs text-amber-700 mt-0.5">
+                If no tap-out (trip end): <strong>&#8369;<?php echo number_format((float) $p['fare_max'], 2); ?></strong>
+                (<?php echo number_format((float) $p['km_max'], 2); ?> km to terminus)
+              </p>
+              <?php endif; ?>
+            </div>
+            <span class="text-xs font-semibold text-emerald-600 shrink-0">Onboard</span>
+          </div>
+        <?php endforeach; ?>
+      <?php else: ?>
+        <p class="py-4 text-sm text-slate-500 text-center">No passengers onboard</p>
+      <?php endif; ?>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1123,22 +1159,9 @@ $routeStopsForMap = array_map(static fn($s) => [
     traveledTrail = [];
     currentLegPath = null;
 
-    var endParams = { flip: 1 };
-
-    var prevRouteId = ROUTE_ID;
-    gpsCall('end', endParams).then(function (data) {
+    gpsCall('end', { flip: 1 }).then(function (data) {
       if (data.error) throw new Error(data.error);
-      var flipped = data.routeFlipped || (data.routeId && data.routeId !== prevRouteId);
-      applyGpsRoute(data);
-      state  = 'idle';
-      curIdx = 0;
-      drawOverview();
-      setBtns('idle');
-      if (flipped) {
-        setChip('idle', 'Next: ' + (data.displayName || data.routeName || 'return route'));
-      } else {
-        setChip('idle', 'Trip ended');
-      }
+      window.location.reload();
     }).catch(function () {
       state  = 'idle';
       curIdx = 0;
@@ -1253,11 +1276,32 @@ $routeStopsForMap = array_map(static fn($s) => [
       });
   }
 
-  document.querySelectorAll('#pax-list .pax-item').forEach(function (item) {
-    var hdr = item.querySelector('[data-toggle]');
-    if (!hdr) return;
-    hdr.addEventListener('click', function () { item.classList.toggle('open'); });
-  });
+  (function initPaxModal() {
+    var backdrop = document.getElementById('pax-modal');
+    var openBtn  = document.getElementById('btn-pax-modal');
+    var closeBtn = document.getElementById('pax-modal-close');
+    if (!backdrop) return;
+
+    function openModal() {
+      backdrop.hidden = false;
+      backdrop.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      backdrop.classList.remove('open');
+      backdrop.hidden = true;
+      document.body.style.overflow = '';
+    }
+
+    if (openBtn) openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', function (e) {
+      if (e.target === backdrop) closeModal();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && backdrop.classList.contains('open')) closeModal();
+    });
+  })();
 
   btnStart .addEventListener('click', startTrip);
   btnArrive.addEventListener('click', arriveStop);

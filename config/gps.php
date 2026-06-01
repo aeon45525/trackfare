@@ -9,12 +9,13 @@
  *   arrive&index= – mark arrival at stop N
  *   depart        – depart current stop (resumes running)
  *   update        – persist live bus position (lat, lng, legFrom, legTo, legProgress)
- *   end           – end trip immediately; flip to opposite route for the next Start Trip
+ *   end           – complete leg in DB, clear onboard passengers, open new active trip on opposite route
  *   (none)        – return current state
  */
 
 session_start();
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/fare.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -88,19 +89,144 @@ function opposite_route_id(int $routeId): int
     return $routeId === 1 ? 2 : 1;
 }
 
-function flip_active_trip_route(mysqli $conn, int $driverId, int $newRouteId): bool
+function get_active_trip(mysqli $conn, int $driverId): ?array
 {
     if ($stmt = $conn->prepare(
-        'UPDATE trips SET route_id = ?, current_stop_index = 0
+        'SELECT trip_id, bus_id, route_id, driver_id, start_time
+         FROM trips
+         WHERE driver_id = ? AND status = ?
+         LIMIT 1'
+    )) {
+        $s = 'active';
+        $stmt->bind_param('is', $driverId, $s);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        return $row ?: null;
+    }
+    return null;
+}
+
+function record_trip_start(mysqli $conn, int $driverId): void
+{
+    if ($stmt = $conn->prepare(
+        'UPDATE trips
+         SET start_time = NOW()
+         WHERE driver_id = ? AND status = ? AND start_time IS NULL'
+    )) {
+        $s = 'active';
+        $stmt->bind_param('is', $driverId, $s);
+        $stmt->execute();
+        $stmt->close();
+    }
+}
+
+function sync_trip_stop_index(mysqli $conn, int $driverId, int $index): void
+{
+    if ($stmt = $conn->prepare(
+        'UPDATE trips SET current_stop_index = ?
          WHERE driver_id = ? AND status = ?'
     )) {
         $s = 'active';
-        $stmt->bind_param('iis', $newRouteId, $driverId, $s);
-        $ok = $stmt->execute() && $stmt->affected_rows > 0;
+        $stmt->bind_param('iis', $index, $driverId, $s);
+        $stmt->execute();
         $stmt->close();
-        return $ok;
     }
-    return false;
+}
+
+/**
+ * Mark the current active leg completed and insert a new active trip (opposite route).
+ */
+function complete_active_trip_and_rotate(mysqli $conn, int $driverId): ?array
+{
+    $trip = get_active_trip($conn, $driverId);
+    if (!$trip) {
+        return null;
+    }
+
+    $tripId    = (int)$trip['trip_id'];
+    $busId     = (int)$trip['bus_id'];
+    $routeId   = (int)$trip['route_id'];
+    $newRoute  = opposite_route_id($routeId);
+
+    if (!$conn->begin_transaction()) {
+        return null;
+    }
+
+    try {
+        $completed = 'completed';
+        $active    = 'active';
+
+        if ($stmt = $conn->prepare(
+            'UPDATE trips
+             SET status = ?, end_time = NOW(),
+                 start_time = COALESCE(start_time, NOW()),
+                 current_stop_index = 0
+             WHERE trip_id = ? AND status = ?'
+        )) {
+            $stmt->bind_param('sis', $completed, $tripId, $active);
+            $stmt->execute();
+            if ($stmt->affected_rows < 1) {
+                $stmt->close();
+                $conn->rollback();
+                return null;
+            }
+            $stmt->close();
+        } else {
+            $conn->rollback();
+            return null;
+        }
+
+        if ($stmt = $conn->prepare(
+            'INSERT INTO trips (bus_id, route_id, driver_id, status, current_stop_index)
+             VALUES (?, ?, ?, ?, 0)'
+        )) {
+            $stmt->bind_param('iiis', $busId, $newRoute, $driverId, $active);
+            $stmt->execute();
+            $newTripId = (int)$conn->insert_id;
+            $stmt->close();
+            if ($newTripId < 1) {
+                $conn->rollback();
+                return null;
+            }
+        } else {
+            $conn->rollback();
+            return null;
+        }
+
+        $passengersCleared = settle_all_active_passengers_for_trip($conn, $tripId, $routeId);
+
+        $conn->commit();
+
+        return [
+            'completed_trip_id'   => $tripId,
+            'completed_route_id'  => $routeId,
+            'new_trip_id'         => $newTripId,
+            'new_route_id'        => $newRoute,
+            'passengers_cleared'  => $passengersCleared,
+        ];
+    } catch (Throwable $e) {
+        $conn->rollback();
+        return null;
+    }
+}
+
+function apply_route_rotation(
+    mysqli $conn,
+    int $newRouteId,
+    int &$routeId,
+    array &$stops,
+    array &$terminal,
+    int &$maxIndex,
+    array &$state
+): void {
+    $routeId = $newRouteId;
+    $stops   = load_route_stops($conn, $routeId);
+    if (!empty($stops)) {
+        $terminal = $stops[0];
+        $maxIndex = count($stops) - 1;
+        $state['routeId'] = $routeId;
+    }
 }
 
 function total_route_km(array $stops): float
@@ -165,12 +291,19 @@ if (($state['routeId'] ?? null) !== $routeId) {
 $state['routeId'] = $routeId;
 $state['currentStopIndex'] = max(0, min($maxIndex, (int)($state['currentStopIndex'] ?? 0)));
 
-$driverId    = (int)($_SESSION['user_id'] ?? 0);
-$routeFlipped = false;
-$action      = $_GET['action'] ?? null;
+$driverId          = (int)($_SESSION['user_id'] ?? 0);
+$routeFlipped      = false;
+$tripCompleted     = false;
+$completedTripId   = null;
+$passengersCleared = 0;
+$action            = $_GET['action'] ?? null;
 
 switch ($action) {
     case 'start':
+        unset($_SESSION['gps_leg_completed']);
+        if ($driverId > 0 && ($_SESSION['role'] ?? '') === 'driver') {
+            record_trip_start($conn, $driverId);
+        }
         if (($state['status'] ?? 'idle') === 'idle') {
             $state['status']           = 'running';
             $state['currentStopIndex'] = 0;
@@ -194,6 +327,9 @@ switch ($action) {
         $state['legFrom']          = null;
         $state['legTo']            = null;
         $state['legProgress']      = 0.0;
+        if ($driverId > 0 && ($_SESSION['role'] ?? '') === 'driver') {
+            sync_trip_stop_index($conn, $driverId, $idx);
+        }
         break;
 
     case 'depart':
@@ -230,24 +366,63 @@ switch ($action) {
         } elseif (($state['status'] ?? 'idle') === 'idle') {
             $state['status'] = 'running';
         }
+        if (isset($_GET['index']) && $driverId > 0 && ($_SESSION['role'] ?? '') === 'driver') {
+            sync_trip_stop_index($conn, $driverId, (int)$state['currentStopIndex']);
+        }
+        if (($state['status'] ?? '') === 'ended'
+            && empty($_SESSION['gps_leg_completed'])
+            && $driverId > 0
+            && ($_SESSION['role'] ?? '') === 'driver'
+        ) {
+            $rotated = complete_active_trip_and_rotate($conn, $driverId);
+            if ($rotated) {
+                $_SESSION['gps_leg_completed'] = true;
+                $tripCompleted       = true;
+                $completedTripId     = $rotated['completed_trip_id'];
+                $passengersCleared   = (int)($rotated['passengers_cleared'] ?? 0);
+                $routeFlipped        = true;
+                apply_route_rotation(
+                    $conn,
+                    $rotated['new_route_id'],
+                    $routeId,
+                    $stops,
+                    $terminal,
+                    $maxIndex,
+                    $state
+                );
+            }
+        }
         break;
 
     case 'end':
         $tripWasActive = !empty($_GET['flip'])
             || in_array($state['status'] ?? 'idle', ['running', 'paused', 'ended'], true);
 
-        if ($tripWasActive && $driverId > 0 && ($_SESSION['role'] ?? '') === 'driver') {
-            $newRouteId = opposite_route_id($routeId);
-            if (flip_active_trip_route($conn, $driverId, $newRouteId)) {
-                $routeFlipped = true;
+        if ($tripWasActive
+            && empty($_SESSION['gps_leg_completed'])
+            && $driverId > 0
+            && ($_SESSION['role'] ?? '') === 'driver'
+        ) {
+            $rotated = complete_active_trip_and_rotate($conn, $driverId);
+            if ($rotated) {
+                $_SESSION['gps_leg_completed'] = true;
+                $tripCompleted     = true;
+                $completedTripId   = $rotated['completed_trip_id'];
+                $passengersCleared = (int)($rotated['passengers_cleared'] ?? 0);
+                $routeFlipped      = true;
+                apply_route_rotation(
+                    $conn,
+                    $rotated['new_route_id'],
+                    $routeId,
+                    $stops,
+                    $terminal,
+                    $maxIndex,
+                    $state
+                );
             }
-            $routeId = $newRouteId;
-            $stops   = load_route_stops($conn, $routeId);
-            if (!empty($stops)) {
-                $terminal = $stops[0];
-                $maxIndex = count($stops) - 1;
-                $state['routeId'] = $routeId;
-            }
+        } elseif ($tripWasActive && !empty($_SESSION['gps_leg_completed'])) {
+            $routeId = resolve_route_id($conn);
+            apply_route_rotation($conn, $routeId, $routeId, $stops, $terminal, $maxIndex, $state);
         }
 
         $state['status']           = 'idle';
@@ -282,4 +457,7 @@ echo json_encode([
     'legTo'            => $legTo === null ? null : (int)$legTo,
     'legProgress'      => (float)($state['legProgress'] ?? 0),
     'routeFlipped'     => $routeFlipped,
+    'tripCompleted'      => $tripCompleted,
+    'completedTripId'    => $completedTripId,
+    'passengersCleared'  => $passengersCleared,
 ], JSON_UNESCAPED_UNICODE);

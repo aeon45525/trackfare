@@ -1,57 +1,79 @@
 <?php
-require_once "../config/db.php";
+require_once '../config/db.php';
+require_once '../config/fare.php';
 
-$uid = strtoupper(trim($_POST['uid']));
-$trip_id = intval($_POST['trip_id']);
+$uid     = normalize_nfc_uid((string) ($_POST['uid'] ?? ''));
+$trip_id = (int) ($_POST['trip_id'] ?? 0);
 
-require_once "../config/fare.php";
-$user = $conn->query("
-SELECT u.user_id, c.card_id
-FROM users u
-JOIN nfc_cards c ON u.user_id = c.user_id
-WHERE UPPER(c.uid) = '$uid'
-")->fetch_assoc();
-
-if (!$user) exit("INVALID CARD");
-
-$user_id = $user['user_id'];
-$card_id = $user['card_id'];
-
-$trip = $conn->query("
-SELECT trip_id, route_id, current_stop_index, status
-FROM trips
-WHERE trip_id = $trip_id AND status = 'active'
-")->fetch_assoc();
-
-if (!$trip) exit("NO ACTIVE TRIP");
-
-$check = $conn->query("
-SELECT 1 FROM active_passengers
-WHERE user_id = $user_id AND trip_id = $trip_id
-")->fetch_assoc();
-
-if ($check) exit("ALREADY TAP IN");
-
-$route_id = $trip['route_id'];
-$current_index = $trip['current_stop_index'];
-
-$boarding = $conn->query("
-SELECT stop_id
-FROM route_stops
-WHERE route_id = $route_id
-ORDER BY stop_order
-LIMIT 1 OFFSET $current_index
-")->fetch_assoc();
-
-if (!$boarding) exit("INVALID STOP");
-
-if ($stmt = $conn->prepare("INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id) VALUES (?, ?, ?, ?)") ) {
-	$stmt->bind_param('iiii', $trip_id, $user_id, $card_id, $boarding['stop_id']);
-	$stmt->execute();
-	$stmt->close();
-} else {
-	$conn->query("INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id) VALUES ($trip_id, $user_id, $card_id, {$boarding['stop_id']})");
+if ($uid === '' || $trip_id < 1) {
+    exit('INVALID REQUEST');
 }
 
-echo "TAP IN SUCCESS";
-?>
+$user = null;
+if ($stmt = $conn->prepare(
+    'SELECT u.user_id, c.card_id
+     FROM users u
+     JOIN nfc_cards c ON u.user_id = c.user_id
+     WHERE UPPER(TRIM(c.uid)) = ?'
+)) {
+    $stmt->bind_param('s', $uid);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+}
+
+if (!$user) {
+    exit('INVALID CARD');
+}
+
+$user_id = (int) $user['user_id'];
+$card_id = (int) $user['card_id'];
+
+$trip = null;
+if ($stmt = $conn->prepare(
+    'SELECT trip_id, route_id, current_stop_index, status
+     FROM trips WHERE trip_id = ? AND status = ?'
+)) {
+    $status = 'active';
+    $stmt->bind_param('is', $trip_id, $status);
+    $stmt->execute();
+    $trip = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+}
+
+if (!$trip) {
+    exit('NO ACTIVE TRIP');
+}
+
+$check = null;
+if ($stmt = $conn->prepare(
+    'SELECT 1 FROM active_passengers WHERE user_id = ? AND trip_id = ?'
+)) {
+    $stmt->bind_param('ii', $user_id, $trip_id);
+    $stmt->execute();
+    $check = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+}
+
+if ($check) {
+    exit('ALREADY TAP IN');
+}
+
+$route_id      = (int) $trip['route_id'];
+$current_index = (int) $trip['current_stop_index'];
+$boardingStopId = get_route_stop_id_at_index($conn, $route_id, $current_index);
+
+if ($boardingStopId === null) {
+    exit('INVALID STOP');
+}
+
+if ($stmt = $conn->prepare(
+    'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id) VALUES (?, ?, ?, ?)'
+)) {
+    $stmt->bind_param('iiii', $trip_id, $user_id, $card_id, $boardingStopId);
+    $stmt->execute();
+    $stmt->close();
+    echo 'TAP IN SUCCESS';
+} else {
+    exit('TAP IN FAILED');
+}
