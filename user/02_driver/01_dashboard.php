@@ -465,9 +465,11 @@ $routeStopsForMap = array_map(static fn($s) => [
   var busHeading = 0;
   var mapsReady = false;
   var legRoutesCache = {};
+  var legRoutesPending = {};
   var traveledTrail = [];
   var currentLegPath = null;
   var lastGpsSave = 0;
+  var lastLineRebuild = { activePartial: null, legRemainder: null, nextLegFrom: 0 };
 
   /* ── DOM ── */
   var btnStart  = document.getElementById('btn-start');
@@ -529,13 +531,16 @@ $routeStopsForMap = array_map(static fn($s) => [
     if (legRoutesCache[key]) {
       return Promise.resolve(legRoutesCache[key]);
     }
+    if (legRoutesPending[key]) {
+      return legRoutesPending[key];
+    }
     var a = stops[fromIdx];
     var b = stops[toIdx];
     var url = OSRM_URL + '/'
       + a.lng + ',' + a.lat + ';' + b.lng + ',' + b.lat
       + '?overview=full&geometries=geojson';
 
-    return fetch(url, { headers: { Accept: 'application/json' } })
+    legRoutesPending[key] = fetch(url, { headers: { Accept: 'application/json' } })
       .then(function (r) {
         if (!r.ok) throw new Error('OSRM HTTP ' + r.status);
         return r.json();
@@ -550,13 +555,29 @@ $routeStopsForMap = array_map(static fn($s) => [
           path = straightPath(a, b);
         }
         legRoutesCache[key] = path;
+        refreshLinesFromCache();
         return path;
       })
       .catch(function () {
         var path = straightPath(a, b);
         legRoutesCache[key] = path;
+        refreshLinesFromCache();
         return path;
+      })
+      .finally(function () {
+        delete legRoutesPending[key];
       });
+
+    return legRoutesPending[key];
+  }
+
+  function refreshLinesFromCache() {
+    if (!mapsReady || !stops.length || !lastLineRebuild) return;
+    rebuildLines(
+      lastLineRebuild.activePartial,
+      lastLineRebuild.legRemainder,
+      lastLineRebuild.nextLegFrom
+    );
   }
 
   function prefetchLegRoute(fromIdx, toIdx) {
@@ -685,6 +706,7 @@ $routeStopsForMap = array_map(static fn($s) => [
     }
     updateRouteHeader(data);
     legRoutesCache = {};
+    legRoutesPending = {};
     curIdx = 0;
     if (pbar) pbar.style.width = '0%';
     if (plabel) plabel.textContent = '0%';
@@ -826,6 +848,12 @@ $routeStopsForMap = array_map(static fn($s) => [
   }
 
   function rebuildLines(activePartial, legRemainder, nextLegFrom) {
+    lastLineRebuild = {
+      activePartial: activePartial,
+      legRemainder: legRemainder ? legRemainder.slice() : null,
+      nextLegFrom: typeof nextLegFrom === 'number' ? nextLegFrom : curIdx,
+    };
+
     if (lineTaken) { lineTaken.setMap(null); lineTaken = null; }
     if (lineAhead) { lineAhead.setMap(null); lineAhead = null; }
     if (!stops.length) return;
@@ -845,13 +873,13 @@ $routeStopsForMap = array_map(static fn($s) => [
     }
 
     var aheadPts = legRemainder ? legRemainder.slice() : [];
-    var fromLeg = typeof nextLegFrom === 'number' ? nextLegFrom : curIdx + 1;
+    var fromLeg = typeof nextLegFrom === 'number' ? nextLegFrom : curIdx;
     for (var j = fromLeg; j < stops.length - 1; j++) {
       var key = legCacheKey(j, j + 1);
       if (legRoutesCache[key]) {
         aheadPts = appendPathPoints(aheadPts, legRoutesCache[key]);
       } else {
-        aheadPts = appendPathPoints(aheadPts, straightPath(stops[j], stops[j + 1]));
+        fetchOsrmRoute(j, j + 1);
       }
     }
 
@@ -1002,7 +1030,7 @@ $routeStopsForMap = array_map(static fn($s) => [
 
           setBusPosition(endPos.lat, endPos.lng, endDeg);
           followBus(endPos.lat, endPos.lng);
-          rebuildLines(null, null, curIdx + 1);
+          rebuildLines(null, null, curIdx);
           updateUI(0, curIdx, Math.min(curIdx + 1, stops.length - 1));
           renderStopList(curIdx + 1);
           refreshStops(curIdx + 1);
@@ -1126,7 +1154,7 @@ $routeStopsForMap = array_map(static fn($s) => [
       var h = nxt && curIdx < stops.length - 1
         ? bearing(bus.lat, bus.lng, nxt.lat, nxt.lng)
         : 0;
-      finishRestore(bus, h, curIdx + 1);
+        finishRestore(bus, h, curIdx);
     });
   }
 
@@ -1145,10 +1173,11 @@ $routeStopsForMap = array_map(static fn($s) => [
     traveledTrail = [{ lat: stops[0].lat, lng: stops[0].lng }];
     currentLegPath = null;
     legRoutesCache = {};
+    legRoutesPending = {};
 
     var p0 = stops[0];
     setBusPosition(p0.lat, p0.lng, 0);
-    rebuildLines(null, null, 1);
+    rebuildLines(null, null, 0);
     followBus(p0.lat, p0.lng);
     prefetchAllLegRoutes();
     startLeg(0, 1);
@@ -1184,7 +1213,7 @@ $routeStopsForMap = array_map(static fn($s) => [
     var h   = nxt ? bearing(pos.lat, pos.lng, nxt.lat, nxt.lng) : busHeading;
     setBusPosition(pos.lat, pos.lng, h);
     followBus(pos.lat, pos.lng);
-    rebuildLines(null, null, curIdx + 1);
+    rebuildLines(null, null, curIdx);
     updateUI(0, curIdx, Math.min(curIdx + 1, stops.length - 1));
     renderStopList(curIdx + 1);
     refreshStops(curIdx + 1);
@@ -1206,12 +1235,12 @@ $routeStopsForMap = array_map(static fn($s) => [
     currentLegPath = null;
     var p0 = stops[0];
     setBusPosition(p0.lat, p0.lng, 0);
-    rebuildLines(null, null, 1);
+    rebuildLines(null, null, 0);
     fitOverview();
     refreshStops(1);
     renderStopList(1);
     updateUI(0, 0, 1);
-    if (stops.length > 1) prefetchLegRoute(0, 1);
+    if (stops.length > 1) prefetchAllLegRoutes();
   }
 
   function bootTripState() {
