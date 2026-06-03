@@ -85,16 +85,15 @@ CREATE TABLE buses (
 -- ============================================================
 
 CREATE TABLE trips (
-    trip_id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    bus_id             INT UNSIGNED NOT NULL,
-    route_id           INT UNSIGNED NOT NULL,
-    driver_id          INT UNSIGNED NOT NULL,
-    status             VARCHAR(20) NOT NULL,  -- active | completed
+    trip_id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    bus_id            INT UNSIGNED NOT NULL,
+    route_id          INT UNSIGNED NOT NULL,
+    driver_id         INT UNSIGNED NOT NULL,
+    status            VARCHAR(20) NOT NULL,
     current_stop_index INT NOT NULL DEFAULT 0,
-    start_time         DATETIME NULL,
-    end_time           DATETIME NULL,
-    PRIMARY KEY (trip_id),
-    KEY idx_trips_driver_status (driver_id, status)
+    start_time        DATETIME NULL,
+    end_time          DATETIME NULL,
+    PRIMARY KEY (trip_id)
 );
 
 CREATE TABLE active_passengers (
@@ -115,7 +114,7 @@ CREATE TABLE trip_transactions (
     card_id          INT UNSIGNED NOT NULL,
     boarding_stop_id INT UNSIGNED NOT NULL,
     alighting_stop_id INT UNSIGNED NOT NULL,
-    fare_amount      DECIMAL(10,2) NOT NULL,  -- PHP15 first km + PHP2.50/km after (config/fare.php)
+    fare_amount      DECIMAL(10,2) NOT NULL,
     PRIMARY KEY (transaction_id)
 );
 
@@ -171,7 +170,7 @@ INSERT INTO routes (route_name, display_name) VALUES
 -- ============================================================
 
 INSERT INTO stops (stop_name, municipality, lat, lng) VALUES
-('ULTRA MEGA',          'Balagtas, Bulacan',  14.821028, 120.902972),  -- 14°49'15.7"N 120°54'10.7"E
+('ULTRA MEGA',          'Balagtas, Bulacan',  14.82005556, 120.90252778),  -- 14°49'15.7"N 120°54'10.7"E
 ('BALAGTAS ARENA',      'Balagtas, Bulacan',  14.812972, 120.912889),  -- 14°48'46.9"N 120°54'46.4"E
 ('GOLDEN CITY',         'Bocaue, Bulacan',    14.804250, 120.920278),  -- 14°48'15.3"N 120°55'13.0"E
 ('DR. YANGA\'S COLLEGE','Bocaue, Bulacan',    14.801861, 120.921472),  -- 14°48'06.7"N 120°55'19.3"E
@@ -190,7 +189,7 @@ INSERT INTO stops (stop_name, municipality, lat, lng) VALUES
 ('BALUBARAN',           'Valenzuela City',    14.697306, 120.963639),  -- 14°41'50.3"N 120°57'49.1"E
 ('MALINTA',             'Valenzuela City',    14.694444, 120.964139),  -- 14°41'40.0"N 120°57'50.9"E
 ('KARUHATAN',           'Valenzuela City',    14.686361, 120.976028),  -- 14°41'10.9"N 120°58'33.7"E
-('VICTONICA MONUMENTO', 'Caloocan City',      14.657889, 120.983944); -- 14°39'28.4"N 120°59'02.2"E
+('VICTONICA MONUMENTO', 'Caloocan City',      14.65872222, 120.98447222); -- 14°39'28.4"N 120°59'02.2"E
 
 -- ============================================================
 -- SEED DATA — ROUTE STOPS
@@ -264,11 +263,11 @@ VALUES
 -- SEED DATA — MORE TRIPS (completed)
 -- ============================================================
 
-INSERT INTO trips (bus_id, route_id, driver_id, status, start_time, end_time) VALUES
-(2, 1, 3, 'completed', '2026-06-01 06:00:00', '2026-06-01 08:30:00'),
-(3, 1, 4, 'completed', '2026-06-01 07:00:00', '2026-06-01 09:15:00'),
-(4, 1, 5, 'completed', '2026-06-01 08:00:00', '2026-06-01 10:00:00'),
-(5, 1, 6, 'completed', '2026-06-01 09:00:00', '2026-06-01 11:30:00');
+INSERT INTO trips (bus_id, route_id, driver_id, status) VALUES
+(2, 1, 3, 'completed'),
+(3, 1, 4, 'completed'),
+(4, 1, 5, 'completed'),
+(5, 1, 6, 'completed');
 
 INSERT INTO trip_transactions
     (trip_id, user_id, card_id, boarding_stop_id, alighting_stop_id, fare_amount)
@@ -310,19 +309,11 @@ INSERT INTO nfc_cards (user_id, uid) VALUES
 
 -- ============================================================
 -- UPGRADE (existing DBs only — skip on fresh import)
--- Adds return leg: Monumento → Balagtas (reverse stop order of route 1).
--- Run once if End Trip still shows Balagtas → Monumento after finishing a leg:
+-- Run if you already have route 1 but not route 2:
 --
--- INSERT INTO routes (route_name, display_name)
--- SELECT 'Monumento-Balagtas', 'Monumento → Balagtas'
--- WHERE NOT EXISTS (SELECT 1 FROM routes WHERE route_name = 'Monumento-Balagtas');
+-- INSERT INTO routes (route_name, display_name) VALUES
+-- ('Monumento-Balagtas', 'Monumento → Balagtas');
 --
 -- INSERT INTO route_stops (route_id, stop_id, stop_order)
--- SELECT r.route_id, s.stop_id, ROW_NUMBER() OVER (ORDER BY s.stop_id DESC)
--- FROM routes r
--- CROSS JOIN stops s
--- WHERE r.route_name = 'Monumento-Balagtas'
---   AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.route_id = r.route_id);
---
--- ALTER TABLE trips ADD KEY idx_trips_driver_status (driver_id, status);
+-- SELECT 2, stop_id, ROW_NUMBER() OVER (ORDER BY stop_id DESC) FROM stops;
 -- ============================================================

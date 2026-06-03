@@ -53,6 +53,9 @@ function formatTripRoute(array $trip)
 
     return 'Trip record';
 }
+
+$pageTitle = 'Trips';
+$activeNav = 'trips';
 ?>
 
 <!doctype html>
@@ -61,7 +64,8 @@ function formatTripRoute(array $trip)
   <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>TrackFare - Trip History</title>
+    <title>TrackFare - <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
+    <link rel="icon" type="image/png" href="../../images/logo.png" />
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap"
@@ -146,52 +150,78 @@ function formatTripRoute(array $trip)
           "GRAD" 0,
           "opsz" 24;
       }
+      html {
+        scrollbar-gutter: stable;
+      }
       body {
         margin: 0;
         min-height: max(884px, 100dvh);
         display: flex;
         justify-content: center;
         background: #f8f9fa;
-        font-family: "Inter", sans-serif;
+        overflow-x: hidden;
       }
       #app-shell {
         width: min(100%, 420px);
         min-height: 100dvh;
         position: relative;
       }
-      .glass-nav {
-        backdrop-filter: blur(20px);
+      .nav-link {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 4.25rem;
+        height: 3.25rem;
+        border-radius: 1rem;
+        flex-shrink: 0;
+        color: rgba(66, 70, 84, 0.6);
+        transition: color 0.2s, background-color 0.2s, box-shadow 0.2s;
+      }
+      .nav-link:hover:not(.active) {
+        color: #0040a1;
+      }
+      .nav-link.active {
+        background: #0040a1;
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgba(0, 64, 161, 0.25);
       }
     </style>
   </head>
-  <body class="bg-surface text-on-surface antialiased">
+  <body class="bg-surface font-body text-on-surface">
     <div id="app-shell" class="w-full">
-      <!-- TopAppBar -->
       <header
         class="fixed inset-x-0 top-0 z-50 w-full max-w-[420px] mx-auto bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200/80"
       >
         <div class="flex items-center justify-between px-4 h-16">
-          <div>
-            <p
-              class="text-xs uppercase tracking-[0.25em] text-on-surface-variant"
-            >
-              TrackFare
-            </p>
-            <h1
-              class="font-['Manrope'] font-bold text-lg tracking-tight text-[#0040a1]"
-            >
-              Trips
-            </h1>
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <img
+              src="../../images/logo.png"
+              alt=""
+              class="h-9 w-9 object-contain shrink-0"
+              aria-hidden="true"
+            />
+            <div class="min-w-0">
+              <h1
+                class="font-headline font-extrabold text-lg leading-tight tracking-tight text-on-surface truncate"
+              >
+                TrackFare
+              </h1>
+              <p class="text-xs text-on-surface-variant truncate">
+                <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?>
+              </p>
+            </div>
           </div>
-          <img
-            src="../../images/pfp.png"
-            alt="Profile photo"
-            class="h-11 w-11 rounded-2xl object-cover border border-slate-200"
-          />
+          <a href="05_profile.php" class="shrink-0">
+            <img
+              src="../../images/pfp.png"
+              alt="Profile"
+              class="h-11 w-11 rounded-2xl object-cover border border-slate-200"
+            />
+          </a>
         </div>
       </header>
-      <!-- Main Content Canvas -->
-      <main class="pt-20 pb-28 px-4 min-h-screen space-y-4">
+      <main class="pt-20 pb-28 min-h-screen px-4 space-y-4">
         <section class="space-y-3">
           <?php if (!empty($tripHistory)): ?>
             <?php foreach ($tripHistory as $trip): ?>
@@ -236,60 +266,29 @@ function formatTripRoute(array $trip)
           <?php endif; ?>
         </section>
       </main>
-      <!-- BottomNavBar -->
       <nav
-        class="fixed bottom-0 left-0 w-full flex justify-around items-center px-2 pb-safe h-20 bg-white/95 backdrop-blur-md rounded-t-3xl z-50 border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+        class="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[420px] flex items-center justify-around px-1 h-20 bg-white/95 backdrop-blur-md rounded-t-3xl border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
       >
+        <?php
+        foreach (
+            [
+                ['home', '01_home.php', 'home', 'Home'],
+                ['routes', '02_routes.php', 'directions_bus', 'Routes'],
+                ['wallet', '03_wallet.php', 'account_balance_wallet', 'Wallet'],
+                ['trips', '04_trips.php', 'history', 'Trips'],
+                ['profile', '05_profile.php', 'person', 'Profile'],
+            ] as [$navKey, $navHref, $navIcon, $navLabel]
+        ):
+            $navActive = $activeNav === $navKey;
+            ?>
         <a
-          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="01_home.php"
+          href="<?= htmlspecialchars($navHref, ENT_QUOTES, 'UTF-8') ?>"
+          class="nav-link<?= $navActive ? ' active' : '' ?>"
         >
-          <span class="material-symbols-outlined">home</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Home</span
-          >
+          <span class="material-symbols-outlined text-[22px] leading-none"><?= htmlspecialchars($navIcon, ENT_QUOTES, 'UTF-8') ?></span>
+          <span class="font-label font-medium text-[10px] uppercase tracking-wider mt-1 leading-none"><?= htmlspecialchars($navLabel, ENT_QUOTES, 'UTF-8') ?></span>
         </a>
-        <a
-          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="02_routes.php"
-        >
-          <span class="material-symbols-outlined">directions_bus</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Routes</span
-          >
-        </a>
-        <a
-          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="03_wallet.php"
-        >
-          <span class="material-symbols-outlined">account_balance_wallet</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Wallet</span
-          >
-        </a>
-        <a
-          class="flex flex-col items-center justify-center text-white bg-primary rounded-3xl px-4 py-2 shadow-lg"
-          href="04_trips.php"
-        >
-          <span class="material-symbols-outlined">history</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Trips</span
-          >
-        </a>
-        <a
-          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="05_profile.php"
-        >
-          <span class="material-symbols-outlined">person</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Profile</span
-          >
-        </a>
+        <?php endforeach; ?>
       </nav>
     </div>
   </body>

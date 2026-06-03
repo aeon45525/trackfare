@@ -63,6 +63,10 @@ if ($stmt = $conn->prepare(
     }
     $stmt->close();
 }
+
+$pageTitle = 'Home';
+$pageSubtitle = 'Welcome back, ' . $fullName;
+$activeNav = 'home';
 ?>
 
 <!doctype html>
@@ -71,6 +75,8 @@ if ($stmt = $conn->prepare(
   <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>TrackFare - <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
+    <link rel="icon" type="image/png" href="../../images/logo.png" />
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap"
@@ -120,7 +126,7 @@ if ($stmt = $conn->prepare(
               error: "#ba1a1a",
               "surface-container-low": "#f3f4f5",
               "primary-fixed": "#dae2ff",
-              primary: "#0056d2",
+              primary: "#0040a1",
               "inverse-on-surface": "#f0f1f2",
               "on-secondary-fixed-variant": "#30495d",
               "on-tertiary-fixed-variant": "#713700",
@@ -140,10 +146,10 @@ if ($stmt = $conn->prepare(
               label: ["Inter"],
             },
             borderRadius: {
-              DEFAULT: "0.25rem",
-              lg: "0.5rem",
-              xl: "0.75rem",
-              full: "1rem",
+              DEFAULT: "0.125rem",
+              lg: "0.25rem",
+              xl: "0.5rem",
+              full: "0.75rem",
             },
           },
         },
@@ -157,9 +163,8 @@ if ($stmt = $conn->prepare(
           "GRAD" 0,
           "opsz" 24;
       }
-      .glass-blur {
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+      html {
+        scrollbar-gutter: stable;
       }
       body {
         min-height: max(884px, 100dvh);
@@ -167,44 +172,70 @@ if ($stmt = $conn->prepare(
         display: flex;
         justify-content: center;
         background: #f8f9fa;
+        overflow-x: hidden;
       }
       #app-shell {
         width: min(100%, 420px);
         min-height: 100dvh;
         position: relative;
       }
+      .nav-link {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 4.25rem;
+        height: 3.25rem;
+        border-radius: 1rem;
+        flex-shrink: 0;
+        color: rgba(66, 70, 84, 0.6);
+        transition: color 0.2s, background-color 0.2s, box-shadow 0.2s;
+      }
+      .nav-link:hover:not(.active) {
+        color: #0040a1;
+      }
+      .nav-link.active {
+        background: #0040a1;
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgba(0, 64, 161, 0.25);
+      }
     </style>
   </head>
   <body class="bg-surface font-body text-on-surface">
     <div id="app-shell" class="w-full">
       <header
-        class="fixed inset-x-0 top-0 z-50 w-full max-w-[420px] mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm border-b border-slate-200/80 dark:border-slate-800/80"
+        class="fixed inset-x-0 top-0 z-50 w-full max-w-[420px] mx-auto bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200/80"
       >
         <div class="flex items-center justify-between px-4 h-16">
-          <div class="flex items-center gap-3">
-            <span class="material-symbols-outlined text-primary text-2xl"
-              >bus_alert</span
-            >
-            <div>
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <img
+              src="../../images/logo.png"
+              alt=""
+              class="h-9 w-9 object-contain shrink-0"
+              aria-hidden="true"
+            />
+            <div class="min-w-0">
               <h1
-                class="font-headline font-extrabold text-xl tracking-tighter text-on-surface"
+                class="font-headline font-extrabold text-lg leading-tight tracking-tight text-on-surface truncate"
               >
                 TrackFare
               </h1>
-              <p class="text-xs text-on-surface-variant mt-1">
-                Welcome back, <?= htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') ?>
+              <p class="text-xs text-on-surface-variant truncate">
+                <?= htmlspecialchars($pageSubtitle, ENT_QUOTES, 'UTF-8') ?>
               </p>
             </div>
           </div>
-          <img
-            src="../../images/pfp.png"
-            alt="Profile photo"
-            class="h-11 w-11 rounded-2xl object-cover border border-slate-200"
-          />
+          <a href="05_profile.php" class="shrink-0">
+            <img
+              src="../../images/pfp.png"
+              alt="Profile"
+              class="h-11 w-11 rounded-2xl object-cover border border-slate-200"
+            />
+          </a>
         </div>
       </header>
-      <main class="pt-20 pb-28 min-h-screen">
-        <section class="px-4 space-y-4">
+      <main class="pt-20 pb-28 min-h-screen px-4 space-y-4">
+        <section class="space-y-4">
           <div class="rounded-[1.75rem] bg-primary text-white p-5 shadow-lg">
             <div class="flex items-center justify-between gap-4">
               <div>
@@ -360,60 +391,29 @@ if ($stmt = $conn->prepare(
           </div>
         </section>
       </main>
-      <!-- Bottom Navigation Bar -->
       <nav
-        class="fixed bottom-0 left-0 w-full flex justify-around items-center px-2 pb-safe h-20 bg-white/95 backdrop-blur-md rounded-t-3xl z-50 border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+        class="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[420px] flex items-center justify-around px-1 h-20 bg-white/95 backdrop-blur-md rounded-t-3xl border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
       >
+        <?php
+        foreach (
+            [
+                ['home', '01_home.php', 'home', 'Home'],
+                ['routes', '02_routes.php', 'directions_bus', 'Routes'],
+                ['wallet', '03_wallet.php', 'account_balance_wallet', 'Wallet'],
+                ['trips', '04_trips.php', 'history', 'Trips'],
+                ['profile', '05_profile.php', 'person', 'Profile'],
+            ] as [$navKey, $navHref, $navIcon, $navLabel]
+        ):
+            $navActive = $activeNav === $navKey;
+            ?>
         <a
-          class="flex flex-col items-center justify-center text-white bg-primary rounded-3xl px-4 py-2 shadow-lg"
-          href="01_home.php"
+          href="<?= htmlspecialchars($navHref, ENT_QUOTES, 'UTF-8') ?>"
+          class="nav-link<?= $navActive ? ' active' : '' ?>"
         >
-          <span class="material-symbols-outlined">home</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Home</span
-          >
+          <span class="material-symbols-outlined text-[22px] leading-none"><?= htmlspecialchars($navIcon, ENT_QUOTES, 'UTF-8') ?></span>
+          <span class="font-label font-medium text-[10px] uppercase tracking-wider mt-1 leading-none"><?= htmlspecialchars($navLabel, ENT_QUOTES, 'UTF-8') ?></span>
         </a>
-        <a
-          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="02_routes.php"
-        >
-          <span class="material-symbols-outlined">directions_bus</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Routes</span
-          >
-        </a>
-        <a
-          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="03_wallet.php"
-        >
-          <span class="material-symbols-outlined">account_balance_wallet</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Wallet</span
-          >
-        </a>
-        <a
-          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="04_trips.php"
-        >
-          <span class="material-symbols-outlined">history</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Trips</span
-          >
-        </a>
-        <a
-          class="flex flex-col items-center justify-center text-on-surface-variant/60 hover:text-primary transition-all duration-200"
-          href="05_profile.php"
-        >
-          <span class="material-symbols-outlined">person</span>
-          <span
-            class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1"
-            >Profile</span
-          >
-        </a>
+        <?php endforeach; ?>
       </nav>
     </div>
   </body>
