@@ -8,59 +8,97 @@ if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
     exit;
 }
 
-$routeId = 1;
-$routeName = 'Balagtas → Monumento';
-$routeStops = [];
+function loadRouteStops(mysqli $conn, int $routeId): array
+{
+    $routeStops = [];
 
-if ($stmt = $conn->prepare(
-    'SELECT s.stop_id, s.stop_name, s.municipality, s.lat, s.lng
-     FROM route_stops rs
-     JOIN stops s ON rs.stop_id = s.stop_id
-     WHERE rs.route_id = ?
-     ORDER BY rs.stop_order'
-)) {
-    $stmt->bind_param('i', $routeId);
+    if ($stmt = $conn->prepare(
+        'SELECT s.stop_id, s.stop_name, s.municipality, s.lat, s.lng
+         FROM route_stops rs
+         JOIN stops s ON rs.stop_id = s.stop_id
+         WHERE rs.route_id = ?
+         ORDER BY rs.stop_order'
+    )) {
+        $stmt->bind_param('i', $routeId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $routeStops[] = [
+                'stop_id'      => (int) $row['stop_id'],
+                'stop_name'    => $row['stop_name'],
+                'municipality' => $row['municipality'],
+                'lat'          => (float) $row['lat'],
+                'lng'          => (float) $row['lng'],
+            ];
+        }
+        $stmt->close();
+    }
+
+    return $routeStops;
+}
+
+$routeId = 1;
+$routeStops = loadRouteStops($conn, $routeId);
+
+if (count($routeStops) === 0) {
+    $routeStops = [
+        ['stop_id' => 1, 'stop_name' => 'ULTRA MEGA', 'municipality' => 'Balagtas, Bulacan', 'lat' => 14.82005556, 'lng' => 120.90252778],
+        ['stop_id' => 2, 'stop_name' => 'BALAGTAS ARENA', 'municipality' => 'Balagtas, Bulacan', 'lat' => 14.812972, 'lng' => 120.912889],
+        ['stop_id' => 20, 'stop_name' => 'VICTONICA MONUMENTO', 'municipality' => 'Caloocan City', 'lat' => 14.65872222, 'lng' => 120.98447222],
+    ];
+}
+
+$routesCatalog = [];
+$dbRoutes = [];
+
+if ($stmt = $conn->prepare('SELECT route_id, route_name, display_name FROM routes ORDER BY route_id ASC')) {
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
-        $routeStops[] = [
-            'stop_id'      => (int) $row['stop_id'],
-            'stop_name'    => $row['stop_name'],
-            'municipality' => $row['municipality'],
-            'lat'          => (float) $row['lat'],
-            'lng'          => (float) $row['lng'],
-        ];
+        $dbRoutes[] = $row;
     }
     $stmt->close();
 }
 
-if (count($routeStops) === 0) {
-    $routeStops = [
-        ['stop_name' => 'ULTRA MEGA', 'municipality' => 'Balagtas, Bulacan'],
-        ['stop_name' => 'BALAGTAS ARENA', 'municipality' => 'Balagtas, Bulacan'],
-        ['stop_name' => 'GOLDEN CITY', 'municipality' => 'Bocaue, Bulacan'],
-        ['stop_name' => 'DR. YANGA’S COLLEGE', 'municipality' => 'Bocaue, Bulacan'],
-        ['stop_name' => 'BOCAUE MARKET', 'municipality' => 'Bocaue, Bulacan'],
-        ['stop_name' => 'BUNLO JIL', 'municipality' => 'Bocaue, Bulacan'],
-        ['stop_name' => 'JONERS LOLOMBOY', 'municipality' => 'Bocaue, Bulacan'],
-        ['stop_name' => 'TOWN IN COUNTRY', 'municipality' => 'Bocaue, Bulacan'],
-        ['stop_name' => 'MARILAO TULAY', 'municipality' => 'Marilao, Bulacan'],
-        ['stop_name' => 'LIAS', 'municipality' => 'Marilao, Bulacan'],
-        ['stop_name' => 'SM MARILAO', 'municipality' => 'Marilao, Bulacan'],
-        ['stop_name' => 'MEDALLION HOMES', 'municipality' => 'Meycauayan, Bulacan'],
-        ['stop_name' => 'MALHACAN', 'municipality' => 'Meycauayan, Bulacan'],
-        ['stop_name' => 'BANGCAL', 'municipality' => 'Meycauayan, Bulacan'],
-        ['stop_name' => 'MALANDAY', 'municipality' => 'Valenzuela City'],
-        ['stop_name' => 'DALANDANAN', 'municipality' => 'Valenzuela City'],
-        ['stop_name' => 'BALUBARAN', 'municipality' => 'Valenzuela City'],
-        ['stop_name' => 'MALINTA', 'municipality' => 'Valenzuela City'],
-        ['stop_name' => 'KARUHATAN', 'municipality' => 'Valenzuela City'],
-        ['stop_name' => 'VICTONICA MONUMENTO', 'municipality' => 'Caloocan City'],
+if (count($dbRoutes) === 0) {
+    $dbRoutes[] = [
+        'route_id'     => 1,
+        'route_name'   => 'Balagtas-Monumento',
+        'display_name' => 'Balagtas → Monumento',
     ];
 }
 
-$stopNames = array_column($routeStops, 'stop_name');
-$stopCount = count($stopNames);
+foreach ($dbRoutes as $routeRow) {
+    $rid = (int) $routeRow['route_id'];
+    $stops = loadRouteStops($conn, $rid);
+    if (count($stops) === 0 && $rid === 1) {
+        $stops = $routeStops;
+    }
+    if (count($stops) === 0) {
+        continue;
+    }
+
+    $routesCatalog[$rid] = [
+        'routeId'     => $rid,
+        'routeName'   => $routeRow['route_name'],
+        'displayName' => $routeRow['display_name'],
+        'stops'       => array_map(static fn($stop) => [
+            'stop_id'      => (int) ($stop['stop_id'] ?? 0),
+            'name'         => $stop['stop_name'],
+            'municipality' => $stop['municipality'],
+            'lat'          => (float) $stop['lat'],
+            'lng'          => (float) $stop['lng'],
+        ], $stops),
+    ];
+}
+
+$routeOptions = [];
+foreach ($routesCatalog as $catalogRoute) {
+    $routeOptions[] = [
+        'route_id' => (int) $catalogRoute['routeId'],
+        'label'    => $catalogRoute['displayName'] ?: $catalogRoute['routeName'],
+    ];
+}
 
 $coordsForFare = array_map(static fn($s) => [
     'lat' => $s['lat'] ?? 0.0,
@@ -68,24 +106,15 @@ $coordsForFare = array_map(static fn($s) => [
 ], $routeStops);
 $cumulativeDistances = build_cumulative_from_route_stops($coordsForFare);
 
-function getDistanceBetweenStops(int $from, int $to, array $cumulativeDistances): float
-{
-    return getDistanceBetweenIndices($from, $to, $cumulativeDistances);
+$farePolicyLabel = fare_policy_label();
+$fareByRoute = [];
+foreach (array_keys($routesCatalog) as $rid) {
+    $fareData = fare_route_data($conn, (int) $rid);
+    $fareByRoute[(int) $rid] = [
+        'stopNames'  => array_column($fareData['stops'], 'stop_name'),
+        'cumulative' => $fareData['cumulative'],
+    ];
 }
-
-$fareMatrix = [];
-for ($from = 0; $from < $stopCount; $from++) {
-    for ($to = 0; $to < $stopCount; $to++) {
-        $distance = getDistanceBetweenStops($from, $to, $cumulativeDistances);
-        $fareMatrix[$from][$to] = [
-            'distance' => $distance,
-            'fare' => $distance > 0 ? calculateFare($distance) : 0.00,
-        ];
-    }
-}
-
-$totalRouteDistance = end($cumulativeDistances);
-$totalStops = $stopCount;
 
 $pageTitle = 'Routes';
 $activeNav = 'routes';
@@ -107,12 +136,6 @@ $activeNav = 'routes';
     <link
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
       rel="stylesheet"
-    />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.10.0/dist/leaflet.css"
-      integrity="sha256-b48gk2+23GPlCGSO44BXlrwYMy9UFj+sZh1QmP4lw5w="
-      crossorigin=""
     />
     <script id="tailwind-config">
       tailwind.config = {
@@ -229,59 +252,150 @@ $activeNav = 'routes';
         box-shadow: 0 4px 12px rgba(0, 64, 161, 0.25);
       }
       .map-card {
-        display: grid;
-        gap: 1rem;
         background: #ffffff;
         border: 1px solid #e1e3e4;
         border-radius: 1.75rem;
-        padding: 1.25rem;
+        padding: 1rem;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
       }
-      #map {
+      #map-empty {
         width: 100%;
-        height: 300px;
+        min-height: 280px;
         border-radius: 1.25rem;
-        overflow: hidden;
-        position: relative;
-        background: #e8eef4;
+        background: linear-gradient(180deg, #eef2f7 0%, #e8eef4 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        text-align: center;
+        padding: 1.5rem;
       }
-      /* Fallback iframe map fills container */
-      #map-iframe {
-        width: 100%;
-        height: 100%;
-        border: none;
-        border-radius: 1.25rem;
+      #map-panel {
+        display: none;
+      }
+      #map-panel.is-visible {
         display: block;
       }
-      /* Leaflet container */
-      .leaflet-container {
+      #route-map {
         width: 100%;
-        height: 100%;
-        border-radius: inherit;
+        height: min(52vw, 280px);
+        min-height: 260px;
+        border-radius: 1.25rem;
+        overflow: hidden;
+        background: #e8eef4;
       }
-      /* Bus pulse marker */
-      @keyframes pulse-ring {
-        0% {
-          transform: scale(1);
-          opacity: 0.7;
-        }
-        100% {
-          transform: scale(2.4);
+      .map-action-btn {
+        min-height: 2.5rem;
+        border-radius: 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        width: 100%;
+        transition: background-color 0.2s, opacity 0.2s;
+      }
+      .fare-compact {
+        border-radius: 1rem;
+        padding: 0.75rem;
+      }
+      .fare-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .fare-select-wrap {
+        position: relative;
+      }
+      .fare-select-wrap .material-symbols-outlined {
+        position: absolute;
+        left: 0.65rem;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 1rem;
+        color: #0040a1;
+        pointer-events: none;
+      }
+      .fare-select {
+        width: 100%;
+        min-height: 2.5rem;
+        padding: 0.5rem 1.75rem 0.5rem 2.15rem;
+        border-radius: 0.75rem;
+        border: 1px solid #c3c6d6;
+        background: #ffffff;
+        font-size: 0.8125rem;
+        color: #191c1d;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23424654' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.65rem center;
+      }
+      .fare-select:disabled {
+        background-color: #f3f4f5;
+        color: #737785;
+      }
+      .fare-result-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.625rem 0.75rem;
+        border-radius: 0.75rem;
+        background: #dae2ff;
+        font-size: 0.8125rem;
+      }
+      .stops-float-backdrop {
+        padding: 1rem;
+        align-items: center;
+        justify-content: center;
+      }
+      .stops-float-card {
+        width: min(100%, 300px);
+        border-radius: 1rem;
+        background: #ffffff;
+        border: 1px solid #e1e3e4;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+        overflow: hidden;
+        animation: pop-in 0.2s ease-out;
+      }
+      .stops-float-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.625rem 0.75rem;
+        border-bottom: 1px solid #eef0f2;
+      }
+      .stops-float-body {
+        padding: 0.625rem;
+      }
+      .stops-select-list {
+        width: 100%;
+        min-height: 2.5rem;
+        max-height: 220px;
+        padding: 0.25rem;
+        border-radius: 0.75rem;
+        border: 1px solid #c3c6d6;
+        background: #ffffff;
+        font-size: 0.8125rem;
+        color: #191c1d;
+        overflow-y: auto;
+      }
+      .stops-select-list option {
+        padding: 0.4rem 0.5rem;
+        border-radius: 0.35rem;
+      }
+      @keyframes pop-in {
+        from {
+          transform: scale(0.96);
           opacity: 0;
         }
-      }
-      .bus-pulse-outer {
-        position: absolute;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        background: rgba(0, 64, 161, 0.4);
-        animation: pulse-ring 1.6s ease-out infinite;
-      }
-      .bus-marker-wrap {
-        position: relative;
-        width: 20px;
-        height: 20px;
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
       }
     </style>
   </head>
@@ -320,134 +434,101 @@ $activeNav = 'routes';
       </header>
 
       <main class="pt-20 pb-28 min-h-screen px-4 space-y-4">
-        <!-- Route Info -->
         <section
           class="rounded-[1.75rem] bg-surface-container-lowest border border-outline-variant p-5 shadow-sm"
         >
-          <p class="text-sm font-semibold text-on-surface-variant">
-            Route information
-          </p>
-          <h2 class="mt-3 text-2xl font-bold text-on-surface">
-            <?= htmlspecialchars($routeName, ENT_QUOTES, 'UTF-8') ?>
-          </h2>
-          <div class="mt-4 text-sm text-on-surface-variant">
-            <p><?= $totalStops ?> stops · Estimated route distance <?= number_format($totalRouteDistance, 2) ?> km</p>
-            <p class="mt-2">Fare model: ₱13 minimum for 0–5 km, then ₱2.25 per additional km.</p>
-          </div>
-          <div
-            class="mt-6 rounded-[1.75rem] bg-white p-4 border border-surface-container-high shadow-sm"
+          <label
+            for="route-select"
+            class="block text-sm font-semibold text-on-surface-variant mb-2"
           >
-            <p
-              class="text-[11px] uppercase tracking-[0.2em] text-on-surface-variant"
-            >
-              Estimated km between stops
-            </p>
-            <div class="mt-4 divide-y divide-surface-container-high text-sm text-on-surface">
-              <?php foreach ($routeStops as $index => $stop):
-                if ($index >= 5) break;
-                $nextStop = $routeStops[$index + 1]['stop_name'] ?? null;
-                $segmentDistance = $segmentDistances[$index] ?? 0.0;
-                $cumulative = $cumulativeDistances[$index];
-              ?>
-                <div class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p class="font-semibold"><?= htmlspecialchars($stop['stop_name'], ENT_QUOTES, 'UTF-8') ?></p>
-                    <p class="text-xs text-on-surface-variant"><?= htmlspecialchars($stop['municipality'], ENT_QUOTES, 'UTF-8') ?></p>
-                  </div>
-                  <div class="text-sm text-on-surface-variant text-right">
-                    <p>KM from start: <?= number_format($cumulative, 2) ?></p>
-                    <?php if ($nextStop !== null): ?>
-                      <p>Next to <?= htmlspecialchars($nextStop, ENT_QUOTES, 'UTF-8') ?> · <?= number_format($segmentDistance, 2) ?> km</p>
-                    <?php else: ?>
-                      <p>Terminus stop</p>
-                    <?php endif; ?>
-                  </div>
-                </div>
-              <?php endforeach; ?>
-            </div>
-            <?php if ($stopCount > 5): ?>
-              <button
-                id="toggle-stops-btn"
-                class="mt-4 w-full rounded-2xl bg-primary-container text-white px-4 py-3 text-sm font-semibold hover:opacity-90 transition-opacity"
-                onclick="toggleStops()"
-              >
-                View All Stops
-              </button>
-            <?php endif; ?>
-          </div>
+            Select bus route
+          </label>
+          <select
+            id="route-select"
+            class="w-full px-4 py-3 rounded-2xl border border-outline-variant bg-white text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="" selected>Select route</option>
+            <?php foreach ($routeOptions as $option): ?>
+              <option value="<?= (int) $option['route_id'] ?>">
+                <?= htmlspecialchars($option['label'], ENT_QUOTES, 'UTF-8') ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
         </section>
 
-        <!-- Map Card -->
         <section class="map-card">
-          <div>
-            <p class="text-sm font-semibold text-on-surface-variant">
-              Live Bus Location
-            </p>
-            <p class="mt-2 text-sm text-on-surface-variant">
-              View your assigned bus in real time.
+          <div id="map-empty">
+            <span class="material-symbols-outlined text-4xl text-on-surface-variant/50">map</span>
+            <p class="text-sm font-medium text-on-surface">No route selected</p>
+            <p class="text-xs text-on-surface-variant max-w-[220px]">
+              Choose a bus route above to view the map, stops, and live bus marker.
             </p>
           </div>
-          <!-- Map container: Leaflet renders here; iframe is the fallback -->
-          <div id="map">
-            <iframe
-              id="map-iframe"
-              src="https://www.openstreetmap.org/export/embed.html?bbox=120.9500%2C14.7800%2C121.0800%2C14.8900&layer=mapnik&marker=14.8400%2C121.0167"
-              title="Route map"
-              loading="lazy"
-            ></iframe>
+          <div id="map-panel" class="space-y-3">
+            <div id="route-map"></div>
+            <div class="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                id="btn-bus-near"
+                class="map-action-btn bg-surface-container-high text-on-surface-variant cursor-not-allowed"
+                title="Coming soon"
+              >
+                <span class="material-symbols-outlined text-[18px]">directions_bus</span>
+                Bus near me
+              </button>
+              <button
+                type="button"
+                id="btn-show-stops"
+                class="map-action-btn border border-outline-variant bg-white text-on-surface active:bg-surface-container-low"
+              >
+                <span class="material-symbols-outlined text-[16px]">list</span>
+                Stops
+              </button>
+            </div>
           </div>
         </section>
 
-        <!-- Fare Estimator -->
         <section
-          class="rounded-3xl bg-surface-container-lowest border border-outline-variant p-5 shadow-sm"
+          id="fare-section"
+          class="fare-compact rounded-2xl bg-surface-container-lowest border border-outline-variant shadow-sm opacity-60 pointer-events-none transition-opacity"
         >
-          <h2 class="text-lg font-bold text-on-surface">Fare estimator</h2>
-          <p class="mt-3 text-sm text-on-surface-variant">
-            Select your boarding and destination stops to see the estimated fare.
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <h2 class="text-sm font-bold text-on-surface leading-tight">Fare estimate</h2>
+              <p class="text-[10px] text-on-surface-variant truncate mt-0.5">
+                <?= htmlspecialchars($farePolicyLabel, ENT_QUOTES, 'UTF-8') ?>
+              </p>
+            </div>
+          </div>
+
+          <p id="fare-route-hint" class="mt-2 text-[11px] text-on-surface-variant">
+            Select a route first.
           </p>
 
-          <div class="mt-5 space-y-4 rounded-3xl bg-white border border-surface-container-high p-5">
-            <div>
-              <label class="block text-sm font-semibold text-on-surface mb-2">From</label>
-              <select
-                id="from-stop"
-                class="w-full px-4 py-3 rounded-2xl border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
-                onchange="updateFare()"
-              >
-                <option value="-1">Select boarding stop</option>
-                <?php foreach ($stopNames as $index => $name): ?>
-                  <option value="<?= $index ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-
-            <div>
-              <label class="block text-sm font-semibold text-on-surface mb-2">To</label>
-              <select
-                id="to-stop"
-                class="w-full px-4 py-3 rounded-2xl border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
-                onchange="updateFare()"
-              >
-                <option value="-1">Select destination stop</option>
-                <?php foreach ($stopNames as $index => $name): ?>
-                  <option value="<?= $index ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-
-            <div id="fare-result" class="hidden mt-5 rounded-2xl bg-primary-fixed p-4">
-              <p class="text-sm text-on-surface-variant mb-3">Estimated trip details</p>
-              <div class="space-y-2">
-                <div class="flex justify-between items-center">
-                  <span class="text-sm text-on-surface-variant">Distance</span>
-                  <span id="result-distance" class="font-semibold text-on-surface">0.00 km</span>
-                </div>
-                <div class="flex justify-between items-center pt-3 border-t border-primary-container">
-                  <span class="font-semibold text-on-surface">Estimated Fare</span>
-                  <span id="result-fare" class="text-2xl font-bold text-primary">₱0.00</span>
-                </div>
+          <div class="mt-2 space-y-2 rounded-xl bg-white border border-surface-container-high p-2.5">
+            <div class="fare-field">
+              <label for="from-stop" class="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">From</label>
+              <div class="fare-select-wrap">
+                <span class="material-symbols-outlined">trip_origin</span>
+                <select id="from-stop" class="fare-select" disabled>
+                  <option value="-1">Boarding stop</option>
+                </select>
               </div>
+            </div>
+
+            <div class="fare-field">
+              <label for="to-stop" class="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">To</label>
+              <div class="fare-select-wrap">
+                <span class="material-symbols-outlined">location_on</span>
+                <select id="to-stop" class="fare-select" disabled>
+                  <option value="-1">Destination stop</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="fare-result" class="hidden fare-result-bar">
+              <span class="text-on-surface-variant"><span id="result-distance">0.00 km</span></span>
+              <span id="result-fare" class="font-extrabold text-primary text-base leading-none">₱0.00</span>
             </div>
           </div>
         </section>
@@ -479,75 +560,89 @@ $activeNav = 'routes';
       </nav>
     </div>
 
-    <!-- All Stops Modal -->
-    <div id="stops-modal" class="hidden fixed inset-0 z-50 flex items-end bg-black/30 backdrop-blur-sm">
-      <div class="w-full max-w-[420px] mx-auto bg-white rounded-t-3xl shadow-lg max-h-[80dvh] overflow-y-auto animate-slide-up">
-        <div class="sticky top-0 bg-white border-b border-outline-variant px-4 py-4 flex items-center justify-between">
-          <h2 class="text-lg font-bold text-on-surface">All <?= $stopCount ?> Stops</h2>
-          <button onclick="closeStopsModal()" class="text-on-surface-variant hover:text-on-surface transition-colors">
-            <span class="material-symbols-outlined">close</span>
+    <div id="stops-modal" class="hidden fixed inset-0 z-[60] flex stops-float-backdrop bg-black/30 backdrop-blur-sm">
+      <div class="stops-float-card" role="dialog" aria-labelledby="stops-modal-title">
+        <div class="stops-float-head">
+          <h2 id="stops-modal-title" class="text-sm font-bold text-on-surface leading-tight truncate flex-1 min-w-0">Route stops</h2>
+          <button type="button" onclick="closeStopsModal()" class="h-7 w-7 shrink-0 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant" aria-label="Close">
+            <span class="material-symbols-outlined text-[16px]">close</span>
           </button>
         </div>
-        <div class="px-4 py-4 divide-y divide-surface-container-high text-sm text-on-surface space-y-0">
-          <?php foreach ($routeStops as $index => $stop):
-            $nextStop = $routeStops[$index + 1]['stop_name'] ?? null;
-            $segmentDistance = $segmentDistances[$index] ?? 0.0;
-            $cumulative = $cumulativeDistances[$index];
-          ?>
-            <div class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p class="font-semibold"><?= htmlspecialchars($stop['stop_name'], ENT_QUOTES, 'UTF-8') ?></p>
-                <p class="text-xs text-on-surface-variant"><?= htmlspecialchars($stop['municipality'], ENT_QUOTES, 'UTF-8') ?></p>
-              </div>
-              <div class="text-sm text-on-surface-variant text-right">
-                <p>KM from start: <?= number_format($cumulative, 2) ?></p>
-                <?php if ($nextStop !== null): ?>
-                  <p>Next to <?= htmlspecialchars($nextStop, ENT_QUOTES, 'UTF-8') ?> · <?= number_format($segmentDistance, 2) ?> km</p>
-                <?php else: ?>
-                  <p>Terminus stop</p>
-                <?php endif; ?>
-              </div>
-            </div>
-          <?php endforeach; ?>
+        <div class="stops-float-body">
+          <select id="stops-list-select" class="stops-select-list" size="8" aria-label="Route stops list"></select>
         </div>
       </div>
     </div>
 
-    <style>
-      @keyframes slide-up {
-        from {
-          transform: translateY(100%);
-          opacity: 0;
-        }
-        to {
-          transform: translateY(0);
-          opacity: 1;
-        }
-      }
-      .animate-slide-up {
-        animation: slide-up 0.3s ease-out;
-      }
-    </style>
-
     <script>
-      // Fare calculation data from PHP
-      const stopNames = <?= json_encode($stopNames) ?>;
-      const cumulativeDistances = <?= json_encode($cumulativeDistances) ?>;
+      const FARE_BY_ROUTE = <?= json_encode($fareByRoute, JSON_UNESCAPED_UNICODE) ?>;
       const FARE_FIRST_KM = <?= FARE_FIRST_KM_PHP ?>;
       const FARE_PER_KM_AFTER = <?= FARE_PER_KM_AFTER_PHP ?>;
       const FARE_INCLUDED_KM = <?= FARE_INCLUDED_KM ?>;
 
-      function calculateFare(distance) {
-        if (distance <= 0) return 0;
-        if (distance <= FARE_INCLUDED_KM) return FARE_FIRST_KM;
-        return Math.round((FARE_FIRST_KM + (distance - FARE_INCLUDED_KM) * FARE_PER_KM_AFTER) * 100) / 100;
+      let activeFareRouteId = null;
+      let activeCumulative = [];
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function calculateFare(distanceKm) {
+        if (distanceKm <= 0) return 0;
+        if (distanceKm <= FARE_INCLUDED_KM) return FARE_FIRST_KM;
+        return Math.round((FARE_FIRST_KM + ((distanceKm - FARE_INCLUDED_KM) * FARE_PER_KM_AFTER)) * 100) / 100;
       }
 
       function getDistance(fromIndex, toIndex) {
-        if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-          return 0.0;
+        if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex || !activeCumulative.length) {
+          return 0;
         }
-        return Math.round(Math.abs(cumulativeDistances[toIndex] - cumulativeDistances[fromIndex]) * 100) / 100;
+        const max = activeCumulative.length - 1;
+        const from = Math.max(0, Math.min(max, fromIndex));
+        const to = Math.max(0, Math.min(max, toIndex));
+        return Math.round(Math.abs(activeCumulative[to] - activeCumulative[from]) * 10000) / 10000;
+      }
+
+      function populateFareStops(routeId) {
+        const fareData = routeId ? FARE_BY_ROUTE[routeId] : null;
+        const fromSelect = document.getElementById('from-stop');
+        const toSelect = document.getElementById('to-stop');
+        const fareSection = document.getElementById('fare-section');
+        const fareHint = document.getElementById('fare-route-hint');
+        const fareResult = document.getElementById('fare-result');
+
+        fromSelect.innerHTML = '<option value="-1">Boarding stop</option>';
+        toSelect.innerHTML = '<option value="-1">Destination stop</option>';
+        fareResult.classList.add('hidden');
+
+        if (!fareData || !fareData.stopNames || !fareData.stopNames.length) {
+          activeFareRouteId = null;
+          activeCumulative = [];
+          fromSelect.disabled = true;
+          toSelect.disabled = true;
+          fareSection.classList.add('opacity-60', 'pointer-events-none');
+          fareHint.classList.remove('hidden');
+          fareHint.textContent = 'Select a route first.';
+          return;
+        }
+
+        activeFareRouteId = routeId;
+        activeCumulative = fareData.cumulative.slice();
+
+        fareData.stopNames.forEach(function (name, index) {
+          const label = escapeHtml(name);
+          fromSelect.insertAdjacentHTML('beforeend', '<option value="' + index + '">' + label + '</option>');
+          toSelect.insertAdjacentHTML('beforeend', '<option value="' + index + '">' + label + '</option>');
+        });
+
+        fromSelect.disabled = false;
+        toSelect.disabled = false;
+        fareSection.classList.remove('opacity-60', 'pointer-events-none');
+        fareHint.classList.add('hidden');
       }
 
       function updateFare() {
@@ -561,131 +656,552 @@ $activeNav = 'routes';
         }
 
         const distance = getDistance(fromIndex, toIndex);
-        const fare = distance > 0 ? calculateFare(distance) : 0.0;
+        const fare = distance > 0 ? calculateFare(distance) : 0;
 
         document.getElementById('result-distance').textContent = distance.toFixed(2) + ' km';
         document.getElementById('result-fare').textContent = '₱' + fare.toFixed(2);
         resultDiv.classList.remove('hidden');
       }
 
-      function toggleStops() {
-        const modal = document.getElementById('stops-modal');
-        modal.classList.remove('hidden');
+      document.getElementById('from-stop').addEventListener('change', updateFare);
+      document.getElementById('to-stop').addEventListener('change', updateFare);
+
+      window.populateFareStops = populateFareStops;
+
+      function openStopsModal() {
+        document.getElementById('stops-modal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
       }
 
       function closeStopsModal() {
-        const modal = document.getElementById('stops-modal');
-        modal.classList.add('hidden');
+        document.getElementById('stops-modal').classList.add('hidden');
+        document.body.style.overflow = '';
       }
 
-      // Close modal when clicking outside
-      document.getElementById('stops-modal').addEventListener('click', function(e) {
+      document.getElementById('stops-modal').addEventListener('click', function (e) {
         if (e.target === this) {
+          closeStopsModal();
+        }
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
           closeStopsModal();
         }
       });
     </script>
 
-    <!-- Leaflet JS -->
     <script>
-      src = "https://unpkg.com/leaflet@1.10.0/dist/leaflet.js";
-      integrity = "sha256-gZOGcR9PGyS3zT8aqfD7VG4HFSYx4M0Qv2eMCyMaC5k=";
-      crossorigin = "";
+    (function () {
+      'use strict';
 
-      // Route stops coordinates
-      const stops = [
-        { name: "Bocaue", latlng: [14.7983, 120.9742] },
-        { name: "Marilao", latlng: [14.757, 120.9588] }, // corrected approx
-        { name: "Meycauayan", latlng: [14.735, 120.9604] },
-      ];
+      var MAP_CFG_URL = '../../api/map.php';
+      var GPS_URL = '../../config/gps.php';
+      var ROUTES = <?= json_encode($routesCatalog, JSON_UNESCAPED_UNICODE) ?>;
+      var OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
+      var OV_ZOOM = 12;
+      var BUS_POLL_MS = 350;
+      var BUS_ANIM_MS = 320;
 
-      // Simulated bus position (between Bocaue and Marilao)
-      const busPosition = [14.778, 120.966];
+      var routeSelect = document.getElementById('route-select');
+      var mapEmpty = document.getElementById('map-empty');
+      var defaultMapEmptyHtml = mapEmpty ? mapEmpty.innerHTML : '';
+      var mapPanel = document.getElementById('map-panel');
+      var mapEl = document.getElementById('route-map');
+      var stopsModalTitle = document.getElementById('stops-modal-title');
+      var stopsListSelect = document.getElementById('stops-list-select');
+      var btnShowStops = document.getElementById('btn-show-stops');
 
-      function initLeaflet() {
-        const iframe = document.getElementById("map-iframe");
-        const mapEl = document.getElementById("map");
+      var map = null;
+      var mapsReady = false;
+      var mapInitialized = false;
+      var routeLine = null;
+      var stopMkrs = [];
+      var busMkr = null;
+      var busPollTimer = null;
+      var currentRouteId = null;
+      var currentStops = [];
+      var legRoutesCache = {};
+      var legRoutesPending = {};
+      var googleMapsPromise = null;
+      var hasCenteredOnBus = false;
+      var busAnimFrame = null;
+      var lastBusPoint = null;
+      var busPollInFlight = false;
 
-        // Hide the fallback iframe
-        if (iframe) iframe.style.display = "none";
+      function latLng(lat, lng) {
+        return new google.maps.LatLng(lat, lng);
+      }
 
-        const map = L.map(mapEl, {
-          scrollWheelZoom: false,
-          attributionControl: false,
-          zoomControl: true,
-        }).setView([14.77, 120.965], 13);
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
 
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-        }).addTo(map);
+      function legCacheKey(from, to) {
+        return from + '-' + to;
+      }
 
-        // Draw route polyline
-        const routeCoords = stops.map((s) => s.latlng);
-        L.polyline(routeCoords, {
-          color: "#0040a1",
-          weight: 4,
-          opacity: 0.75,
-          dashArray: "8 6",
-        }).addTo(map);
+      function straightPath(from, to) {
+        return [
+          { lat: from.lat, lng: from.lng },
+          { lat: to.lat, lng: to.lng },
+        ];
+      }
 
-        // Stop markers
-        stops.forEach((stop, i) => {
-          const isFirst = i === 0;
-          const isLast = i === stops.length - 1;
-          const color = isFirst ? "#22c55e" : isLast ? "#ef4444" : "#0040a1";
+      function pathToLatLngs(pts) {
+        return pts.map(function (p) { return latLng(p.lat, p.lng); });
+      }
 
-          L.circleMarker(stop.latlng, {
-            radius: 8,
-            fillColor: color,
-            color: "#ffffff",
-            weight: 2,
-            fillOpacity: 1,
+      function appendPathPoints(base, extra) {
+        if (!extra || !extra.length) return base.slice();
+        var out = base.slice();
+        var start = out.length ? 1 : 0;
+        for (var i = start; i < extra.length; i++) out.push(extra[i]);
+        return out;
+      }
+
+      function fetchOsrmRoute(fromIdx, toIdx) {
+        var key = legCacheKey(fromIdx, toIdx);
+        if (legRoutesCache[key]) {
+          return Promise.resolve(legRoutesCache[key]);
+        }
+        if (legRoutesPending[key]) {
+          return legRoutesPending[key];
+        }
+
+        var a = currentStops[fromIdx];
+        var b = currentStops[toIdx];
+        var url = OSRM_URL + '/'
+          + a.lng + ',' + a.lat + ';' + b.lng + ',' + b.lat
+          + '?overview=full&geometries=geojson';
+
+        legRoutesPending[key] = fetch(url, { headers: { Accept: 'application/json' } })
+          .then(function (r) {
+            if (!r.ok) throw new Error('OSRM HTTP ' + r.status);
+            return r.json();
           })
-            .addTo(map)
-            .bindPopup(`<b>${stop.name}</b>`);
-        });
+          .then(function (data) {
+            var path;
+            if (data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry) {
+              path = data.routes[0].geometry.coordinates.map(function (c) {
+                return { lat: c[1], lng: c[0] };
+              });
+            } else {
+              path = straightPath(a, b);
+            }
+            legRoutesCache[key] = path;
+            return path;
+          })
+          .catch(function () {
+            var path = straightPath(a, b);
+            legRoutesCache[key] = path;
+            return path;
+          })
+          .finally(function () {
+            delete legRoutesPending[key];
+          });
 
-        // Animated bus marker using a DivIcon
-        const busIcon = L.divIcon({
-          className: "",
-          html: `
-            <div style="position:relative;width:28px;height:28px;">
-              <div style="
-                position:absolute;inset:0;border-radius:50%;
-                background:rgba(0,64,161,0.3);
-                animation:pulse-ring 1.6s ease-out infinite;
-              "></div>
-              <div style="
-                position:absolute;inset:4px;border-radius:50%;
-                background:#0040a1;border:2px solid #fff;
-                display:flex;align-items:center;justify-content:center;
-                font-size:10px;color:#fff;
-              ">🚌</div>
-            </div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
-        });
-
-        L.marker(busPosition, { icon: busIcon })
-          .addTo(map)
-          .bindPopup("<b>Your Bus</b><br>Currently en route")
-          .openPopup();
-
-        // Fit map to show full route
-        map.fitBounds(L.latLngBounds(routeCoords).pad(0.2));
+        return legRoutesPending[key];
       }
 
-      // Try Leaflet first; fall back to iframe if Leaflet failed to load
-      if (typeof L !== "undefined") {
-        document.addEventListener("DOMContentLoaded", initLeaflet);
-      } else {
-        window.addEventListener("load", function () {
-          if (typeof L !== "undefined") {
-            initLeaflet();
+      function prefetchAllLegRoutes() {
+        var i = 0;
+        function next() {
+          if (i >= currentStops.length - 1) {
+            drawRouteLine();
+            return;
           }
-          // else: iframe fallback is already visible
+          fetchOsrmRoute(i, i + 1).finally(function () {
+            i += 1;
+            setTimeout(next, 120);
+          });
+        }
+        next();
+      }
+
+      function drawRouteLine() {
+        if (!mapsReady || currentStops.length < 2) return;
+
+        if (routeLine) {
+          routeLine.setMap(null);
+          routeLine = null;
+        }
+
+        var pts = [];
+        for (var j = 0; j < currentStops.length - 1; j++) {
+          var key = legCacheKey(j, j + 1);
+          if (legRoutesCache[key]) {
+            pts = appendPathPoints(pts, legRoutesCache[key]);
+          }
+        }
+
+        if (pts.length < 2) {
+          pts = currentStops.map(function (s) { return { lat: s.lat, lng: s.lng }; });
+        }
+
+        routeLine = new google.maps.Polyline({
+          path: pathToLatLngs(pts),
+          geodesic: false,
+          strokeColor: '#0040a1',
+          strokeOpacity: 0.92,
+          strokeWeight: 5,
+          map: map,
+          zIndex: 10,
         });
       }
+
+      function stopDotIcon(color, size) {
+        return {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: color,
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+          scale: size,
+        };
+      }
+
+      function busMarkerIcon() {
+        var svg = [
+          '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">',
+          '<circle cx="22" cy="22" r="20" fill="#0040a1" stroke="#ffffff" stroke-width="3"/>',
+          '<path transform="translate(10 10)" fill="#ffffff" d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4S4 2.5 4 6v10Zm3.5 1C6.67 17 6 16.33 6 15.5S6.67 14 7.5 14 9 14.67 9 15.5 8.33 17 7.5 17Zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5ZM18 11H6V6h12v5Z"/>',
+          '</svg>',
+        ].join('');
+        return {
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+          scaledSize: new google.maps.Size(44, 44),
+          anchor: new google.maps.Point(22, 22),
+        };
+      }
+
+      function mkBusMarker(position) {
+        return new google.maps.Marker({
+          position: position,
+          map: map,
+          title: 'Active bus',
+          zIndex: 2000,
+          icon: busMarkerIcon(),
+        });
+      }
+
+      function setBusPosition(lat, lng, panToBus) {
+        var pos = latLng(lat, lng);
+        if (!busMkr) {
+          busMkr = mkBusMarker(pos);
+        } else {
+          busMkr.setPosition(pos);
+          busMkr.setIcon(busMarkerIcon());
+        }
+        lastBusPoint = { lat: lat, lng: lng };
+        if (map && panToBus !== false) {
+          map.panTo(pos);
+          if (!hasCenteredOnBus && map.getZoom() < 14) {
+            map.setZoom(14);
+          }
+          hasCenteredOnBus = true;
+        }
+      }
+
+      function stopBusAnimation() {
+        if (busAnimFrame) {
+          cancelAnimationFrame(busAnimFrame);
+          busAnimFrame = null;
+        }
+      }
+
+      function animateBusPosition(lat, lng) {
+        if (!mapsReady || !map) return;
+
+        var target = { lat: lat, lng: lng };
+        if (!lastBusPoint || !busMkr) {
+          stopBusAnimation();
+          setBusPosition(target.lat, target.lng, true);
+          return;
+        }
+
+        var start = { lat: lastBusPoint.lat, lng: lastBusPoint.lng };
+        var distance = Math.abs(start.lat - target.lat) + Math.abs(start.lng - target.lng);
+        if (distance < 0.0000001) return;
+
+        var startedAt = performance.now();
+        stopBusAnimation();
+
+        function step(now) {
+          var t = Math.min(1, (now - startedAt) / BUS_ANIM_MS);
+          var eased = 1 - Math.pow(1 - t, 3);
+          var nextLat = start.lat + ((target.lat - start.lat) * eased);
+          var nextLng = start.lng + ((target.lng - start.lng) * eased);
+
+          setBusPosition(nextLat, nextLng, true);
+
+          if (t < 1) {
+            busAnimFrame = requestAnimationFrame(step);
+          } else {
+            busAnimFrame = null;
+            setBusPosition(target.lat, target.lng, true);
+          }
+        }
+
+        busAnimFrame = requestAnimationFrame(step);
+      }
+
+      function clearStopMarkers() {
+        stopMkrs.forEach(function (m) { m.setMap(null); });
+        stopMkrs = [];
+      }
+
+      function refreshStopMarkers() {
+        clearStopMarkers();
+        if (!mapsReady || !currentStops.length) return;
+
+        currentStops.forEach(function (stop, i) {
+          var isFirst = i === 0;
+          var isLast = i === currentStops.length - 1;
+          var color = isFirst ? '#16a34a' : isLast ? '#ef4444' : '#0040a1';
+          var size = isFirst || isLast ? 8 : 6;
+
+          stopMkrs.push(new google.maps.Marker({
+            position: latLng(stop.lat, stop.lng),
+            map: map,
+            title: stop.name,
+            icon: stopDotIcon(color, size),
+            zIndex: isFirst || isLast ? 500 : 200,
+          }));
+        });
+      }
+
+      function fitOverview() {
+        if (!mapsReady || !currentStops.length) return;
+        var bounds = new google.maps.LatLngBounds();
+        currentStops.forEach(function (s) { bounds.extend(latLng(s.lat, s.lng)); });
+        if (busMkr) {
+          bounds.extend(busMkr.getPosition());
+        }
+        map.fitBounds(bounds, 48);
+        map.setHeading(0);
+        map.setTilt(0);
+      }
+
+      function renderStopsModal() {
+        if (!currentStops.length || !stopsListSelect) return;
+
+        var route = ROUTES[currentRouteId] || {};
+        var routeLabel = route.displayName || 'Balagtas ↔ Monumento';
+        stopsModalTitle.textContent = currentStops.length + ' stops · ' + routeLabel;
+
+        stopsListSelect.innerHTML = currentStops.map(function (stop, index) {
+          return '<option value="' + index + '">' + (index + 1) + '. ' + escapeHtml(stop.name) + '</option>';
+        }).join('');
+
+        stopsListSelect.size = Math.min(8, Math.max(4, currentStops.length));
+      }
+
+      function clearMapLayers() {
+        if (routeLine) {
+          routeLine.setMap(null);
+          routeLine = null;
+        }
+        if (busMkr) {
+          busMkr.setMap(null);
+          busMkr = null;
+        }
+        stopBusAnimation();
+        clearStopMarkers();
+        legRoutesCache = {};
+        legRoutesPending = {};
+        hasCenteredOnBus = false;
+        lastBusPoint = null;
+      }
+
+      function stopBusPolling() {
+        if (busPollTimer) {
+          clearInterval(busPollTimer);
+          busPollTimer = null;
+        }
+      }
+
+      function updateBusFromGps(data) {
+        if (!data || !data.busPosition || !mapsReady) return;
+        if (String(data.routeId) !== String(currentRouteId)) return;
+
+        var lat = data.busPosition.lat;
+        var lng = data.busPosition.lng;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        animateBusPosition(lat, lng);
+      }
+
+      function fetchBusPosition() {
+        if (!currentRouteId) return Promise.resolve();
+        if (busPollInFlight) return Promise.resolve();
+        busPollInFlight = true;
+
+        var params = new URLSearchParams();
+        params.set('route_id', currentRouteId);
+        params.set('_', Date.now());
+
+        return fetch(GPS_URL + '?' + params.toString(), {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('GPS unavailable');
+            return r.json();
+          })
+          .then(function (data) {
+            updateBusFromGps(data);
+          })
+          .catch(function () {})
+          .finally(function () {
+            busPollInFlight = false;
+          });
+      }
+
+      function startBusPolling() {
+        stopBusPolling();
+        fetchBusPosition();
+        busPollTimer = setInterval(fetchBusPosition, BUS_POLL_MS);
+      }
+
+      function showMapPanel(show) {
+        if (show) {
+          mapEmpty.style.display = 'none';
+          mapPanel.classList.add('is-visible');
+        } else {
+          mapEmpty.style.display = 'flex';
+          mapPanel.classList.remove('is-visible');
+        }
+      }
+
+      function loadGoogleMaps() {
+        if (googleMapsPromise) return googleMapsPromise;
+
+        googleMapsPromise = fetch(MAP_CFG_URL, {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        }).then(function (r) {
+          if (!r.ok) throw new Error('Map config unavailable');
+          return r.json();
+        }).then(function (cfg) {
+          if (!cfg.apiKey) throw new Error('Missing API key');
+          return new Promise(function (resolve, reject) {
+            if (window.google && window.google.maps) {
+              resolve();
+              return;
+            }
+            var cb = '__trackfarePassengerMapsInit';
+            window[cb] = function () {
+              delete window[cb];
+              resolve();
+            };
+            var s = document.createElement('script');
+            s.src = 'https://maps.googleapis.com/maps/api/js?key='
+              + encodeURIComponent(cfg.apiKey) + '&callback=' + cb;
+            s.async = true;
+            s.defer = true;
+            s.onerror = function () { reject(new Error('Failed to load Google Maps')); };
+            document.head.appendChild(s);
+          });
+        });
+
+        return googleMapsPromise;
+      }
+
+      function initGoogleMap() {
+        var center = currentStops.length
+          ? { lat: currentStops[0].lat, lng: currentStops[0].lng }
+          : { lat: 14.75, lng: 120.95 };
+
+        if (mapInitialized) {
+          map.setCenter(center);
+          map.setZoom(OV_ZOOM);
+          return;
+        }
+
+        map = new google.maps.Map(mapEl, {
+          center: center,
+          zoom: OV_ZOOM,
+          mapTypeId: 'roadmap',
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: true,
+          gestureHandling: 'greedy',
+        });
+
+        mapsReady = true;
+        mapInitialized = true;
+      }
+
+      function drawSelectedRoute(routeId) {
+        var route = ROUTES[routeId];
+        if (!route || !route.stops || !route.stops.length) {
+          return Promise.resolve();
+        }
+
+        currentRouteId = routeId;
+        currentStops = route.stops.slice();
+        renderStopsModal();
+        showMapPanel(true);
+
+        if (window.populateFareStops) {
+          window.populateFareStops(routeId);
+        }
+
+        return loadGoogleMaps().then(function () {
+          initGoogleMap();
+          clearMapLayers();
+          refreshStopMarkers();
+          fitOverview();
+          prefetchAllLegRoutes();
+          startBusPolling();
+
+          google.maps.event.trigger(map, 'resize');
+          fitOverview();
+        });
+      }
+
+      function resetRouteView() {
+        currentRouteId = null;
+        currentStops = [];
+        stopBusPolling();
+        if (mapsReady) {
+          clearMapLayers();
+        }
+        if (mapEmpty && defaultMapEmptyHtml) {
+          mapEmpty.innerHTML = defaultMapEmptyHtml;
+        }
+        showMapPanel(false);
+
+        if (window.populateFareStops) {
+          window.populateFareStops(null);
+        }
+      }
+
+      function onRouteChange() {
+        var routeId = parseInt(routeSelect.value, 10);
+        if (!routeId || !ROUTES[routeId]) {
+          resetRouteView();
+          return;
+        }
+        drawSelectedRoute(routeId).catch(function () {
+          mapEmpty.innerHTML = '<p class="text-sm text-on-surface-variant px-4">Could not load the map. Check your connection and try again.</p>';
+          showMapPanel(false);
+        });
+      }
+
+      routeSelect.addEventListener('change', onRouteChange);
+      if (btnShowStops) {
+        btnShowStops.addEventListener('click', openStopsModal);
+      }
+
+      routeSelect.value = '';
+      resetRouteView();
+    })();
     </script>
   </body>
 </html>

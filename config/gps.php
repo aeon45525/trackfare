@@ -246,6 +246,158 @@ function total_route_km(array $stops): float
     return round($total, 4);
 }
 
+function gps_shared_state_file(): string
+{
+    return __DIR__ . '/gps_state.json';
+}
+
+function gps_read_shared_state(): ?array
+{
+    $file = gps_shared_state_file();
+    if (!is_file($file)) {
+        return null;
+    }
+
+    $json = file_get_contents($file);
+    if ($json === false || $json === '') {
+        return null;
+    }
+
+    $data = json_decode($json, true);
+    return is_array($data) ? $data : null;
+}
+
+function gps_write_shared_state(array $payload): void
+{
+    $payload['updatedAt'] = time();
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    if ($json === false) {
+        return;
+    }
+
+    $fp = fopen(gps_shared_state_file(), 'c');
+    if (!$fp) {
+        return;
+    }
+
+    flock($fp, LOCK_EX);
+    ftruncate($fp, 0);
+    rewind($fp);
+    fwrite($fp, $json);
+    fflush($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+}
+
+/* ── passenger read-only tracking ───────────────────────────── */
+
+if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
+    if (empty($_SESSION['user_id'])) {
+        http_response_code(401);
+        echo json_encode(['error' => 'Unauthorized'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $requestedRouteId = isset($_GET['route_id']) ? max(1, (int) $_GET['route_id']) : 0;
+
+    $sharedState = gps_read_shared_state();
+    $routeId = $requestedRouteId;
+    if ($routeId <= 0 && is_array($sharedState) && !empty($sharedState['routeId'])) {
+        $routeId = max(1, (int) $sharedState['routeId']);
+    }
+
+    if ($routeId <= 0) {
+        if ($stmt = $conn->prepare(
+            'SELECT route_id
+             FROM trips
+             WHERE status = ?
+             ORDER BY start_time DESC, trip_id DESC
+             LIMIT 1'
+        )) {
+            $active = 'active';
+            $stmt->bind_param('s', $active);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if ($row) {
+                $routeId = max(1, (int) $row['route_id']);
+            }
+        }
+    }
+
+    if ($routeId <= 0) {
+        $routeId = 1;
+    }
+
+    $stops   = load_route_stops($conn, $routeId);
+
+    if ($stops === []) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Route not found'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $maxIndex         = count($stops) - 1;
+    $tripStatus       = 'idle';
+    $currentStopIndex = 0;
+    $busPosition      = [
+        'lat' => (float) $stops[0]['lat'],
+        'lng' => (float) $stops[0]['lng'],
+    ];
+
+    if ($stmt = $conn->prepare(
+        'SELECT trip_id, status, current_stop_index
+         FROM trips
+         WHERE route_id = ? AND status = ?
+         LIMIT 1'
+    )) {
+        $active = 'active';
+        $stmt->bind_param('is', $routeId, $active);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if ($row) {
+            $tripStatus       = $row['status'];
+            $currentStopIndex = max(0, min($maxIndex, (int) $row['current_stop_index']));
+            $busPosition      = [
+                'lat' => (float) $stops[$currentStopIndex]['lat'],
+                'lng' => (float) $stops[$currentStopIndex]['lng'],
+            ];
+        }
+    }
+
+    if (is_array($sharedState) && (int)($sharedState['routeId'] ?? 0) === $routeId) {
+        $tripStatus = (string)($sharedState['status'] ?? $tripStatus);
+        $currentStopIndex = max(0, min($maxIndex, (int)($sharedState['currentStopIndex'] ?? $currentStopIndex)));
+        if (isset($sharedState['busPosition']['lat'], $sharedState['busPosition']['lng'])) {
+            $busPosition = [
+                'lat' => (float)$sharedState['busPosition']['lat'],
+                'lng' => (float)$sharedState['busPosition']['lng'],
+            ];
+        }
+    } else {
+        $sharedState = null;
+    }
+
+    $routeInfo = load_route_info($conn, $routeId);
+
+    echo json_encode([
+        'routeId'          => $routeId,
+        'routeName'        => $routeInfo['route_name'],
+        'displayName'      => $routeInfo['display_name'],
+        'stops'            => $stops,
+        'status'           => $tripStatus,
+        'currentStopIndex' => $currentStopIndex,
+        'busPosition'      => $busPosition,
+        'legFrom'          => $sharedState['legFrom'] ?? null,
+        'legTo'            => $sharedState['legTo'] ?? null,
+        'legProgress'      => isset($sharedState['legProgress']) ? (float)$sharedState['legProgress'] : 0.0,
+        'updatedAt'        => $sharedState['updatedAt'] ?? null,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 /* ── bootstrap ───────────────────────────────────────────────── */
 
 $routeId = resolve_route_id($conn);
@@ -441,7 +593,7 @@ $legTo      = $state['legTo'] ?? null;
 $routeInfo  = load_route_info($conn, $routeId);
 $totalKm    = total_route_km($stops);
 
-echo json_encode([
+$response = [
     'routeId'          => $routeId,
     'routeName'        => $routeInfo['route_name'],
     'displayName'      => $routeInfo['display_name'],
@@ -460,4 +612,10 @@ echo json_encode([
     'tripCompleted'      => $tripCompleted,
     'completedTripId'    => $completedTripId,
     'passengersCleared'  => $passengersCleared,
-], JSON_UNESCAPED_UNICODE);
+];
+
+if ($driverId > 0 && ($_SESSION['role'] ?? '') === 'driver') {
+    gps_write_shared_state($response);
+}
+
+echo json_encode($response, JSON_UNESCAPED_UNICODE);

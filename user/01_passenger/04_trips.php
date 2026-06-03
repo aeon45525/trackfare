@@ -160,6 +160,7 @@ $activeNav = 'trips';
         justify-content: center;
         background: #f8f9fa;
         overflow-x: hidden;
+        -webkit-tap-highlight-color: transparent;
       }
       #app-shell {
         width: min(100%, 420px);
@@ -185,6 +186,56 @@ $activeNav = 'trips';
         background: #0040a1;
         color: #ffffff;
         box-shadow: 0 4px 12px rgba(0, 64, 161, 0.25);
+      }
+      .phone-panel {
+        border: 1px solid #e1e3e4;
+        border-radius: 1.75rem;
+        background: #ffffff;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+      }
+      .balance-panel {
+        border-radius: 1.75rem;
+        background: #0040a1;
+        color: #ffffff;
+        box-shadow: 0 10px 28px rgba(0, 64, 161, 0.22);
+      }
+      .icon-chip {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.875rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 1.625rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 9999px;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .status-idle {
+        background: #e7e8e9;
+        color: #424654;
+      }
+      .status-active {
+        background: #dae2ff;
+        color: #0040a1;
+      }
+      @keyframes pop-in {
+        from {
+          transform: scale(0.96);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
       }
     </style>
   </head>
@@ -221,50 +272,71 @@ $activeNav = 'trips';
           </a>
         </div>
       </header>
-      <main class="pt-20 pb-28 min-h-screen px-4 space-y-4">
-        <section class="space-y-3">
-          <?php if (!empty($tripHistory)): ?>
-            <?php foreach ($tripHistory as $trip): ?>
-              <div
-                class="rounded-3xl bg-surface-container-lowest p-4 border border-surface-container-high shadow-sm"
-              >
-                <p
-                  class="text-xs uppercase tracking-[0.2em] text-on-surface-variant"
-                >
-                  Route
-                </p>
-                <p class="mt-2 font-semibold text-on-surface">
-                  <?= htmlspecialchars(formatTripRoute($trip), ENT_QUOTES, 'UTF-8') ?>
-                </p>
-                <div
-                  class="mt-3 flex items-center justify-between text-sm text-on-surface-variant"
-                >
-                  <span>Fare</span>
-                  <span>₱<?= number_format((float)$trip['fare_amount'], 2) ?></span>
+      <main class="pt-20 pb-28 min-h-screen px-4 space-y-3.5">
+        <?php if (!empty($tripHistory)): ?>
+          <?php foreach ($tripHistory as $trip): ?>
+            <?php
+            $status = strtolower($trip['trip_status'] ?? 'completed');
+            $statusClass = 'status-pill ';
+            if ($status === 'active') {
+                $statusClass .= 'status-active';
+            } else {
+                $statusClass .= 'status-idle';
+            }
+            ?>
+            <section class="phone-panel p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[18px] text-primary">directions_bus</span>
+                  <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Trip Record</span>
                 </div>
-                <div
-                  class="mt-2 flex items-center justify-between text-sm text-on-surface-variant"
-                >
-                  <span>Time</span>
-                  <span>—</span>
+                <span class="<?= $statusClass ?>"><?= htmlspecialchars(formatTripStatus($trip['trip_status']), ENT_QUOTES, 'UTF-8') ?></span>
+              </div>
+              
+              <div class="bg-surface-container-low rounded-2xl p-3 space-y-2">
+                <div class="flex items-start gap-2.5">
+                  <span class="material-symbols-outlined text-[16px] text-primary mt-0.5">route</span>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-[9px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">Route Path</p>
+                    <p class="text-xs font-semibold text-on-surface mt-0.5"><?= htmlspecialchars($trip['route_name'] ?: 'Unknown Route', ENT_QUOTES, 'UTF-8') ?></p>
+                    <?php if (!empty($trip['boarding_stop']) && !empty($trip['alighting_stop'])): ?>
+                      <p class="text-[10px] text-on-surface-variant mt-0.5 truncate"><?= htmlspecialchars($trip['boarding_stop'] . ' → ' . $trip['alighting_stop'], ENT_QUOTES, 'UTF-8') ?></p>
+                    <?php endif; ?>
+                  </div>
                 </div>
-                <div
-                  class="mt-3 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800"
-                >
-                  <?= htmlspecialchars(formatTripStatus($trip['trip_status']), ENT_QUOTES, 'UTF-8') ?>
+                
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                  <div class="flex items-start gap-2.5">
+                    <span class="material-symbols-outlined text-[16px] text-primary mt-0.5">payments</span>
+                    <div>
+                      <p class="text-[9px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">Fare</p>
+                      <p class="text-xs font-bold text-on-surface mt-0.5">&#8369;<?= number_format((float)$trip['fare_amount'], 2) ?></p>
+                    </div>
+                  </div>
+                  
+                  <div class="flex items-start gap-2.5">
+                    <span class="material-symbols-outlined text-[16px] text-primary mt-0.5">schedule</span>
+                    <div>
+                      <p class="text-[9px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">Time</p>
+                      <p class="text-xs font-bold text-on-surface mt-0.5">—</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            <?php endforeach; ?>
-          <?php else: ?>
-            <div
-              class="rounded-3xl bg-surface-container-lowest p-4 border border-surface-container-high shadow-sm"
-            >
-              <p class="text-sm font-semibold text-on-surface">
-                No trips yet
-              </p>
-            </div>
-          <?php endif; ?>
-        </section>
+              
+              <div class="flex items-center justify-between text-[10px] text-on-surface-variant pt-1">
+                <span>ID: <?= htmlspecialchars($trip['transaction_id'], ENT_QUOTES, 'UTF-8') ?></span>
+                <span class="font-medium text-primary">NFC Tap Validation</span>
+              </div>
+            </section>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <section class="phone-panel p-6 text-center">
+            <span class="material-symbols-outlined text-4xl text-on-surface-variant/40">history</span>
+            <p class="mt-2 text-sm font-semibold text-on-surface">No trips yet</p>
+            <p class="text-xs text-on-surface-variant mt-1">Your tap history will show up here after boarding a vehicle.</p>
+          </section>
+        <?php endif; ?>
       </main>
       <nav
         class="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[420px] flex items-center justify-around px-1 h-20 bg-white/95 backdrop-blur-md rounded-t-3xl border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"

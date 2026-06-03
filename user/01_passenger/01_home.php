@@ -11,9 +11,10 @@ $userId = (int) $_SESSION['user_id'];
 $fullName = trim($_SESSION['full_name'] ?? 'Passenger');
 $walletBalance = 0.00;
 $tapStatus = 'Waiting';
-$tapStatusClasses = 'inline-flex rounded-full bg-surface-container-high px-3 py-1 text-xs font-semibold text-primary';
+$tapStatusClasses = 'status-pill status-idle';
 $activeTripStatus = 'No active trip';
 $activeTripBadge = 'Idle';
+$activeTripBadgeClasses = 'status-pill status-idle';
 $boardedStop = '—';
 $currentStop = '—';
 $estimatedFare = '₱0.00';
@@ -55,11 +56,12 @@ if ($stmt = $conn->prepare(
     if ($stmt->fetch()) {
         $activeTripStatus = $tripStatus === 'active' ? 'On active trip' : ucfirst($tripStatus);
         $activeTripBadge = $tripStatus === 'active' ? 'Active' : ucfirst($tripStatus);
+        $activeTripBadgeClasses = $tripStatus === 'active' ? 'status-pill status-active' : 'status-pill status-idle';
         $boardedStop = $boardedStopResult ?: '—';
         $currentStop = $routeName ?: 'In transit';
         $estimatedFare = '₱0.00';
         $tapStatus = 'Active';
-        $tapStatusClasses = 'inline-flex rounded-full bg-primary-container px-3 py-1 text-xs font-semibold text-primary';
+        $tapStatusClasses = 'status-pill status-active';
     }
     $stmt->close();
 }
@@ -173,6 +175,7 @@ $activeNav = 'home';
         justify-content: center;
         background: #f8f9fa;
         overflow-x: hidden;
+        -webkit-tap-highlight-color: transparent;
       }
       #app-shell {
         width: min(100%, 420px);
@@ -198,6 +201,79 @@ $activeNav = 'home';
         background: #0040a1;
         color: #ffffff;
         box-shadow: 0 4px 12px rgba(0, 64, 161, 0.25);
+      }
+      .phone-panel {
+        border: 1px solid #e1e3e4;
+        border-radius: 1.75rem;
+        background: #ffffff;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+      }
+      .balance-panel {
+        border-radius: 1.75rem;
+        background: #0040a1;
+        color: #ffffff;
+        box-shadow: 0 10px 28px rgba(0, 64, 161, 0.22);
+      }
+      .icon-chip {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.875rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 1.625rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 9999px;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .status-idle {
+        background: #e7e8e9;
+        color: #424654;
+      }
+      .status-active {
+        background: #dae2ff;
+        color: #0040a1;
+      }
+      .home-action {
+        min-height: 2.625rem;
+        border-radius: 0.875rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        font-size: 0.8125rem;
+        font-weight: 700;
+      }
+      .trip-row {
+        display: grid;
+        grid-template-columns: 2rem minmax(0, 1fr);
+        gap: 0.65rem;
+        align-items: start;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #eef0f2;
+      }
+      .trip-row:last-child {
+        border-bottom: 0;
+      }
+      .quick-link {
+        min-height: 5.75rem;
+        border-radius: 1rem;
+        border: 1px solid #e1e3e4;
+        background: #ffffff;
+        padding: 0.875rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 0.5rem;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.035);
       }
     </style>
   </head>
@@ -234,30 +310,34 @@ $activeNav = 'home';
           </a>
         </div>
       </header>
-      <main class="pt-20 pb-28 min-h-screen px-4 space-y-4">
-        <section class="space-y-4">
-          <div class="rounded-[1.75rem] bg-primary text-white p-5 shadow-lg">
+      <main class="pt-20 pb-28 min-h-screen px-4 space-y-3">
+        <section class="space-y-3">
+          <div class="balance-panel p-5">
             <div class="flex items-center justify-between gap-4">
               <div>
-                <p class="text-sm opacity-80">Wallet Balance</p>
-                <p class="mt-2 text-3xl font-extrabold">₱<?= number_format($walletBalance, 2) ?></p>
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-white/75">Wallet balance</p>
+                <p class="mt-2 text-[2rem] leading-none font-extrabold tracking-tight">&#8369;<?= number_format($walletBalance, 2) ?></p>
               </div>
-              <div
-                class="inline-flex items-center gap-2 rounded-2xl bg-white/15 px-3 py-2 text-sm font-semibold"
-              >
+              <div class="icon-chip bg-white/15 text-white">
                 <span class="material-symbols-outlined"
                   >account_balance_wallet</span
                 >
-                Balance
               </div>
             </div>
-            <p class="mt-3 text-sm text-white/80">
-              Balance is used for NFC tap journeys only.
-            </p>
+            <div class="mt-4 grid grid-cols-2 gap-2.5">
+              <a href="03_wallet.php" class="home-action bg-white text-primary">
+                <span class="material-symbols-outlined text-[18px]">add</span>
+                Top up
+              </a>
+              <a href="02_routes.php" class="home-action bg-white/15 text-white">
+                <span class="material-symbols-outlined text-[18px]">directions_bus</span>
+                Routes
+              </a>
+            </div>
           </div>
 
           <div
-            class="rounded-[2rem] bg-white p-5 shadow-sm border border-outline-variant"
+            class="phone-panel p-4"
           >
             <div class="flex items-start justify-between gap-4">
               <div>
@@ -266,8 +346,8 @@ $activeNav = 'home';
                 >
                   NFC Tap
                 </p>
-                <h2 class="mt-2 text-xl font-semibold text-on-surface">
-                  Tap your card/phone to the reader
+                <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface">
+                  Ready for boarding
                 </h2>
               </div>
               <span
@@ -276,13 +356,12 @@ $activeNav = 'home';
                 <?= htmlspecialchars($tapStatus, ENT_QUOTES, 'UTF-8') ?>
               </span>
             </div>
-            <div class="mt-5 rounded-[1.75rem] bg-surface-container-low p-4 space-y-2">
-              <p class="text-sm text-on-surface-variant">
-                Ready to start. Place your NFC card or phone over the bus reader
-                to begin your ride.
+            <div class="mt-3 rounded-2xl bg-surface-container-low p-3 space-y-2">
+              <p class="text-xs leading-relaxed text-on-surface-variant">
+                Place your linked card or phone over the bus reader when you board.
               </p>
               <?php if ($nfcCardUid): ?>
-                <p class="text-sm text-on-surface-variant">
+                <p class="text-xs text-on-surface-variant">
                   NFC UID: <?= htmlspecialchars($nfcCardUid, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($nfcCardStatus, ENT_QUOTES, 'UTF-8') ?>
                 </p>
               <?php endif; ?>
@@ -290,63 +369,71 @@ $activeNav = 'home';
           </div>
 
           <div
-            class="rounded-[2rem] bg-surface-container-lowest p-5 shadow-sm border border-outline-variant"
+            class="phone-panel p-4"
           >
             <div class="flex items-center justify-between mb-4">
               <div>
-                <p class="text-sm text-on-surface-variant">Active Trip</p>
-                <h2 class="text-xl font-bold text-on-surface">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Active trip</p>
+                <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface truncate">
                   <?= htmlspecialchars($activeTripStatus, ENT_QUOTES, 'UTF-8') ?>
                 </h2>
               </div>
               <span
-                class="inline-flex rounded-full bg-surface-container-high px-3 py-1 text-xs font-semibold text-on-surface-variant"
+                class="<?= htmlspecialchars($activeTripBadgeClasses, ENT_QUOTES, 'UTF-8') ?>"
               >
                 <?= htmlspecialchars($activeTripBadge, ENT_QUOTES, 'UTF-8') ?>
               </span>
             </div>
-            <div class="grid grid-cols-2 gap-3 mb-4">
-              <div class="rounded-3xl bg-white p-4 shadow-sm">
-                <p
-                  class="text-[11px] uppercase tracking-[0.2em] text-on-surface-variant"
-                >
+            <div class="mb-3">
+              <div class="trip-row">
+                <span class="icon-chip bg-surface-container-low text-primary !h-8 !w-8">
+                  <span class="material-symbols-outlined text-[18px]">trip_origin</span>
+                </span>
+                <div class="min-w-0">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
                   Boarded stop
                 </p>
-                <p class="mt-2 font-semibold text-on-surface"><?= htmlspecialchars($boardedStop, ENT_QUOTES, 'UTF-8') ?></p>
+                <p class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($boardedStop, ENT_QUOTES, 'UTF-8') ?></p>
+                </div>
               </div>
-              <div class="rounded-3xl bg-white p-4 shadow-sm">
-                <p
-                  class="text-[11px] uppercase tracking-[0.2em] text-on-surface-variant"
-                >
-                  Current stop
+              <div class="trip-row">
+                <span class="icon-chip bg-surface-container-low text-primary !h-8 !w-8">
+                  <span class="material-symbols-outlined text-[18px]">route</span>
+                </span>
+                <div class="min-w-0">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
+                  Current route
                 </p>
-                <p class="mt-2 font-semibold text-on-surface"><?= htmlspecialchars($currentStop, ENT_QUOTES, 'UTF-8') ?></p>
+                <p class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($currentStop, ENT_QUOTES, 'UTF-8') ?></p>
+                </div>
               </div>
-              <div class="rounded-3xl bg-white p-4 shadow-sm col-span-2">
-                <p
-                  class="text-[11px] uppercase tracking-[0.2em] text-on-surface-variant"
-                >
+              <div class="trip-row">
+                <span class="icon-chip bg-surface-container-low text-primary !h-8 !w-8">
+                  <span class="material-symbols-outlined text-[18px]">payments</span>
+                </span>
+                <div class="min-w-0">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
                   Estimated fare
                 </p>
-                <p class="mt-2 font-semibold text-on-surface"><?= htmlspecialchars($estimatedFare, ENT_QUOTES, 'UTF-8') ?></p>
+                <p class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($estimatedFare, ENT_QUOTES, 'UTF-8') ?></p>
+                </div>
               </div>
             </div>
-            <p class="text-sm text-on-surface-variant">
-              Once tap is detected, the reader will track your boarding and
-              alighting stops automatically.
+            <p class="text-xs leading-relaxed text-on-surface-variant">
+              Tap activity updates your trip and fare automatically.
             </p>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
             <a
               href="03_wallet.php"
-              class="rounded-3xl bg-white border border-outline-variant p-4 flex flex-col gap-3 shadow-sm"
+              class="quick-link"
             >
-              <span class="material-symbols-outlined text-primary text-3xl"
+              <span class="material-symbols-outlined text-primary text-[26px]"
                 >account_balance_wallet</span
               >
               <div>
-                <p class="text-sm font-semibold">Wallet</p>
+                <p class="text-sm font-bold">Wallet</p>
                 <p class="text-xs text-on-surface-variant">
                   Balance and top-up
                 </p>
@@ -354,38 +441,38 @@ $activeNav = 'home';
             </a>
             <a
               href="04_trips.php"
-              class="rounded-3xl bg-white border border-outline-variant p-4 flex flex-col gap-3 shadow-sm"
+              class="quick-link"
             >
-              <span class="material-symbols-outlined text-primary text-3xl"
-                >receipt_long</span
+              <span class="material-symbols-outlined text-primary text-[26px]"
+                >history</span
               >
               <div>
-                <p class="text-sm font-semibold">Trips</p>
-                <p class="text-xs text-on-surface-variant">Journey history</p>
+                <p class="text-sm font-bold">Trips</p>
+                <p class="text-xs text-on-surface-variant">Ride history</p>
               </div>
             </a>
             <a
               href="02_routes.php"
-              class="rounded-3xl bg-white border border-outline-variant p-4 flex flex-col gap-3 shadow-sm"
+              class="quick-link"
             >
-              <span class="material-symbols-outlined text-primary text-3xl"
+              <span class="material-symbols-outlined text-primary text-[26px]"
                 >directions_bus</span
               >
               <div>
-                <p class="text-sm font-semibold">Routes</p>
-                <p class="text-xs text-on-surface-variant">Route details</p>
+                <p class="text-sm font-bold">Routes</p>
+                <p class="text-xs text-on-surface-variant">Live bus map</p>
               </div>
             </a>
             <a
               href="05_profile.php"
-              class="rounded-3xl bg-white border border-outline-variant p-4 flex flex-col gap-3 shadow-sm"
+              class="quick-link"
             >
-              <span class="material-symbols-outlined text-primary text-3xl"
+              <span class="material-symbols-outlined text-primary text-[26px]"
                 >person</span
               >
               <div>
-                <p class="text-sm font-semibold">Profile</p>
-                <p class="text-xs text-on-surface-variant">Account settings</p>
+                <p class="text-sm font-bold">Profile</p>
+                <p class="text-xs text-on-surface-variant">Card settings</p>
               </div>
             </a>
           </div>

@@ -8,7 +8,8 @@ session_start();
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 
-if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'driver') {
+$role = $_SESSION['role'] ?? '';
+if (empty($_SESSION['user_id']) || !in_array($role, ['driver', 'passenger'], true)) {
     http_response_code(401);
     echo json_encode(['error' => 'Unauthorized'], JSON_UNESCAPED_UNICODE);
     exit;

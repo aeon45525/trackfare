@@ -39,8 +39,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount'])) {
 // Fetch transaction history
 if ($stmt = $conn->prepare(
     'SELECT tt.transaction_id, tt.fare_amount, tt.boarding_stop_id, tt.alighting_stop_id, 
-            bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop
+            bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop,
+            r.display_name AS route_name
      FROM trip_transactions tt
+     LEFT JOIN trips t ON tt.trip_id = t.trip_id
+     LEFT JOIN routes r ON t.route_id = r.route_id
      LEFT JOIN stops bs ON tt.boarding_stop_id = bs.stop_id
      LEFT JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id
      WHERE tt.user_id = ?
@@ -164,6 +167,7 @@ $activeNav = 'wallet';
         justify-content: center;
         background: #f8f9fa;
         overflow-x: hidden;
+        -webkit-tap-highlight-color: transparent;
       }
       #app-shell {
         width: min(100%, 420px);
@@ -189,6 +193,56 @@ $activeNav = 'wallet';
         background: #0040a1;
         color: #ffffff;
         box-shadow: 0 4px 12px rgba(0, 64, 161, 0.25);
+      }
+      .phone-panel {
+        border: 1px solid #e1e3e4;
+        border-radius: 1.75rem;
+        background: #ffffff;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+      }
+      .balance-panel {
+        border-radius: 1.75rem;
+        background: #0040a1;
+        color: #ffffff;
+        box-shadow: 0 10px 28px rgba(0, 64, 161, 0.22);
+      }
+      .icon-chip {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.875rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 1.625rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 9999px;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .status-idle {
+        background: #e7e8e9;
+        color: #424654;
+      }
+      .status-active {
+        background: #dae2ff;
+        color: #0040a1;
+      }
+      @keyframes pop-in {
+        from {
+          transform: scale(0.96);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
       }
     </style>
   </head>
@@ -225,33 +279,32 @@ $activeNav = 'wallet';
           </a>
         </div>
       </header>
-      <main class="pt-20 pb-28 min-h-screen px-4 space-y-4">
-        <section class="rounded-[1.75rem] bg-primary text-white p-5 shadow-lg">
+      <main class="pt-20 pb-28 min-h-screen px-4 space-y-3.5">
+        <section class="balance-panel p-5">
           <div class="flex items-center justify-between gap-4">
             <div>
-              <p class="text-sm opacity-80">Current balance</p>
-              <p class="mt-3 text-4xl font-extrabold">₱<?= number_format($walletBalance, 2) ?></p>
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-white/75">Current balance</p>
+              <p class="mt-2 text-[2rem] leading-none font-extrabold tracking-tight">&#8369;<?= number_format($walletBalance, 2) ?></p>
+            </div>
+            <div class="icon-chip bg-white/15 text-white">
+              <span class="material-symbols-outlined">account_balance_wallet</span>
             </div>
           </div>
-          <p class="mt-4 text-sm text-white/85">
+          <p class="mt-4 text-xs text-white/80 leading-relaxed">
             Your wallet balance is reserved for NFC tap journeys only.
           </p>
         </section>
 
-        <section
-          class="rounded-[1.75rem] bg-white p-5 shadow-sm border border-outline-variant"
-        >
+        <section class="phone-panel p-5">
           <div class="flex items-center justify-between mb-4">
             <div>
-              <p class="text-sm text-on-surface-variant">Quick top-up</p>
-              <h2 class="mt-2 text-xl font-semibold text-on-surface">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Quick top-up</p>
+              <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface">
                 Add funds
               </h2>
             </div>
-            <span
-              class="inline-flex rounded-full bg-surface-container-high px-3 py-1 text-xs font-semibold text-primary"
-            >
-              ₱50 / ₱100 / ₱200
+            <span class="status-pill status-active">
+              Presets
             </span>
           </div>
           <form method="POST" class="grid grid-cols-3 gap-3">
@@ -259,69 +312,69 @@ $activeNav = 'wallet';
               type="submit"
               name="amount"
               value="50"
-              class="rounded-3xl bg-surface-container-low py-4 text-sm font-semibold text-on-surface shadow-sm hover:bg-surface-container transition"
+              class="min-h-[2.875rem] rounded-2xl bg-surface-container-low text-xs font-bold text-on-surface hover:bg-surface-container transition flex items-center justify-center gap-1"
             >
-              Add ₱50
+              <span class="material-symbols-outlined text-[16px] text-primary">add</span>
+              &#8369;50
             </button>
             <button
               type="submit"
               name="amount"
               value="100"
-              class="rounded-3xl bg-surface-container-low py-4 text-sm font-semibold text-on-surface shadow-sm hover:bg-surface-container transition"
+              class="min-h-[2.875rem] rounded-2xl bg-surface-container-low text-xs font-bold text-on-surface hover:bg-surface-container transition flex items-center justify-center gap-1"
             >
-              Add ₱100
+              <span class="material-symbols-outlined text-[16px] text-primary">add</span>
+              &#8369;100
             </button>
             <button
               type="submit"
               name="amount"
               value="200"
-              class="rounded-3xl bg-surface-container-low py-4 text-sm font-semibold text-on-surface shadow-sm hover:bg-surface-container transition"
+              class="min-h-[2.875rem] rounded-2xl bg-surface-container-low text-xs font-bold text-on-surface hover:bg-surface-container transition flex items-center justify-center gap-1"
             >
-              Add ₱200
+              <span class="material-symbols-outlined text-[16px] text-primary">add</span>
+              &#8369;200
             </button>
           </form>
         </section>
 
-        <section
-          class="rounded-[1.75rem] bg-surface-container-lowest p-5 shadow-sm border border-outline-variant"
-        >
+        <section class="phone-panel p-5">
           <div class="flex items-center justify-between mb-4">
             <div>
-              <p class="text-sm text-on-surface-variant">Transaction history</p>
-              <h2 class="mt-2 text-xl font-semibold text-on-surface">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Transaction history</p>
+              <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface">
                 Recent activity
               </h2>
             </div>
-            <span
-              class="text-xs uppercase tracking-[0.2em] text-on-surface-variant"
-              >Latest</span
-            >
+            <span class="status-pill status-idle">LATEST</span>
           </div>
           <div class="space-y-3">
             <?php if (count($transactions) > 0): ?>
               <?php foreach ($transactions as $txn): ?>
-                <div
-                  class="rounded-3xl bg-white p-4 shadow-sm border border-surface-container-high"
-                >
+                <div class="rounded-2xl bg-surface-container-low p-3.5 border border-surface-container-high/60">
                   <div class="flex items-center justify-between gap-3">
-                    <div>
-                      <p class="font-semibold text-on-surface">Fare deduction</p>
-                      <p class="text-xs text-on-surface-variant mt-1">
-                        <?= htmlspecialchars($txn['boarding_stop'] ?? 'Unknown', ENT_QUOTES, 'UTF-8') ?> → <?= htmlspecialchars($txn['alighting_stop'] ?? 'Unknown', ENT_QUOTES, 'UTF-8') ?>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px] text-error">payments</span>
+                        <p class="font-bold text-xs text-on-surface leading-tight truncate">
+                          <?= htmlspecialchars($txn['route_name'] ?? 'Unknown Route', ENT_QUOTES, 'UTF-8') ?>
+                        </p>
+                      </div>
+                      <p class="text-[10px] text-on-surface-variant mt-1.5 font-medium truncate">
+                        <?= htmlspecialchars($txn['boarding_stop'] ?? 'Unknown', ENT_QUOTES, 'UTF-8') ?> &rarr; <?= htmlspecialchars($txn['alighting_stop'] ?? 'Unknown', ENT_QUOTES, 'UTF-8') ?>
                       </p>
                     </div>
-                    <span class="text-sm font-bold text-error">-₱<?= number_format((float)$txn['fare_amount'], 2) ?></span>
+                    <span class="text-xs font-extrabold text-error whitespace-nowrap">-&#8369;<?= number_format((float)$txn['fare_amount'], 2) ?></span>
                   </div>
-                  <p class="mt-3 text-[11px] text-on-surface-variant">
-                    Transaction ID: <?= htmlspecialchars($txn['transaction_id'], ENT_QUOTES, 'UTF-8') ?>
-                  </p>
+                  <div class="mt-3 pt-2.5 border-t border-surface-container-highest flex items-center justify-between text-[10px] text-on-surface-variant">
+                    <span>ID: <?= htmlspecialchars($txn['transaction_id'], ENT_QUOTES, 'UTF-8') ?></span>
+                    <span class="font-medium text-primary">Completed</span>
+                  </div>
                 </div>
               <?php endforeach; ?>
             <?php else: ?>
-              <div
-                class="rounded-3xl bg-white p-4 shadow-sm border border-surface-container-high text-center"
-              >
-                <p class="text-sm text-on-surface-variant">No transaction history yet</p>
+              <div class="rounded-2xl bg-surface-container-low p-4 text-center">
+                <p class="text-xs text-on-surface-variant font-medium">No transaction history yet</p>
               </div>
             <?php endif; ?>
           </div>

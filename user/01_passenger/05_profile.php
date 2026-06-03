@@ -142,7 +142,8 @@ if ($stmt = $conn->prepare('SELECT uid, is_active FROM nfc_cards WHERE user_id =
     $stmt->close();
 }
 
-$frequentRouteLabel = '—';
+$frequentRouteName = '—';
+$frequentStopsLabel = '—';
 
 if ($stmt = $conn->prepare('SELECT COUNT(*) AS trip_count, COALESCE(SUM(fare_amount), 0) AS fare_spent FROM trip_transactions WHERE user_id = ?')) {
     $stmt->bind_param('i', $userId);
@@ -155,31 +156,36 @@ if ($stmt = $conn->prepare('SELECT COUNT(*) AS trip_count, COALESCE(SUM(fare_amo
 }
 
 if ($stmt = $conn->prepare(
-    'SELECT bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop, COUNT(*) AS route_count
+    'SELECT r.display_name AS route_name, bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop, COUNT(*) AS route_count
      FROM trip_transactions tt
+     LEFT JOIN trips t ON tt.trip_id = t.trip_id
+     LEFT JOIN routes r ON t.route_id = r.route_id
      LEFT JOIN stops bs ON tt.boarding_stop_id = bs.stop_id
      LEFT JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id
      WHERE tt.user_id = ?
-     GROUP BY tt.boarding_stop_id, tt.alighting_stop_id
+     GROUP BY t.route_id, tt.boarding_stop_id, tt.alighting_stop_id
      ORDER BY route_count DESC
      LIMIT 1'
 )) {
     $stmt->bind_param('i', $userId);
     $stmt->execute();
-    $stmt->bind_result($freqBoarding, $freqAlighting, $routeCount);
+    $stmt->bind_result($freqRouteName, $freqBoarding, $freqAlighting, $routeCount);
     if ($stmt->fetch()) {
+        $frequentRouteName = $freqRouteName ?: 'Unknown Route';
         if (!empty($freqBoarding) && !empty($freqAlighting)) {
-            $frequentRouteLabel = $freqBoarding . ' → ' . $freqAlighting;
+            $frequentStopsLabel = $freqBoarding . ' → ' . $freqAlighting;
         } elseif (!empty($freqBoarding)) {
-            $frequentRouteLabel = $freqBoarding;
+            $frequentStopsLabel = $freqBoarding;
         }
     }
     $stmt->close();
 }
 
 if ($stmt = $conn->prepare(
-    'SELECT tt.fare_amount, bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop
+    'SELECT tt.fare_amount, bs.stop_name AS boarding_stop, as_stop.stop_name AS alighting_stop, r.display_name AS route_name
      FROM trip_transactions tt
+     LEFT JOIN trips t ON tt.trip_id = t.trip_id
+     LEFT JOIN routes r ON t.route_id = r.route_id
      LEFT JOIN stops bs ON tt.boarding_stop_id = bs.stop_id
      LEFT JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id
      WHERE tt.user_id = ?
@@ -195,12 +201,15 @@ if ($stmt = $conn->prepare(
     $stmt->close();
 }
 
+$lastTripName = '—';
+$lastTripStops = '—';
 if (!empty($recentTrips)) {
     $firstTrip = $recentTrips[0];
+    $lastTripName = $firstTrip['route_name'] ?: 'Unknown Route';
     if (!empty($firstTrip['boarding_stop']) && !empty($firstTrip['alighting_stop'])) {
-        $lastTripLabel = $firstTrip['boarding_stop'] . ' → ' . $firstTrip['alighting_stop'];
+        $lastTripStops = $firstTrip['boarding_stop'] . ' → ' . $firstTrip['alighting_stop'];
     } elseif (!empty($firstTrip['boarding_stop'])) {
-        $lastTripLabel = $firstTrip['boarding_stop'];
+        $lastTripStops = $firstTrip['boarding_stop'];
     }
 }
 
@@ -315,6 +324,7 @@ $activeNav = 'profile';
         justify-content: center;
         background: #f8f9fa;
         overflow-x: hidden;
+        -webkit-tap-highlight-color: transparent;
       }
       #app-shell {
         width: min(100%, 420px);
@@ -340,6 +350,56 @@ $activeNav = 'profile';
         background: #0040a1;
         color: #ffffff;
         box-shadow: 0 4px 12px rgba(0, 64, 161, 0.25);
+      }
+      .phone-panel {
+        border: 1px solid #e1e3e4;
+        border-radius: 1.75rem;
+        background: #ffffff;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+      }
+      .balance-panel {
+        border-radius: 1.75rem;
+        background: #0040a1;
+        color: #ffffff;
+        box-shadow: 0 10px 28px rgba(0, 64, 161, 0.22);
+      }
+      .icon-chip {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.875rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 1.625rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 9999px;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .status-idle {
+        background: #e7e8e9;
+        color: #424654;
+      }
+      .status-active {
+        background: #dae2ff;
+        color: #0040a1;
+      }
+      @keyframes pop-in {
+        from {
+          transform: scale(0.96);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
       }
     </style>
   </head>
@@ -376,286 +436,254 @@ $activeNav = 'profile';
           </a>
         </div>
       </header>
-      <main class="pt-20 pb-28 min-h-screen px-4 space-y-4">
-        <section class="rounded-[1.75rem] bg-primary text-white p-5 shadow-lg">
+      <main class="pt-20 pb-28 min-h-screen px-4 space-y-3.5">
+        <section class="balance-panel p-5">
           <div class="flex items-center gap-4">
-            <div
-              class="h-20 w-20 rounded-3xl overflow-hidden border border-white/20"
-            >
+            <div class="h-16 w-16 rounded-2xl overflow-hidden border-2 border-white/30 shrink-0">
               <img
                 src="../../images/pfp.png"
                 alt="Passenger avatar"
                 class="h-full w-full object-cover"
               />
             </div>
-            <div class="flex-1">
-              <p class="text-sm opacity-80">TrackFare Passenger</p>
-              <h2 class="mt-2 text-2xl font-bold"><?= escape($fullName) ?></h2>
-              <p class="mt-1 text-sm text-white/80"><?= escape($email) ?></p>
+            <div class="min-w-0 flex-1">
+              <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/75">TrackFare Passenger</p>
+              <h2 class="mt-1 text-xl font-extrabold tracking-tight text-white truncate"><?= escape($fullName) ?></h2>
+              <p class="text-xs text-white/80 truncate mt-0.5"><?= escape($email) ?></p>
             </div>
           </div>
-          <div class="mt-5 grid gap-3 sm:grid-cols-2">
-            <div class="rounded-3xl bg-white/10 p-4">
-              <p class="text-xs uppercase tracking-[0.25em] text-white/70">
-                Trips
-              </p>
-              <p class="mt-2 text-2xl font-extrabold"><?= number_format($tripCount) ?></p>
+          <div class="mt-4 grid grid-cols-2 gap-2.5">
+            <div class="rounded-2xl bg-white/10 p-3 flex flex-col justify-between">
+              <p class="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/70">Trips Taken</p>
+              <p class="mt-1.5 text-lg font-extrabold tracking-tight"><?= number_format($tripCount) ?></p>
             </div>
-            <div class="rounded-3xl bg-white/10 p-4">
-              <p class="text-xs uppercase tracking-[0.25em] text-white/70">
-                Wallet Balance
-              </p>
-              <p class="mt-2 text-2xl font-extrabold">₱<?= number_format($walletBalance, 2) ?></p>
+            <div class="rounded-2xl bg-white/10 p-3 flex flex-col justify-between">
+              <p class="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/70">Wallet Balance</p>
+              <p class="mt-1.5 text-lg font-extrabold tracking-tight">&#8369;<?= number_format($walletBalance, 2) ?></p>
             </div>
           </div>
         </section>
 
-        <section
-          class="rounded-[1.75rem] bg-white p-5 shadow-sm border border-outline-variant"
-        >
-          <div class="flex items-center justify-between gap-3">
+        <section class="phone-panel p-5">
+          <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-on-surface-variant">Travel Statistics</p>
-              <h2 class="mt-2 text-xl font-semibold text-on-surface">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Travel Statistics</p>
+              <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface">
                 Journey Summary
               </h2>
             </div>
-            <span class="text-xs uppercase tracking-[0.3em] text-primary">
-              updated today
-            </span>
+            <span class="status-pill status-active">TODAY</span>
           </div>
-          <div class="mt-5 grid gap-3 sm:grid-cols-2">
-            <div class="rounded-3xl bg-surface-container-lowest p-4">
-              <p class="text-xs uppercase tracking-[0.25em] text-on-surface-variant">
-                Total Trips
-              </p>
-              <p class="mt-2 text-xl font-bold text-on-surface"><?= number_format($tripCount) ?></p>
+          <div class="mt-4 grid grid-cols-2 gap-2.5">
+            <div class="rounded-2xl bg-surface-container-low p-3">
+              <p class="text-[9px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Total Trips</p>
+              <p class="mt-1 text-base font-extrabold text-on-surface"><?= number_format($tripCount) ?></p>
             </div>
-            <div class="rounded-3xl bg-surface-container-lowest p-4">
-              <p class="text-xs uppercase tracking-[0.25em] text-on-surface-variant">
-                Fare Spent
-              </p>
-              <p class="mt-2 text-xl font-bold text-on-surface">₱<?= number_format($fareSpent, 2) ?></p>
+            <div class="rounded-2xl bg-surface-container-low p-3">
+              <p class="text-[9px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Total Spent</p>
+              <p class="mt-1 text-base font-extrabold text-on-surface">&#8369;<?= number_format($fareSpent, 2) ?></p>
             </div>
-            <div class="rounded-3xl bg-surface-container-lowest p-4">
-              <p class="text-xs uppercase tracking-[0.25em] text-on-surface-variant">
-                Frequent Route
-              </p>
-              <p class="mt-2 text-base font-semibold text-on-surface">
-                <?= escape($frequentRouteLabel) ?>
-              </p>
+            <div class="rounded-2xl bg-surface-container-low p-3 col-span-2">
+              <p class="text-[9px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Frequent Route</p>
+              <p class="mt-1 text-xs font-bold text-on-surface truncate"><?= escape($frequentRouteName) ?></p>
+              <p class="text-[10px] text-on-surface-variant mt-0.5 truncate"><?= escape($frequentStopsLabel) ?></p>
             </div>
-            <div class="rounded-3xl bg-surface-container-lowest p-4">
-              <p class="text-xs uppercase tracking-[0.25em] text-on-surface-variant">
-                Last Trip
-              </p>
-              <p class="mt-2 text-base font-semibold text-on-surface">
-                <?= escape($lastTripLabel) ?>
-              </p>
+            <div class="rounded-2xl bg-surface-container-low p-3 col-span-2">
+              <p class="text-[9px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Last Trip</p>
+              <p class="mt-1 text-xs font-bold text-on-surface truncate"><?= escape($lastTripName) ?></p>
+              <p class="text-[10px] text-on-surface-variant mt-0.5 truncate"><?= escape($lastTripStops) ?></p>
             </div>
           </div>
         </section>
 
-        <section
-          class="rounded-[1.75rem] bg-white p-5 shadow-sm border border-outline-variant"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <p class="text-sm text-on-surface-variant">NFC Card</p>
-              <h2 class="mt-2 text-xl font-semibold text-on-surface">
-                <?= escape($nfcMasked) ?>
+        <section class="phone-panel p-5">
+          <div class="flex items-center justify-between gap-4">
+            <div class="min-w-0 flex-1">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">NFC ID</p>
+              <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface truncate">
+                <?= escape($nfcUid) ?>
               </h2>
             </div>
-            <div class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold <?= $nfcStatusClass ?>">
-              <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-              <?= escape($nfcStatusText) ?>
-            </div>
+            <?php
+            $nfcIsActive = $nfcStatusText === 'Active / Ready';
+            $badgeClass = $nfcIsActive ? 'status-active' : 'status-idle';
+            ?>
+            <span class="status-pill <?= $badgeClass ?>"><?= $nfcIsActive ? 'Active' : 'Inactive' ?></span>
           </div>
-          <div class="mt-4 rounded-3xl bg-surface-container-lowest p-4 border border-slate-200">
-            <div class="flex items-center justify-between gap-4">
-              <div>
-                <p class="text-xs uppercase tracking-[0.25em] text-on-surface-variant">
-                  NFC UID
-                </p>
-                <p class="mt-2 text-base font-semibold text-on-surface">
-                  <?= escape($nfcUid) ?>
-                </p>
-              </div>
-              <span class="inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                <?= $nfcStatusText === 'Active / Ready' ? 'Ready to tap' : 'Not linked' ?>
-              </span>
-            </div>
-          </div>
-          <p class="mt-4 text-sm text-on-surface-variant">
-            Used for tap-in fare verification and fast boarding on TrackFare buses.
-          </p>
         </section>
 
-        <section
-          class="rounded-[1.75rem] bg-white p-5 shadow-sm border border-outline-variant"
-        >
+        <section class="phone-panel p-5">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <p class="text-sm text-on-surface-variant">Recent Trips Preview</p>
-              <h2 class="mt-2 text-xl font-semibold text-on-surface">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Recent Trips Preview</p>
+              <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface">
                 Latest rides
               </h2>
             </div>
-            <button
-              class="rounded-full border border-outline-variant px-3 py-2 text-xs font-semibold text-on-surface-variant transition hover:bg-surface-container-high"
+            <a
+              href="04_trips.php"
+              class="status-pill status-active hover:bg-primary hover:text-white transition"
             >
-              View All Trips
-            </button>
+              View All
+            </a>
           </div>
-          <div class="mt-5 space-y-3">
+          <div class="mt-4 space-y-2.5">
             <?php if (!empty($recentTrips)): ?>
               <?php foreach ($recentTrips as $trip): ?>
-                <div class="rounded-3xl bg-surface-container-lowest p-4">
+                <div class="rounded-2xl bg-surface-container-low p-3.5 border border-surface-container-high/60">
                   <div class="flex items-center justify-between gap-3">
-                    <div>
-                      <p class="font-semibold text-on-surface">
-                        <?= escape(trim(($trip['boarding_stop'] ?? '') . ' → ' . ($trip['alighting_stop'] ?? ''))) ?>
-                      </p>
-                      <p class="mt-1 text-sm text-on-surface-variant">
-                        —
-                      </p>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px] text-primary">directions_bus</span>
+                        <p class="font-bold text-xs text-on-surface leading-tight truncate">
+                          <?= escape($trip['route_name'] ?: 'Unknown Route') ?>
+                        </p>
+                      </div>
+                      <?php if (!empty($trip['boarding_stop']) && !empty($trip['alighting_stop'])): ?>
+                        <p class="text-[10px] text-on-surface-variant mt-1.5 font-medium truncate">
+                          <?= escape($trip['boarding_stop'] . ' → ' . $trip['alighting_stop']) ?>
+                        </p>
+                      <?php endif; ?>
                     </div>
-                    <p class="font-semibold text-on-surface">₱<?= number_format((float)$trip['fare_amount'], 2) ?></p>
+                    <span class="text-xs font-extrabold text-on-surface">&#8369;<?= number_format((float)$trip['fare_amount'], 2) ?></span>
                   </div>
                 </div>
               <?php endforeach; ?>
             <?php else: ?>
-              <div class="rounded-3xl bg-surface-container-lowest p-4">
-                <div class="text-sm text-on-surface-variant">No recent trips yet</div>
+              <div class="rounded-2xl bg-surface-container-low p-4 text-center">
+                <p class="text-xs text-on-surface-variant font-medium">No recent trips yet</p>
               </div>
             <?php endif; ?>
           </div>
         </section>
 
-        <section
-          class="rounded-[1.75rem] bg-surface-container-lowest p-5 shadow-sm border border-outline-variant space-y-3"
-        >
+        <section class="phone-panel p-5 space-y-3">
           <button
             type="button"
             onclick="openModal('edit-profile-modal')"
-            class="w-full rounded-3xl bg-primary px-4 py-4 text-sm font-semibold text-white transition hover:bg-primary/90"
+            class="w-full min-h-[3rem] rounded-2xl bg-primary text-xs font-bold text-white transition hover:bg-primary/90 flex items-center justify-center gap-1.5"
           >
+            <span class="material-symbols-outlined text-[18px]">edit</span>
             Edit Profile
           </button>
           <button
             type="button"
             onclick="openModal('change-password-modal')"
-            class="w-full rounded-3xl bg-white border border-outline-variant px-4 py-4 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high"
+            class="w-full min-h-[3rem] rounded-2xl bg-white border border-outline-variant text-xs font-bold text-on-surface transition hover:bg-surface-container-low flex items-center justify-center gap-1.5"
           >
+            <span class="material-symbols-outlined text-[18px]">lock</span>
             Change Password
           </button>
           <form method="post" class="w-full">
             <input type="hidden" name="form_action" value="logout" />
             <button
               type="submit"
-              class="w-full rounded-3xl border border-error text-error px-4 py-4 font-semibold transition hover:bg-error/10"
+              class="w-full min-h-[3rem] rounded-2xl border border-error text-error text-xs font-bold transition hover:bg-error/5 flex items-center justify-center gap-1.5"
             >
-              Logout
+              <span class="material-symbols-outlined text-[18px]">logout</span>
+              Logout Account
             </button>
           </form>
         </section>
       </main>
 
-      <div id="edit-profile-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm <?= $showEditModal ? '' : 'hidden' ?>">
-        <div class="flex h-full items-center justify-center p-4">
-          <div class="w-full max-w-[420px] rounded-[1.75rem] bg-white p-5 shadow-lg">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <h2 class="text-lg font-semibold">Edit Profile</h2>
-                <p class="text-sm text-slate-500">Update your name and email.</p>
-              </div>
-              <button type="button" onclick="closeModal('edit-profile-modal')" class="text-slate-500 hover:text-slate-900">✕</button>
+      <!-- Edit Profile Modal -->
+      <div id="edit-profile-modal" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm <?= $showEditModal ? '' : 'hidden' ?> flex items-center justify-center p-4">
+        <div class="w-full max-w-[340px] rounded-[1.75rem] bg-white border border-outline-variant p-5 shadow-2xl animate-[pop-in_0.2s_ease-out]">
+          <div class="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h2 class="text-base font-extrabold text-on-surface">Edit Profile</h2>
+              <p class="text-[11px] text-on-surface-variant mt-0.5">Update your personal details</p>
             </div>
-            <?php if ($editProfileMessage !== ''): ?>
-              <div class="mb-4 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
-                <?= escape($editProfileMessage) ?>
-              </div>
-            <?php endif; ?>
-            <form method="post" class="space-y-4">
-              <input type="hidden" name="form_action" value="edit_profile" />
-              <div>
-                <label class="text-sm font-medium text-slate-700">Full Name</label>
-                <input
-                  type="text"
-                  name="full_name"
-                  value="<?= escape($fullName) ?>"
-                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                />
-              </div>
-              <div>
-                <label class="text-sm font-medium text-slate-700">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value="<?= escape($email) ?>"
-                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                />
-              </div>
-              <button
-                type="submit"
-                class="w-full rounded-3xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-primary/90"
-              >
-                Save Changes
-              </button>
-            </form>
+            <button type="button" onclick="closeModal('edit-profile-modal')" class="h-7 w-7 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant hover:text-on-surface transition">
+              <span class="material-symbols-outlined text-[16px]">close</span>
+            </button>
           </div>
+          <?php if ($editProfileMessage !== ''): ?>
+            <div class="mb-4 rounded-xl bg-surface-container px-3.5 py-2.5 text-xs text-on-surface font-medium">
+              <?= escape($editProfileMessage) ?>
+            </div>
+          <?php endif; ?>
+          <form method="post" class="space-y-4">
+            <input type="hidden" name="form_action" value="edit_profile" />
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Full Name</label>
+              <input
+                type="text"
+                name="full_name"
+                value="<?= escape($fullName) ?>"
+                class="w-full rounded-2xl border border-outline-variant bg-white px-3.5 py-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Email Address</label>
+              <input
+                type="email"
+                name="email"
+                value="<?= escape($email) ?>"
+                class="w-full rounded-2xl border border-outline-variant bg-white px-3.5 py-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+            <button
+              type="submit"
+              class="w-full min-h-[2.75rem] rounded-2xl bg-primary text-xs font-bold text-white hover:bg-primary/90 transition shadow-sm mt-2"
+            >
+              Save Changes
+            </button>
+          </form>
         </div>
       </div>
 
-      <div id="change-password-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm <?= $showChangePasswordModal ? '' : 'hidden' ?>">
-        <div class="flex h-full items-center justify-center p-4">
-          <div class="w-full max-w-[420px] rounded-[1.75rem] bg-white p-5 shadow-lg">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <h2 class="text-lg font-semibold">Change Password</h2>
-                <p class="text-sm text-slate-500">Update your account password.</p>
-              </div>
-              <button type="button" onclick="closeModal('change-password-modal')" class="text-slate-500 hover:text-slate-900">✕</button>
+      <!-- Change Password Modal -->
+      <div id="change-password-modal" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm <?= $showChangePasswordModal ? '' : 'hidden' ?> flex items-center justify-center p-4">
+        <div class="w-full max-w-[340px] rounded-[1.75rem] bg-white border border-outline-variant p-5 shadow-2xl animate-[pop-in_0.2s_ease-out]">
+          <div class="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h2 class="text-base font-extrabold text-on-surface">Change Password</h2>
+              <p class="text-[11px] text-on-surface-variant mt-0.5">Update your account security</p>
             </div>
-            <?php if ($changePasswordMessage !== ''): ?>
-              <div class="mb-4 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
-                <?= escape($changePasswordMessage) ?>
-              </div>
-            <?php endif; ?>
-            <form method="post" class="space-y-4">
-              <input type="hidden" name="form_action" value="change_password" />
-              <div>
-                <label class="text-sm font-medium text-slate-700">Current Password</label>
-                <input
-                  type="password"
-                  name="current_password"
-                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                />
-              </div>
-              <div>
-                <label class="text-sm font-medium text-slate-700">New Password</label>
-                <input
-                  type="password"
-                  name="new_password"
-                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                />
-              </div>
-              <div>
-                <label class="text-sm font-medium text-slate-700">Confirm Password</label>
-                <input
-                  type="password"
-                  name="confirm_password"
-                  class="mt-2 w-full rounded-3xl border border-slate-200 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                />
-              </div>
-              <button
-                type="submit"
-                class="w-full rounded-3xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-primary/90"
-              >
-                Change Password
-              </button>
-            </form>
+            <button type="button" onclick="closeModal('change-password-modal')" class="h-7 w-7 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant hover:text-on-surface transition">
+              <span class="material-symbols-outlined text-[16px]">close</span>
+            </button>
           </div>
+          <?php if ($changePasswordMessage !== ''): ?>
+            <div class="mb-4 rounded-xl bg-surface-container px-3.5 py-2.5 text-xs text-on-surface font-medium">
+              <?= escape($changePasswordMessage) ?>
+            </div>
+          <?php endif; ?>
+          <form method="post" class="space-y-4">
+            <input type="hidden" name="form_action" value="change_password" />
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Current Password</label>
+              <input
+                type="password"
+                name="current_password"
+                class="w-full rounded-2xl border border-outline-variant bg-white px-3.5 py-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">New Password</label>
+              <input
+                type="password"
+                name="new_password"
+                class="w-full rounded-2xl border border-outline-variant bg-white px-3.5 py-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Confirm Password</label>
+              <input
+                type="password"
+                name="confirm_password"
+                class="w-full rounded-2xl border border-outline-variant bg-white px-3.5 py-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+            <button
+              type="submit"
+              class="w-full min-h-[2.75rem] rounded-2xl bg-primary text-xs font-bold text-white hover:bg-primary/90 transition shadow-sm mt-2"
+            >
+              Update Password
+            </button>
+          </form>
         </div>
       </div>
 
