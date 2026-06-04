@@ -1,13 +1,13 @@
 <?php
 /**
  * Global fare calculation for TrackFare.
- * Rate: ₱15 for the first km, then ₱2.50 per succeeding km.
+ * Rate: ₱15 for the first 5km, then ₱2.50 per succeeding km.
  * Distance is summed along route stop coordinates (haversine).
  */
 
 const FARE_FIRST_KM_PHP       = 15.00;
 const FARE_PER_KM_AFTER_PHP    = 2.50;
-const FARE_INCLUDED_KM         = 1.0;
+const FARE_INCLUDED_KM         = 5.0;
 
 /** Normalize UID from PN532 POST body (e.g. "62 BB 1D 07") for nfc_cards lookup. */
 function normalize_nfc_uid(string $raw): string
@@ -317,4 +317,58 @@ function fare_estimate_for_active_passenger(
     int $alightingStopId
 ): array {
     return fare_for_boarding_and_alighting($conn, $routeId, $boardingStopId, $alightingStopId);
+}
+
+/**
+ * Get current fare information for an active passenger.
+ * @return array{ok: bool, fare_now: float, distance_now: float, fare_max: float, distance_max: float, boarding_stop: string, current_stop_index: int, message: string}
+ */
+function get_passenger_fare_info(mysqli $conn, int $userId): array
+{
+    $active = null;
+    if ($stmt = $conn->prepare(
+        'SELECT ap.trip_id, ap.boarding_stop_id, t.route_id, t.current_stop_index, s.stop_name AS boarding_stop
+         FROM active_passengers ap
+         JOIN trips t ON ap.trip_id = t.trip_id
+         JOIN stops s ON ap.boarding_stop_id = s.stop_id
+         WHERE ap.user_id = ? AND t.status = ?'
+    )) {
+        $status = 'active';
+        $stmt->bind_param('is', $userId, $status);
+        $stmt->execute();
+        $active = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+    }
+
+    if (!$active) {
+        return ['ok' => false, 'message' => 'NOT ON TRIP', 'fare_now' => 0.0, 'distance_now' => 0.0, 'fare_max' => 0.0, 'distance_max' => 0.0, 'boarding_stop' => '', 'current_stop_index' => 0];
+    }
+
+    $tripId = (int) $active['trip_id'];
+    $routeId = (int) $active['route_id'];
+    $boardingStopId = (int) $active['boarding_stop_id'];
+    $currentStopIndex = (int) $active['current_stop_index'];
+
+    $currentStopId = get_route_stop_id_at_index($conn, $routeId, $currentStopIndex);
+    if ($currentStopId === null) {
+        return ['ok' => false, 'message' => 'INVALID STOP', 'fare_now' => 0.0, 'distance_now' => 0.0, 'fare_max' => 0.0, 'distance_max' => 0.0, 'boarding_stop' => '', 'current_stop_index' => 0];
+    }
+
+    $fareData = fare_for_boarding_and_alighting($conn, $routeId, $boardingStopId, $currentStopId);
+
+    $lastStopId = get_route_last_stop_id($conn, $routeId);
+    $maxFareData = $lastStopId !== null
+        ? fare_for_boarding_and_alighting($conn, $routeId, $boardingStopId, $lastStopId)
+        : $fareData;
+
+    return [
+        'ok' => true,
+        'fare_now' => $fareData['fare'],
+        'distance_now' => $fareData['distance_km'],
+        'fare_max' => $maxFareData['fare'],
+        'distance_max' => $maxFareData['distance_km'],
+        'boarding_stop' => $active['boarding_stop'],
+        'current_stop_index' => $currentStopIndex,
+        'message' => 'SUCCESS'
+    ];
 }

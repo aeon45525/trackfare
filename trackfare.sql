@@ -12,6 +12,8 @@ CREATE TABLE users (
     password      VARCHAR(255) NOT NULL,
     role          ENUM('passenger','driver','admin') NOT NULL,
     is_active     TINYINT(1) NOT NULL DEFAULT 1,
+    lat           DECIMAL(9,6) NULL,
+    lng           DECIMAL(9,6) NULL,
     PRIMARY KEY (user_id)
 );
 
@@ -103,6 +105,9 @@ CREATE TABLE active_passengers (
     card_id         INT UNSIGNED NOT NULL,
     boarding_stop_id INT UNSIGNED NOT NULL,
     tap_state       ENUM('in','out') DEFAULT 'in',
+    lat             DECIMAL(9,6) NULL,
+    lng             DECIMAL(9,6) NULL,
+    tap_in_time     DATETIME NULL,
     PRIMARY KEY (active_id),
     UNIQUE KEY uq_user (user_id)
 );
@@ -289,6 +294,9 @@ VALUES
 
 UPDATE passenger_profiles SET wallet_balance = 650.00
 WHERE user_id = (SELECT user_id FROM users WHERE full_name = 'Aaron Catapang');
+
+UPDATE users SET lat = 14.697278, lng = 120.963722
+WHERE full_name = 'Aaron Catapang';
 
 UPDATE passenger_profiles SET wallet_balance = 420.00
 WHERE user_id = (SELECT user_id FROM users WHERE full_name = 'John Michael Gonzales');

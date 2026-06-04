@@ -8,11 +8,11 @@
 
 Adafruit_PN532 nfc(SDA, SCL);
 
-const char* ssid = "WILMASTORE";
-const char* password = "edertgt01614";
+const char* ssid = "aninganing";
+const char* password = "alyonetwo12";
 
-const char* tapInURL = "http://192.168.100.103/TrackFare/api/tapin.php";
-const char* tapOutURL = "http://192.168.100.103/TrackFare/api/tapout.php";
+const char* tapInURL = "http://192.168.100.108/TrackFare/api/tapin.php";
+const char* tapOutURL = "http://192.168.100.108/TrackFare/api/tapout.php";
 
 String uidToString(uint8_t *uid, uint8_t uidLength) {
   String result = "";

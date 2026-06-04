@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/fare.php';
 
 if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
     header('Location: ../../auth/login.php');
@@ -20,6 +21,7 @@ $currentStop = '—';
 $estimatedFare = '₱0.00';
 $nfcCardUid = null;
 $nfcCardStatus = 'No card linked';
+$hasActiveTrip = false;
 
 if ($stmt = $conn->prepare('SELECT wallet_balance FROM passenger_profiles WHERE user_id = ? LIMIT 1')) {
     $stmt->bind_param('i', $userId);
@@ -59,9 +61,16 @@ if ($stmt = $conn->prepare(
         $activeTripBadgeClasses = $tripStatus === 'active' ? 'status-pill status-active' : 'status-pill status-idle';
         $boardedStop = $boardedStopResult ?: '—';
         $currentStop = $routeName ?: 'In transit';
-        $estimatedFare = '₱0.00';
+        $hasActiveTrip = true;
         $tapStatus = 'Active';
         $tapStatusClasses = 'status-pill status-active';
+
+        $fareInfo = get_passenger_fare_info($conn, $userId);
+        if ($fareInfo['ok']) {
+            $estimatedFare = '₱' . number_format($fareInfo['fare_now'], 2);
+        } else {
+            $estimatedFare = '₱0.00';
+        }
     }
     $stmt->close();
 }
@@ -415,7 +424,7 @@ $activeNav = 'home';
                 <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
                   Estimated fare
                 </p>
-                <p class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($estimatedFare, ENT_QUOTES, 'UTF-8') ?></p>
+                <p class="mt-1 text-sm font-semibold text-on-surface truncate" data-fare-display><?= htmlspecialchars($estimatedFare, ENT_QUOTES, 'UTF-8') ?></p>
                 </div>
               </div>
             </div>

@@ -67,13 +67,35 @@ if ($boardingStopId === null) {
     exit('INVALID STOP');
 }
 
+// Get the stop location for passenger position tracking
+$stopLat = null;
+$stopLng = null;
+if ($stmt = $conn->prepare('SELECT lat, lng FROM stops WHERE stop_id = ?')) {
+    $stmt->bind_param('i', $boardingStopId);
+    $stmt->execute();
+    $stmt->bind_result($stopLat, $stopLng);
+    $stmt->fetch();
+    $stmt->close();
+}
+
+// Try to insert with location columns (if migration was run)
 if ($stmt = $conn->prepare(
-    'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id) VALUES (?, ?, ?, ?)'
+    'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id, lat, lng, tap_in_time) VALUES (?, ?, ?, ?, ?, ?, NOW())'
 )) {
-    $stmt->bind_param('iiii', $trip_id, $user_id, $card_id, $boardingStopId);
+    $stmt->bind_param('iiiidd', $trip_id, $user_id, $card_id, $boardingStopId, $stopLat, $stopLng);
     $stmt->execute();
     $stmt->close();
     echo 'TAP IN SUCCESS';
 } else {
-    exit('TAP IN FAILED');
+    // Fallback to old schema if migration not run
+    if ($stmt = $conn->prepare(
+        'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id) VALUES (?, ?, ?, ?)'
+    )) {
+        $stmt->bind_param('iiii', $trip_id, $user_id, $card_id, $boardingStopId);
+        $stmt->execute();
+        $stmt->close();
+        echo 'TAP IN SUCCESS';
+    } else {
+        exit('TAP IN FAILED');
+    }
 }

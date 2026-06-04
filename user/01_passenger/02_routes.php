@@ -8,6 +8,49 @@ if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
     exit;
 }
 
+$userLat = null;
+$userLng = null;
+$userFullName = '';
+$userId = (int) $_SESSION['user_id'];
+$hasActiveTrip = false;
+$activeTripData = null;
+
+if ($stmt = $conn->prepare('SELECT full_name, lat, lng FROM users WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $stmt->bind_result($dbName, $dbLat, $dbLng);
+    if ($stmt->fetch()) {
+        $userFullName = $dbName;
+        $userLat = $dbLat !== null ? (float) $dbLat : null;
+        $userLng = $dbLng !== null ? (float) $dbLng : null;
+    }
+    $stmt->close();
+}
+
+// Check if passenger has an active trip
+if ($stmt = $conn->prepare(
+    'SELECT ap.lat, ap.lng, ap.boarding_stop_id, t.trip_id, t.route_id, t.current_stop_index, bs.stop_name AS boarding_stop
+     FROM active_passengers ap
+     JOIN trips t ON ap.trip_id = t.trip_id
+     LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
+     WHERE ap.user_id = ? AND t.status = ?'
+)) {
+    $status = 'active';
+    $stmt->bind_param('is', $userId, $status);
+    $stmt->execute();
+    $activeTripData = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+}
+
+if ($activeTripData) {
+    $hasActiveTrip = true;
+    // Use passenger's current position from active_passengers if available
+    if ($activeTripData['lat'] !== null && $activeTripData['lng'] !== null) {
+        $userLat = (float) $activeTripData['lat'];
+        $userLng = (float) $activeTripData['lng'];
+    }
+}
+
 function loadRouteStops(mysqli $conn, int $routeId): array
 {
     $routeStops = [];
@@ -470,8 +513,7 @@ $activeNav = 'routes';
               <button
                 type="button"
                 id="btn-bus-near"
-                class="map-action-btn bg-surface-container-high text-on-surface-variant cursor-not-allowed"
-                title="Coming soon"
+                class="map-action-btn border border-outline-variant bg-white text-on-surface active:bg-surface-container-low hover:bg-surface-container-low transition-colors"
               >
                 <span class="material-symbols-outlined text-[18px]">directions_bus</span>
                 Bus near me
@@ -702,6 +744,11 @@ $activeNav = 'routes';
       var OV_ZOOM = 12;
       var BUS_POLL_MS = 350;
       var BUS_ANIM_MS = 320;
+      var USER_LAT = <?= json_encode($userLat) ?>;
+      var USER_LNG = <?= json_encode($userLng) ?>;
+      var HAS_ACTIVE_TRIP = <?= $hasActiveTrip ? 'true' : 'false' ?>;
+      var ACTIVE_TRIP_ID = <?= (int)($activeTripData['trip_id'] ?? 0) ?>;
+      var LAST_PAX_UPDATE = 0;
 
       var routeSelect = document.getElementById('route-select');
       var mapEmpty = document.getElementById('map-empty');
@@ -711,6 +758,7 @@ $activeNav = 'routes';
       var stopsModalTitle = document.getElementById('stops-modal-title');
       var stopsListSelect = document.getElementById('stops-list-select');
       var btnShowStops = document.getElementById('btn-show-stops');
+      var btnBusNear = document.getElementById('btn-bus-near');
 
       var map = null;
       var mapsReady = false;
@@ -718,6 +766,7 @@ $activeNav = 'routes';
       var routeLine = null;
       var stopMkrs = [];
       var busMkr = null;
+      var humanMkr = null;
       var busPollTimer = null;
       var currentRouteId = null;
       var currentStops = [];
@@ -865,6 +914,62 @@ $activeNav = 'routes';
         };
       }
 
+      function humanMarkerIcon() {
+        var svg = [
+          '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">',
+          '<circle cx="22" cy="22" r="20" fill="#e11d48" stroke="#ffffff" stroke-width="3"/>',
+          '<path transform="translate(10 10)" fill="#ffffff" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>',
+          '</svg>',
+        ].join('');
+        return {
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+          scaledSize: new google.maps.Size(44, 44),
+          anchor: new google.maps.Point(22, 22),
+        };
+      }
+
+      function showHumanMarker() {
+        if (!mapsReady || !map || USER_LAT === null || USER_LNG === null) return;
+        var pos = latLng(USER_LAT, USER_LNG);
+        if (!humanMkr) {
+          humanMkr = new google.maps.Marker({
+            position: pos,
+            map: map,
+            title: HAS_ACTIVE_TRIP ? 'Your Position on Bus' : 'Your Location',
+            zIndex: 1000,
+            icon: humanMarkerIcon(),
+          });
+        } else {
+          humanMkr.setPosition(pos);
+          humanMkr.setMap(map);
+          humanMkr.setTitle(HAS_ACTIVE_TRIP ? 'Your Position on Bus' : 'Your Location');
+        }
+      }
+
+      function updatePassengerPosition() {
+        if (!HAS_ACTIVE_TRIP || ACTIVE_TRIP_ID === 0) return;
+
+        var now = Date.now();
+        if (now - LAST_PAX_UPDATE < 2000) return;
+        LAST_PAX_UPDATE = now;
+
+        fetch('../../api/get_passenger_fare.php', {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+        .then(function (r) {
+          if (!r.ok) throw new Error('API error');
+          return r.json();
+        })
+        .then(function (data) {
+          if (data.ok && humanMkr) {
+            // The passenger position is updated in the database by the driver dashboard
+            // We can show a visual indicator that they're on the bus
+            humanMkr.setTitle('On Bus - Fare: ₱' + parseFloat(data.fare_now).toFixed(2));
+          }
+        })
+        .catch(function () {});
+      }
       function busMarkerIcon() {
         var svg = [
           '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">',
@@ -976,15 +1081,26 @@ $activeNav = 'routes';
       }
 
       function fitOverview() {
-        if (!mapsReady || !currentStops.length) return;
+        if (!mapsReady) return;
         var bounds = new google.maps.LatLngBounds();
-        currentStops.forEach(function (s) { bounds.extend(latLng(s.lat, s.lng)); });
+        var hasPoints = false;
+        if (currentStops && currentStops.length) {
+          currentStops.forEach(function (s) { bounds.extend(latLng(s.lat, s.lng)); });
+          hasPoints = true;
+        }
         if (busMkr) {
           bounds.extend(busMkr.getPosition());
+          hasPoints = true;
         }
-        map.fitBounds(bounds, 48);
-        map.setHeading(0);
-        map.setTilt(0);
+        if (humanMkr) {
+          bounds.extend(humanMkr.getPosition());
+          hasPoints = true;
+        }
+        if (hasPoints) {
+          map.fitBounds(bounds, 48);
+          map.setHeading(0);
+          map.setTilt(0);
+        }
       }
 
       function renderStopsModal() {
@@ -1055,6 +1171,7 @@ $activeNav = 'routes';
           })
           .then(function (data) {
             updateBusFromGps(data);
+            updatePassengerPosition();
           })
           .catch(function () {})
           .finally(function () {
@@ -1115,7 +1232,9 @@ $activeNav = 'routes';
       function initGoogleMap() {
         var center = currentStops.length
           ? { lat: currentStops[0].lat, lng: currentStops[0].lng }
-          : { lat: 14.75, lng: 120.95 };
+          : (USER_LAT !== null && USER_LNG !== null
+             ? { lat: USER_LAT, lng: USER_LNG }
+             : { lat: 14.75, lng: 120.95 });
 
         if (mapInitialized) {
           map.setCenter(center);
@@ -1155,6 +1274,7 @@ $activeNav = 'routes';
         return loadGoogleMaps().then(function () {
           initGoogleMap();
           clearMapLayers();
+          showHumanMarker();
           refreshStopMarkers();
           fitOverview();
           prefetchAllLegRoutes();
@@ -1199,8 +1319,70 @@ $activeNav = 'routes';
         btnShowStops.addEventListener('click', openStopsModal);
       }
 
+      if (btnBusNear) {
+        btnBusNear.addEventListener('click', function () {
+          if (currentRouteId) {
+            if (busMkr) {
+              map.panTo(busMkr.getPosition());
+              map.setZoom(15);
+            } else {
+              fetchBusPosition().then(function() {
+                if (busMkr) {
+                  map.panTo(busMkr.getPosition());
+                  map.setZoom(15);
+                } else {
+                  alert('No active bus found on this route.');
+                }
+              });
+            }
+          } else {
+            btnBusNear.disabled = true;
+            fetch(GPS_URL + '?_' + Date.now(), {
+              cache: 'no-store',
+              credentials: 'same-origin',
+              headers: { Accept: 'application/json' },
+            })
+            .then(function (r) {
+              if (!r.ok) throw new Error('GPS unavailable');
+              return r.json();
+            })
+            .then(function (data) {
+              btnBusNear.disabled = false;
+              if (data && data.routeId) {
+                routeSelect.value = data.routeId;
+                drawSelectedRoute(data.routeId).then(function() {
+                  fetchBusPosition().then(function() {
+                    if (busMkr) {
+                      map.panTo(busMkr.getPosition());
+                      map.setZoom(15);
+                    }
+                  });
+                });
+              } else {
+                alert('No active buses found.');
+              }
+            })
+            .catch(function () {
+              btnBusNear.disabled = false;
+              alert('Could not locate nearby buses. Please try again.');
+            });
+          }
+        });
+      }
+
       routeSelect.value = '';
-      resetRouteView();
+      if (USER_LAT !== null && USER_LNG !== null) {
+        showMapPanel(true);
+        loadGoogleMaps().then(function () {
+          initGoogleMap();
+          showHumanMarker();
+          map.setZoom(14);
+        }).catch(function () {
+          resetRouteView();
+        });
+      } else {
+        resetRouteView();
+      }
     })();
     </script>
   </body>

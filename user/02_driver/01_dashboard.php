@@ -456,6 +456,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   var stops = [];
   var map, busMkr, lineTaken, lineAhead;
   var stopMkrs = [];
+  var paxMkrs = [];
   var state = 'idle';
   var curIdx = 0;
   var legTimer = null;
@@ -470,6 +471,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   var currentLegPath = null;
   var lastGpsSave = 0;
   var lastLineRebuild = { activePartial: null, legRemainder: null, nextLegFrom: 0 };
+  var lastPaxUpdate = 0;
 
   /* ── DOM ── */
   var btnStart  = document.getElementById('btn-start');
@@ -819,6 +821,52 @@ $routeStopsForMap = array_map(static fn($s) => [
     };
   }
 
+  function passengerMarkerIcon() {
+    return {
+      path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
+      fillColor: '#e11d48',
+      fillOpacity: 1,
+      strokeColor: '#ffffff',
+      strokeWeight: 2,
+      scale: 1.2,
+      anchor: new google.maps.Point(12, 24),
+    };
+  }
+
+  function updatePassengerMarkers(lat, lng) {
+    if (!mapsReady || !map) return;
+
+    var now = Date.now();
+    if (now - lastPaxUpdate < 500) return;
+    lastPaxUpdate = now;
+
+    // Clear existing passenger markers
+    paxMkrs.forEach(function (m) { m.setMap(null); });
+    paxMkrs = [];
+
+    // Update passenger positions in database
+    var formData = new FormData();
+    formData.append('trip_id', ROUTE_ID);
+    formData.append('lat', lat);
+    formData.append('lng', lng);
+
+    fetch('../../api/update_passenger_positions.php', {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin',
+    }).catch(function () {});
+
+    // Add a single passenger marker at bus position to represent all passengers
+    var m = new google.maps.Marker({
+      position: latLng(lat, lng),
+      map: map,
+      title: 'Passengers on board',
+      zIndex: 1500,
+      icon: passengerMarkerIcon(),
+    });
+    paxMkrs.push(m);
+  }
+
   function refreshStops(nextIdx) {
     stopMkrs.forEach(function (m) { m.setMap(null); });
     stopMkrs = [];
@@ -1015,6 +1063,7 @@ $routeStopsForMap = array_map(static fn($s) => [
         followBus(pos.point.lat, pos.point.lng);
         rebuildLines(partial, remain, to);
         updateUI(raw, from, to);
+        updatePassengerMarkers(pos.point.lat, pos.point.lng);
         if (raw < 1) persistGps(pos.point.lat, pos.point.lng, from, to, raw);
 
         if (raw >= 1) {

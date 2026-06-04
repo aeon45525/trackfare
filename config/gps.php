@@ -619,3 +619,33 @@ if ($driverId > 0 && ($_SESSION['role'] ?? '') === 'driver') {
 }
 
 echo json_encode($response, JSON_UNESCAPED_UNICODE);
+
+/* ── passenger position update ─────────────────────────────── */
+
+/**
+ * Update all active passengers for a trip with the current bus location.
+ * @return array{ok: bool, message: string, affected: int}
+ */
+function update_passenger_positions(mysqli $conn, int $tripId, float $lat, float $lng): array
+{
+    if ($tripId < 1 || $lat === 0.0 || $lng === 0.0) {
+        return ['ok' => false, 'message' => 'INVALID REQUEST', 'affected' => 0];
+    }
+
+    if ($stmt = $conn->prepare(
+        'UPDATE active_passengers SET lat = ?, lng = ? WHERE trip_id = ?'
+    )) {
+        $stmt->bind_param('ddi', $lat, $lng, $tripId);
+        $ok = $stmt->execute();
+        $affected = $stmt->affected_rows;
+        $stmt->close();
+
+        return [
+            'ok' => $ok,
+            'message' => $ok ? 'POSITIONS UPDATED' : 'UPDATE FAILED',
+            'affected' => $affected
+        ];
+    }
+
+    return ['ok' => false, 'message' => 'DATABASE ERROR', 'affected' => 0];
+}
