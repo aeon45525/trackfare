@@ -360,6 +360,7 @@ $activeNav = 'home';
                 </h2>
               </div>
               <span
+                id="tap-status-pill"
                 class="<?= htmlspecialchars($tapStatusClasses, ENT_QUOTES, 'UTF-8') ?>"
               >
                 <?= htmlspecialchars($tapStatus, ENT_QUOTES, 'UTF-8') ?>
@@ -383,11 +384,12 @@ $activeNav = 'home';
             <div class="flex items-center justify-between mb-4">
               <div>
                 <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Active trip</p>
-                <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface truncate">
+                <h2 id="active-trip-status" class="mt-1 text-base font-extrabold leading-tight text-on-surface truncate">
                   <?= htmlspecialchars($activeTripStatus, ENT_QUOTES, 'UTF-8') ?>
                 </h2>
               </div>
               <span
+                id="active-trip-badge"
                 class="<?= htmlspecialchars($activeTripBadgeClasses, ENT_QUOTES, 'UTF-8') ?>"
               >
                 <?= htmlspecialchars($activeTripBadge, ENT_QUOTES, 'UTF-8') ?>
@@ -402,7 +404,7 @@ $activeNav = 'home';
                 <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
                   Boarded stop
                 </p>
-                <p class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($boardedStop, ENT_QUOTES, 'UTF-8') ?></p>
+                <p id="boarded-stop" class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($boardedStop, ENT_QUOTES, 'UTF-8') ?></p>
                 </div>
               </div>
               <div class="trip-row">
@@ -413,7 +415,7 @@ $activeNav = 'home';
                 <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
                   Current route
                 </p>
-                <p class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($currentStop, ENT_QUOTES, 'UTF-8') ?></p>
+                <p id="current-stop" class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($currentStop, ENT_QUOTES, 'UTF-8') ?></p>
                 </div>
               </div>
               <div class="trip-row">
@@ -424,7 +426,7 @@ $activeNav = 'home';
                 <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
                   Estimated fare
                 </p>
-                <p class="mt-1 text-sm font-semibold text-on-surface truncate" data-fare-display><?= htmlspecialchars($estimatedFare, ENT_QUOTES, 'UTF-8') ?></p>
+                <p id="fare-display" class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($estimatedFare, ENT_QUOTES, 'UTF-8') ?></p>
                 </div>
               </div>
             </div>
@@ -512,5 +514,60 @@ $activeNav = 'home';
         <?php endforeach; ?>
       </nav>
     </div>
+    <script>
+      (function () {
+        var endpoint = '../../config/gps.php?action=passenger_status';
+        var tapStatusEl = document.getElementById('tap-status-pill');
+        var tripStatusEl = document.getElementById('active-trip-status');
+        var tripBadgeEl = document.getElementById('active-trip-badge');
+        var boardedStopEl = document.getElementById('boarded-stop');
+        var currentStopEl = document.getElementById('current-stop');
+        var fareEl = document.getElementById('fare-display');
+
+        function setStatusPill(isActive) {
+          return isActive ? 'status-pill status-active' : 'status-pill status-idle';
+        }
+
+        function refreshPassengerStatus() {
+          fetch(endpoint + '?_' + Date.now(), {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+          })
+          .then(function (r) {
+            if (!r.ok) throw new Error('Network error');
+            return r.json();
+          })
+          .then(function (data) {
+            if (!data.ok) return;
+            if (tapStatusEl) {
+              tapStatusEl.textContent = data.has_active_trip ? 'Active' : 'Waiting';
+              tapStatusEl.className = setStatusPill(data.has_active_trip);
+            }
+            if (tripStatusEl) {
+              tripStatusEl.textContent = data.active_trip_status || 'No active trip';
+            }
+            if (tripBadgeEl) {
+              tripBadgeEl.textContent = data.active_trip_badge || 'Idle';
+              tripBadgeEl.className = setStatusPill(data.has_active_trip);
+            }
+            if (boardedStopEl) {
+              boardedStopEl.textContent = data.boarding_stop || '—';
+            }
+            if (currentStopEl) {
+              currentStopEl.textContent = data.current_stop || '—';
+            }
+            if (fareEl) {
+              fareEl.textContent = data.estimated_fare || '₱0.00';
+            }
+          })
+          .catch(function () {
+            // ignore polling errors
+          });
+        }
+
+        setInterval(refreshPassengerStatus, 3000);
+        refreshPassengerStatus();
+      })();
+    </script>
   </body>
 </html>

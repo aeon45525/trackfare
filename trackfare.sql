@@ -154,9 +154,9 @@ SELECT user_id, 100 FROM users WHERE role = 'passenger';
 -- SEED DATA — NFC CARDS
 -- ============================================================
 
-INSERT INTO nfc_cards (user_id, uid) VALUES
-((SELECT user_id FROM users WHERE full_name = 'Aaron Catapang'),        '62 BB 1D 07'),
-((SELECT user_id FROM users WHERE full_name = 'John Michael Gonzales'), '9B 4C 13 07');
+INSERT INTO nfc_cards (user_id, uid) VALUES 
+((SELECT user_id FROM users WHERE full_name = 'Aaron Catapang'),        '9B 4C 13 07'),
+((SELECT user_id FROM users WHERE full_name = 'John Michael Gonzales'), '62 BB 1D 07');
 
 -- ============================================================
 -- SEED DATA — ROUTES
@@ -242,7 +242,7 @@ INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id) VALU
 (
     1,
     (SELECT user_id FROM users WHERE full_name = 'John Michael Gonzales'),
-    (SELECT card_id FROM nfc_cards WHERE uid = '9B 4C 13 07'),
+    (SELECT card_id FROM nfc_cards WHERE uid = '62 BB 1D 07'),
     9
 );
 
@@ -253,8 +253,8 @@ INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id) VALU
 INSERT INTO trip_transactions
     (trip_id, user_id, card_id, boarding_stop_id, alighting_stop_id, fare_amount)
 VALUES
-(1, (SELECT user_id FROM users WHERE full_name='Aaron Catapang'),        (SELECT card_id FROM nfc_cards WHERE uid='62 BB 1D 07'),  5, 11, 24.25),
-(1, (SELECT user_id FROM users WHERE full_name='John Michael Gonzales'), (SELECT card_id FROM nfc_cards WHERE uid='9B 4C 13 07'),  9, 15, 22.00),
+(1, (SELECT user_id FROM users WHERE full_name='Aaron Catapang'),        (SELECT card_id FROM nfc_cards WHERE uid='9B 4C 13 07'),  5, 11, 24.25),
+(1, (SELECT user_id FROM users WHERE full_name='John Michael Gonzales'), (SELECT card_id FROM nfc_cards WHERE uid='62 BB 1D 07'),  9, 15, 22.00),
 (1, (SELECT user_id FROM users WHERE full_name='Maria Lopez'),           1,  3, 10, 22.00),
 (1, (SELECT user_id FROM users WHERE full_name='Angela Reyes'),          1,  8, 14, 19.75),
 (1, (SELECT user_id FROM users WHERE full_name='Jin Park'),              1,  1, 20, 46.75),
@@ -332,4 +332,4 @@ INSERT INTO nfc_cards (user_id, uid) VALUES
 --
 -- INSERT INTO route_stops (route_id, stop_id, stop_order)
 -- SELECT 2, stop_id, ROW_NUMBER() OVER (ORDER BY stop_id DESC) FROM stops;
--- ============================================================
+-- ============================================================	

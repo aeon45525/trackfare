@@ -289,6 +289,142 @@ function gps_write_shared_state(array $payload): void
     fclose($fp);
 }
 
+/* ── passenger / driver status APIs ───────────────────────────── */
+if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET['action'] === 'passenger_status') {
+    if (empty($_SESSION['user_id'])) {
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'message' => 'Unauthorized'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $userId = (int) $_SESSION['user_id'];
+    $response = [
+        'ok' => true,
+        'has_active_trip' => false,
+        'active_trip_id' => 0,
+        'active_trip_status' => 'No active trip',
+        'active_trip_badge' => 'Idle',
+        'boarding_stop' => '—',
+        'current_stop' => '—',
+        'estimated_fare' => '₱0.00',
+        'route_id' => null,
+    ];
+
+    if ($stmt = $conn->prepare(
+        'SELECT ap.trip_id, ap.boarding_stop_id, t.route_id, t.current_stop_index, t.status,
+                bs.stop_name AS boarding_stop_name
+         FROM active_passengers ap
+         JOIN trips t ON ap.trip_id = t.trip_id
+         LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
+         WHERE ap.user_id = ?
+         LIMIT 1'
+    )) {
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $active = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if ($active) {
+            $routeId = (int) $active['route_id'];
+            $currentStopId = get_route_stop_id_at_index($conn, $routeId, (int) $active['current_stop_index']);
+            $currentStop = 'In transit';
+
+            if ($currentStopId !== null) {
+                if ($stmt2 = $conn->prepare(
+                    'SELECT stop_name FROM stops WHERE stop_id = ? LIMIT 1'
+                )) {
+                    $stmt2->bind_param('i', $currentStopId);
+                    $stmt2->execute();
+                    $stmt2->bind_result($stopName);
+                    if ($stmt2->fetch()) {
+                        $currentStop = $stopName;
+                    }
+                    $stmt2->close();
+                }
+            }
+
+            $fareInfo = get_passenger_fare_info($conn, $userId);
+
+            $response['has_active_trip'] = true;
+            $response['active_trip_id'] = (int) $active['trip_id'];
+            $response['active_trip_status'] = $active['status'] === 'active' ? 'On active trip' : ucfirst($active['status']);
+            $response['active_trip_badge'] = $active['status'] === 'active' ? 'Active' : ucfirst($active['status']);
+            $response['boarding_stop'] = $active['boarding_stop_name'] ?: '—';
+            $response['current_stop'] = $currentStop;
+            $response['estimated_fare'] = $fareInfo['ok'] ? ('₱' . number_format($fareInfo['fare_now'], 2)) : '₱0.00';
+            $response['route_id'] = $routeId;
+        }
+    }
+
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'driver' && $_GET['action'] === 'driver_passengers') {
+    if (empty($_SESSION['user_id'])) {
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'message' => 'Unauthorized'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $driverId = (int) $_SESSION['user_id'];
+    $response = [
+        'ok' => true,
+        'passenger_count' => 0,
+        'passengers' => [],
+    ];
+
+    $trip = null;
+    if ($stmt = $conn->prepare(
+        'SELECT trip_id, route_id, current_stop_index
+         FROM trips
+         WHERE driver_id = ? AND status = ?
+         LIMIT 1'
+    )) {
+        $status = 'active';
+        $stmt->bind_param('is', $driverId, $status);
+        $stmt->execute();
+        $trip = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+    }
+
+    if ($trip) {
+        $routeId = (int) $trip['route_id'];
+        $currentStopIndex = max(0, min((int) $trip['current_stop_index'], PHP_INT_MAX));
+        $currentStopId = get_route_stop_id_at_index($conn, $routeId, $currentStopIndex);
+        $lastStopId = get_route_last_stop_id($conn, $routeId);
+
+        if ($stmt = $conn->prepare(
+            'SELECT u.full_name, ap.boarding_stop_id, bs.stop_name AS boarding_stop
+             FROM active_passengers ap
+             JOIN users u ON ap.user_id = u.user_id
+             LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
+             WHERE ap.trip_id = ?'
+        )) {
+            $stmt->bind_param('i', $trip['trip_id']);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $boardingStopId = (int) $row['boarding_stop_id'];
+                $fareNow = fare_estimate_for_active_passenger($conn, $routeId, $boardingStopId, $currentStopId ?? $boardingStopId);
+                $fareMax = fare_estimate_for_active_passenger($conn, $routeId, $boardingStopId, $lastStopId ?? $boardingStopId);
+
+                $response['passengers'][] = [
+                    'full_name' => $row['full_name'] ?? 'Passenger',
+                    'boarding_stop' => $row['boarding_stop'] ?? 'Unknown',
+                    'fare_now' => $fareNow['fare'],
+                    'fare_max' => $fareMax['fare'],
+                ];
+            }
+            $stmt->close();
+        }
+    }
+
+    $response['passenger_count'] = count($response['passengers']);
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 /* ── passenger read-only tracking ───────────────────────────── */
 
 if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {

@@ -953,7 +953,7 @@ $activeNav = 'routes';
         if (now - LAST_PAX_UPDATE < 2000) return;
         LAST_PAX_UPDATE = now;
 
-        fetch('../../api/get_passenger_fare.php', {
+        fetch('../../config/gps.php?action=passenger_status', {
           credentials: 'same-origin',
           headers: { Accept: 'application/json' },
         })
@@ -963,13 +963,34 @@ $activeNav = 'routes';
         })
         .then(function (data) {
           if (data.ok && humanMkr) {
-            // The passenger position is updated in the database by the driver dashboard
-            // We can show a visual indicator that they're on the bus
-            humanMkr.setTitle('On Bus - Fare: ₱' + parseFloat(data.fare_now).toFixed(2));
+            humanMkr.setTitle('On Bus - Fare: ' + (data.estimated_fare || '₱0.00'));
           }
         })
         .catch(function () {});
       }
+
+      function refreshPassengerState() {
+        fetch('../../config/gps.php?action=passenger_status&_' + Date.now(), {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+        .then(function (r) {
+          if (!r.ok) throw new Error('Network error');
+          return r.json();
+        })
+        .then(function (data) {
+          if (!data.ok) return;
+          var active = !!data.has_active_trip;
+          var tripIdChanged = parseInt(data.active_trip_id || 0, 10) !== ACTIVE_TRIP_ID;
+          if (active !== HAS_ACTIVE_TRIP || tripIdChanged) {
+            window.location.reload();
+          }
+        })
+        .catch(function () {
+          // ignore errors
+        });
+      }
+
       function busMarkerIcon() {
         var svg = [
           '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">',
@@ -1371,6 +1392,8 @@ $activeNav = 'routes';
       }
 
       routeSelect.value = '';
+      setInterval(refreshPassengerState, 3000);
+      refreshPassengerState();
       if (USER_LAT !== null && USER_LNG !== null) {
         showMapPanel(true);
         loadGoogleMaps().then(function () {

@@ -358,11 +358,14 @@ $routeStopsForMap = array_map(static fn($s) => [
               <p class="text-xs text-slate-500">No passengers onboard</p>
             <?php endif; ?>
           </div>
-          <?php if ($passengerCount > 0): ?>
-          <button type="button" id="btn-pax-modal" class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 text-xs font-semibold text-primary hover:bg-blue-50 transition">
+          <button
+            type="button"
+            id="btn-pax-modal"
+            class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 text-xs font-semibold text-primary hover:bg-blue-50 transition"
+            <?php echo $passengerCount === 0 ? 'hidden' : ''; ?>
+          >
             View all passengers (<?php echo $passengerCount; ?>)
           </button>
-          <?php endif; ?>
         </article>
 
         <div class="grid grid-cols-2 gap-3 shrink-0">
@@ -1380,6 +1383,74 @@ $routeStopsForMap = array_map(static fn($s) => [
       if (e.key === 'Escape' && backdrop.classList.contains('open')) closeModal();
     });
   })();
+
+  function renderDriverPassengerPanel(data) {
+    if (!data || !data.ok) return;
+    var count = parseInt(data.passenger_count || 0, 10);
+    var badge = document.getElementById('pax-count-badge');
+    var countMetric = document.getElementById('m-pax');
+    var list = document.getElementById('pax-list');
+    var modalBtn = document.getElementById('btn-pax-modal');
+
+    if (badge) {
+      badge.textContent = count + ' onboard';
+    }
+    if (countMetric) {
+      countMetric.textContent = count;
+    }
+    if (modalBtn) {
+      modalBtn.hidden = count === 0;
+      modalBtn.textContent = 'View all passengers (' + count + ')';
+    }
+    if (!list) return;
+
+    if (count === 0) {
+      list.innerHTML = '<p class="text-xs text-slate-500">No passengers onboard</p>';
+      return;
+    }
+
+    var preview = data.passengers || [];
+    var previewCount = Math.min(3, preview.length);
+    var html = '';
+
+    for (var i = 0; i < previewCount; i++) {
+      var pax = preview[i] || {};
+      html += '<div class="pax-row">'
+        + '<div class="min-w-0">'
+        + '<p class="font-semibold text-slate-900 truncate">' + (pax.full_name || 'Passenger') + '</p>'
+        + '<p class="text-[10px] text-slate-500 truncate">' + (pax.boarding_stop || 'Unknown') + '</p>';
+      if (pax.fare_now != null) {
+        html += '<p class="text-[10px] text-primary font-semibold mt-0.5">Est. now ₱' + parseFloat(pax.fare_now).toFixed(2) + '</p>';
+      }
+      html += '</div>'
+        + '<span class="text-[10px] font-semibold text-emerald-600 shrink-0">Onboard</span>'
+        + '</div>';
+    }
+    if (count > previewCount) {
+      html += '<p class="mt-1.5 text-[10px] text-slate-400">+' + (count - previewCount) + ' more not shown</p>';
+    }
+    list.innerHTML = html;
+  }
+
+  function refreshDriverPassengerPanel() {
+    fetch('../../config/gps.php?action=driver_passengers&_' + Date.now(), {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
+    .then(function (r) {
+      if (!r.ok) throw new Error('Network error');
+      return r.json();
+    })
+    .then(function (data) {
+      renderDriverPassengerPanel(data);
+    })
+    .catch(function () {
+      // ignore polling failures
+    });
+  }
+
+  refreshDriverPassengerPanel();
+  setInterval(refreshDriverPassengerPanel, 3000);
 
   btnStart .addEventListener('click', startTrip);
   btnArrive.addEventListener('click', arriveStop);
