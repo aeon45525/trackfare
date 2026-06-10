@@ -1,3 +1,145 @@
+<?php
+if (isset($_GET['action'])) {
+    require_once '../../config/db.php';
+    header('Content-Type: application/json');
+
+    function getDashboardStats() {
+        global $conn;
+        $stats = [
+            'total_passengers' => 0,
+            'active_trips' => 0,
+            'today_revenue' => 0,
+            'active_drivers' => 0
+        ];
+
+        try {
+            $result = $conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'passenger' AND is_active = 1");
+            if ($result && $row = $result->fetch_assoc()) {
+                $stats['total_passengers'] = $row['count'];
+            }
+
+            $result = $conn->query("SELECT COUNT(*) as count FROM trips WHERE status = 'active'");
+            if ($result && $row = $result->fetch_assoc()) {
+                $stats['active_trips'] = $row['count'];
+            }
+
+            $today = date('Y-m-d');
+            $result = $conn->query("SELECT COALESCE(SUM(fare_amount), 0) as total FROM trip_transactions WHERE DATE(transaction_id) >= '$today' OR trip_id IN (SELECT trip_id FROM trips WHERE DATE(start_time) = '$today')");
+            if ($result && $row = $result->fetch_assoc()) {
+                $stats['today_revenue'] = (float)$row['total'];
+            }
+
+            $result = $conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'driver' AND is_active = 1");
+            if ($result && $row = $result->fetch_assoc()) {
+                $stats['active_drivers'] = $row['count'];
+            }
+        } catch (Exception $e) {
+            error_log("Dashboard stats error: " . $e->getMessage());
+        }
+
+        return $stats;
+    }
+
+    function getRecentBoardings($limit = 3) {
+        global $conn;
+        $boardings = [];
+
+        try {
+            $result = $conn->query("SELECT ap.active_id, u.full_name, s.stop_name, ap.tap_in_time FROM active_passengers ap JOIN users u ON ap.user_id = u.user_id JOIN stops s ON ap.boarding_stop_id = s.stop_id WHERE ap.tap_state = 'in' ORDER BY ap.tap_in_time DESC LIMIT $limit");
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $boardings[] = $row;
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Recent boardings error: " . $e->getMessage());
+        }
+
+        return $boardings;
+    }
+
+    function getCompletedTrips($limit = 3) {
+        global $conn;
+        $trips = [];
+
+        try {
+            $result = $conn->query("SELECT tt.transaction_id, u.full_name, bs.stop_name as boarding_stop, as_stop.stop_name as alighting_stop, tt.fare_amount, tt.trip_id FROM trip_transactions tt JOIN users u ON tt.user_id = u.user_id JOIN stops bs ON tt.boarding_stop_id = bs.stop_id JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id ORDER BY tt.transaction_id DESC LIMIT $limit");
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $trips[] = $row;
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Completed trips error: " . $e->getMessage());
+        }
+
+        return $trips;
+    }
+
+    function getDailyTripCounts() {
+        global $conn;
+        $counts = [];
+
+        try {
+            $result = $conn->query("SELECT DAYNAME(DATE_SUB(NOW(), INTERVAL (6 - d.day) DAY)) as day_name, COALESCE(COUNT(DISTINCT t.trip_id), 0) as trip_count FROM (SELECT 0 as day UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) d LEFT JOIN trips t ON DATE(t.start_time) = DATE_SUB(NOW(), INTERVAL (6 - d.day) DAY) GROUP BY d.day ORDER BY d.day");
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $counts[] = (int)$row['trip_count'];
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Daily trip counts error: " . $e->getMessage());
+            $counts = [8, 5, 9, 6, 8, 3, 5];
+        }
+
+        return $counts;
+    }
+
+    function getWeeklyRevenueTrend() {
+        global $conn;
+        $revenue = [];
+
+        try {
+            $result = $conn->query("SELECT d.day_name, COALESCE(r.revenue, 0) as revenue FROM (SELECT 0 as day, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 6 DAY)) as day_name UNION SELECT 1, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 5 DAY)) UNION SELECT 2, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 4 DAY)) UNION SELECT 3, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 3 DAY)) UNION SELECT 4, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 2 DAY)) UNION SELECT 5, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 1 DAY)) UNION SELECT 6, DAYNAME(CURDATE())) d LEFT JOIN (SELECT DATE(t.start_time) as day, SUM(tt.fare_amount) as revenue FROM trip_transactions tt JOIN trips t ON tt.trip_id = t.trip_id GROUP BY DATE(t.start_time)) r ON r.day = DATE_SUB(CURDATE(), INTERVAL (6 - d.day) DAY) ORDER BY d.day");
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $revenue[] = [
+                        'day_name' => $row['day_name'],
+                        'revenue' => (float)$row['revenue']
+                    ];
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Weekly revenue error: " . $e->getMessage());
+        }
+
+        return $revenue;
+    }
+
+    $action = $_GET['action'] ?? '';
+    switch ($action) {
+        case 'stats':
+            echo json_encode(getDashboardStats());
+            break;
+        case 'boardings':
+            echo json_encode(getRecentBoardings($_GET['limit'] ?? 3));
+            break;
+        case 'trips':
+            echo json_encode(getCompletedTrips($_GET['limit'] ?? 3));
+            break;
+        case 'daily_counts':
+            echo json_encode(getDailyTripCounts());
+            break;
+        case 'weekly_revenue':
+            echo json_encode(getWeeklyRevenueTrend());
+            break;
+        default:
+            echo json_encode(['error' => 'Unknown action']);
+    }
+    exit;
+}
+?>
+
 <!doctype html>
 
 <html lang="en">
@@ -14,6 +156,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
       rel="stylesheet"
     />
+    <link rel="icon" href="../../images/logo.png" type="image/png">
     <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
@@ -229,58 +372,26 @@
             </div>
           </div>
         </header>
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-          <div
-            class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-            >
-              Total Passengers
-            </p>
-            <h2 class="mt-4 text-3xl font-black text-on-surface">14,850</h2>
-            <p class="mt-3 text-sm text-slate-600">
-              Registered passengers across the TrackFare network.
-            </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6" id="kpi-cards">
+          <div class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200">
+            <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Total Passengers</p>
+            <h2 class="mt-4 text-3xl font-black text-on-surface" id="stat-passengers">--</h2>
+            <p class="mt-3 text-sm text-slate-600">Registered passengers across the TrackFare network.</p>
           </div>
-          <div
-            class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-            >
-              Active Trips
-            </p>
-            <h2 class="mt-4 text-3xl font-black text-on-surface">112</h2>
-            <p class="mt-3 text-sm text-slate-600">
-              NFC-verified trips in progress.
-            </p>
+          <div class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200">
+            <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Active Trips</p>
+            <h2 class="mt-4 text-3xl font-black text-on-surface" id="stat-trips">--</h2>
+            <p class="mt-3 text-sm text-slate-600">NFC-verified trips in progress.</p>
           </div>
-          <div
-            class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-            >
-              Today Revenue
-            </p>
-            <h2 class="mt-4 text-3xl font-black text-on-surface">₱62,300</h2>
-            <p class="mt-3 text-sm text-slate-600">
-              Revenue captured from NFC and cash boarding today.
-            </p>
+          <div class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200">
+            <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Today Revenue</p>
+            <h2 class="mt-4 text-3xl font-black text-on-surface" id="stat-revenue">--</h2>
+            <p class="mt-3 text-sm text-slate-600">Revenue captured from NFC and cash boarding today.</p>
           </div>
-          <div
-            class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200"
-          >
-            <p
-              class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
-            >
-              Active Drivers
-            </p>
-            <h2 class="mt-4 text-3xl font-black text-on-surface">46</h2>
-            <p class="mt-3 text-sm text-slate-600">
-              Drivers currently on duty across the service routes.
-            </p>
+          <div class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200">
+            <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Active Drivers</p>
+            <h2 class="mt-4 text-3xl font-black text-on-surface" id="stat-drivers">--</h2>
+            <p class="mt-3 text-sm text-slate-600">Drivers currently on duty across the service routes.</p>
           </div>
         </div>
         <div class="grid gap-4 xl:grid-cols-2 mb-6">
@@ -300,7 +411,8 @@
               >
             </div>
             <div class="h-56 rounded-[1.25rem] bg-surface-container p-4">
-              <div class="flex h-full items-end gap-2">
+              <div class="flex h-full items-end gap-2" id="daily-trips-chart">
+                <!-- Bars will be populated by JavaScript -->
                 <div class="w-full rounded-t-3xl bg-primary/20 h-[42%]"></div>
                 <div class="w-full rounded-t-3xl bg-primary/40 h-[72%]"></div>
                 <div class="w-full rounded-t-3xl bg-primary/30 h-[58%]"></div>
@@ -336,39 +448,14 @@
             <div
               class="relative h-56 rounded-[1.25rem] bg-surface-container p-4 overflow-hidden"
             >
-              <svg
-                class="absolute inset-0 h-full w-full"
-                viewBox="0 0 400 200"
-                preserveAspectRatio="none"
-              >
-                <path
-                  d="M0,150 Q70,125 140,105 T280,85 T400,70 V200 H0 Z"
-                  fill="rgba(0, 64, 161, 0.08)"
-                />
-                <path
-                  d="M0,150 Q70,125 140,105 T280,85 T400,70"
-                  fill="none"
-                  stroke="#0040a1"
-                  stroke-width="3"
-                />
-                <path
-                  d="M0,170 Q70,155 140,145 T280,130 T400,120 V200 H0 Z"
-                  fill="rgba(175, 202, 226, 0.12)"
-                />
-                <path
-                  d="M0,170 Q70,155 140,145 T280,130 T400,120"
-                  fill="none"
-                  stroke="#afcae2"
-                  stroke-width="2"
-                />
-              </svg>
+              <div id="revenue-chart" class="flex h-full items-end gap-2"></div>
               <div class="absolute bottom-5 right-5 text-right">
                 <p
                   class="text-[10px] uppercase tracking-[0.3em] text-primary font-semibold"
                 >
                   Peak Revenue
                 </p>
-                <p class="mt-2 text-2xl font-black text-on-surface">₱72.4k</p>
+                <p id="revenue-peak" class="mt-2 text-2xl font-black text-on-surface">₱0.00</p>
               </div>
             </div>
           </section>
@@ -412,7 +499,7 @@
                   >Realtime</span
                 >
               </div>
-              <ul class="space-y-3">
+              <ul class="space-y-3" id="boardings-list">
                 <li class="rounded-3xl bg-white p-4 shadow-sm">
                   <div class="flex items-center justify-between gap-3">
                     <div>
@@ -468,7 +555,7 @@
                   >Updated</span
                 >
               </div>
-              <ul class="space-y-3">
+              <ul class="space-y-3" id="trips-list">
                 <li class="rounded-3xl bg-white p-4 shadow-sm">
                   <div class="flex items-center justify-between gap-3">
                     <div>
@@ -508,5 +595,106 @@
         </section>
       </main>
     </div>
+
+    <script>
+      const dashboardApiUrl = '01_dashboard.php';
+
+      async function fetchDashboardData(endpoint) {
+        const response = await fetch(`${dashboardApiUrl}?action=${endpoint}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${endpoint}`);
+        }
+        return response.json();
+      }
+
+      async function loadDashboardData() {
+        try {
+          const stats = await fetchDashboardData('stats');
+          document.getElementById('stat-passengers').textContent = stats.total_passengers.toLocaleString();
+          document.getElementById('stat-trips').textContent = stats.active_trips.toLocaleString();
+          document.getElementById('stat-revenue').textContent = '₱' + stats.today_revenue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          document.getElementById('stat-drivers').textContent = stats.active_drivers.toLocaleString();
+
+          const boardings = await fetchDashboardData('boardings');
+          const boardingsList = document.getElementById('boardings-list');
+          if (boardingsList) {
+            boardingsList.innerHTML = '';
+            boardings.forEach(boarding => {
+              const time = new Date(boarding.tap_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+              boardingsList.innerHTML += `
+                <li class="rounded-3xl bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p class="font-semibold text-slate-900">${boarding.full_name}</p>
+                      <p class="text-sm text-slate-500">Boarded at: ${boarding.stop_name}</p>
+                    </div>
+                    <span class="text-xs font-semibold text-primary">${time}</span>
+                  </div>
+                </li>
+              `;
+            });
+          }
+
+          const trips = await fetchDashboardData('trips');
+          const tripsList = document.getElementById('trips-list');
+          if (tripsList) {
+            tripsList.innerHTML = '';
+            trips.forEach(trip => {
+              tripsList.innerHTML += `
+                <li class="rounded-3xl bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p class="font-semibold text-slate-900">${trip.full_name}</p>
+                      <p class="text-sm text-slate-500">${trip.boarding_stop} → ${trip.alighting_stop}</p>
+                    </div>
+                    <span class="text-xs font-semibold text-emerald-700">₱${parseFloat(trip.fare_amount).toFixed(2)}</span>
+                  </div>
+                </li>
+              `;
+            });
+          }
+
+          const weeklyRevenue = await fetchDashboardData('weekly_revenue');
+          const revenueChart = document.getElementById('revenue-chart');
+          const revenuePeak = document.getElementById('revenue-peak');
+          if (revenueChart && revenuePeak && weeklyRevenue.length > 0) {
+            revenueChart.innerHTML = '';
+            const maxRevenue = Math.max(...weeklyRevenue.map(r => r.revenue));
+            revenuePeak.textContent = '₱' + maxRevenue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            weeklyRevenue.forEach(day => {
+              const bar = document.createElement('div');
+              bar.className = 'flex-1 rounded-t-3xl bg-primary';
+              const heightPercent = maxRevenue > 0 ? (day.revenue / maxRevenue) * 100 : 10;
+              bar.style.height = Math.max(heightPercent, 10) + '%';
+              bar.title = `${day.day_name}: ₱${day.revenue.toFixed(2)}`;
+              revenueChart.appendChild(bar);
+            });
+          }
+
+          const dailyCounts = await fetchDashboardData('daily_counts');
+          if (dailyCounts.length > 0) {
+            const maxCount = Math.max(...dailyCounts);
+            const chart = document.getElementById('daily-trips-chart');
+            if (chart) {
+              chart.innerHTML = '';
+              const opacities = [0.2, 0.4, 0.3, 0.2, 0.4, 0.3, 0.2];
+              dailyCounts.forEach((count, idx) => {
+                const heightPercent = maxCount > 0 ? (count / maxCount) * 100 : 50;
+                const bar = document.createElement('div');
+                bar.className = 'w-full rounded-t-3xl bg-primary';
+                bar.style.opacity = opacities[idx];
+                bar.style.height = heightPercent + '%';
+                chart.appendChild(bar);
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error loading dashboard data:', error);
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', loadDashboardData);
+      setInterval(loadDashboardData, 30000);
+    </script>
   </body>
 </html>

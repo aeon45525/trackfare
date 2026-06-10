@@ -13,6 +13,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
       rel="stylesheet"
     />
+    <link rel="icon" href="../../images/logo.png" type="image/png">
     <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",

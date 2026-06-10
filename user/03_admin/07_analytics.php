@@ -13,6 +13,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
       rel="stylesheet"
     />
+    <link rel="icon" href="../../images/logo.png" type="image/png">
     <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
@@ -20,38 +21,26 @@
           extend: {
             colors: {
               "secondary-fixed-dim": "#afcae2",
-              "tertiary-fixed-dim": "#ffb783",
-              "surface-container": "#edeeef",
               error: "#ba1a1a",
               "on-primary-fixed-variant": "#0040a1",
               background: "#f8f9fa",
               "on-secondary-container": "#4e677c",
-              tertiary: "#713700",
-              "surface-dim": "#d9dadb",
               primary: "#0040a1",
               "on-tertiary-container": "#ffd0b0",
               "surface-tint": "#0056d2",
               "on-background": "#191c1d",
-              "surface-container-low": "#f3f4f5",
-              "on-primary-fixed": "#001847",
               "inverse-primary": "#b2c5ff",
               "surface-container-high": "#e7e8e9",
               "outline-variant": "#c3c6d6",
               "primary-fixed-dim": "#b2c5ff",
-              "primary-container": "#0056d2",
-              "primary-fixed": "#dae2ff",
               "on-secondary-fixed-variant": "#30495d",
               "on-primary": "#ffffff",
               "inverse-surface": "#2e3132",
               "on-tertiary": "#ffffff",
-              "on-error-container": "#93000a",
-              "surface-variant": "#e1e3e4",
               "inverse-on-surface": "#f0f1f2",
               outline: "#737785",
               "on-secondary-fixed": "#001e30",
               "surface-bright": "#f8f9fa",
-              "on-primary-container": "#ccd8ff",
-              "on-error": "#ffffff",
               secondary: "#486176",
               "on-surface": "#191c1d",
               "surface-container-lowest": "#ffffff",
@@ -122,56 +111,56 @@
         <nav class="flex-1 px-3 py-6 space-y-1">
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="01_dashboard.html"
+            href="01_dashboard.php"
           >
             <span class="material-symbols-outlined">dashboard</span>
             <span>Dashboard</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="02_passengers.html"
+            href="02_passengers.php"
           >
             <span class="material-symbols-outlined">group</span>
             <span>Passengers</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="03_drivers.html"
+            href="03_drivers.php"
           >
             <span class="material-symbols-outlined">badge</span>
             <span>Drivers</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="04_fleet.html"
+            href="04_fleet.php"
           >
             <span class="material-symbols-outlined">local_shipping</span>
             <span>Fleet</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="05_routes_fares.html"
+            href="05_routes_fares.php"
           >
             <span class="material-symbols-outlined">alt_route</span>
             <span>Routes &amp; Fares</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="06_transactions.html"
+            href="06_transactions.php"
           >
             <span class="material-symbols-outlined">payments</span>
             <span>Transactions</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full bg-blue-50 text-blue-700 font-semibold border-r-4 border-blue-700 transition"
-            href="07_analytics.html"
+            href="07_analytics.php"
           >
             <span class="material-symbols-outlined">insights</span>
             <span>Analytics</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
-            href="08_profile.html"
+            href="08_profile.php"
           >
             <span class="material-symbols-outlined">person</span>
             <span>Profile</span>
