@@ -292,17 +292,25 @@ VALUES
 -- SEED DATA — WALLET BALANCE UPDATES
 -- ============================================================
 
-UPDATE passenger_profiles SET wallet_balance = 650.00
-WHERE user_id = (SELECT user_id FROM users WHERE full_name = 'Aaron Catapang');
+UPDATE passenger_profiles pp
+INNER JOIN users u ON pp.user_id = u.user_id
+SET pp.wallet_balance = 650.00
+WHERE u.full_name = 'Aaron Catapang';
 
-UPDATE users SET lat = 14.697278, lng = 120.963722
-WHERE full_name = 'Aaron Catapang';
+UPDATE users u
+INNER JOIN (SELECT user_id FROM users WHERE full_name = 'Aaron Catapang' LIMIT 1) sel
+    ON u.user_id = sel.user_id
+SET u.lat = 14.697278, u.lng = 120.963722;
 
-UPDATE passenger_profiles SET wallet_balance = 420.00
-WHERE user_id = (SELECT user_id FROM users WHERE full_name = 'John Michael Gonzales');
+UPDATE passenger_profiles pp
+INNER JOIN users u ON pp.user_id = u.user_id
+SET pp.wallet_balance = 420.00
+WHERE u.full_name = 'John Michael Gonzales';
 
-UPDATE passenger_profiles SET wallet_balance = 1180.00
-WHERE user_id = (SELECT user_id FROM users WHERE full_name = 'Maria Lopez');
+UPDATE passenger_profiles pp
+INNER JOIN users u ON pp.user_id = u.user_id
+SET pp.wallet_balance = 1180.00
+WHERE u.full_name = 'Maria Lopez';
 
 -- ============================================================
 -- SEED DATA — ADDITIONAL NFC CARDS
