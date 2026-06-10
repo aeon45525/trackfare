@@ -184,12 +184,13 @@
               <p class="text-xs text-slate-500">Admin</p>
             </div>
           </div>
-          <button
+          <a
+            href="../../auth/logout.php"
             class="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
           >
             <span class="material-symbols-outlined">logout</span>
             Logout
-          </button>
+          </a>
         </div>
       </aside>
 

@@ -319,8 +319,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
             <span>Transactions</span>
           </a>
           <a
-            class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
+            class="hidden"
             href="07_analytics.php"
+            aria-hidden="true"
+            tabindex="-1"
           >
             <span class="material-symbols-outlined">insights</span>
             <span>Analytics</span>
@@ -349,12 +351,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
               <p class="text-xs text-slate-500">Admin</p>
             </div>
           </div>
-          <button
+          <a
+            href="../../auth/logout.php"
             class="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
           >
             <span class="material-symbols-outlined">logout</span>
             Logout
-          </button>
+          </a>
         </div>
       </aside>
 

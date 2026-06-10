@@ -178,10 +178,10 @@ INSERT INTO routes (route_name, display_name) VALUES
 INSERT INTO stops (stop_name, municipality, lat, lng) VALUES
 ('ULTRA MEGA',          'Balagtas, Bulacan',  14.82005556, 120.90252778),  -- 14°49'15.7"N 120°54'10.7"E
 ('BALAGTAS ARENA',      'Balagtas, Bulacan',  14.812972, 120.912889),  -- 14°48'46.9"N 120°54'46.4"E
-('GOLDEN CITY',         'Bocaue, Bulacan',    14.804250, 120.920278),  -- 14°48'15.3"N 120°55'13.0"E
-('DR. YANGA\'S COLLEGE','Bocaue, Bulacan',    14.801861, 120.921472),  -- 14°48'06.7"N 120°55'19.3"E
+('GOLDEN CITY',         'Bocaue, Bulacan',    14.804500, 120.920056),  -- 14°48'15.3"N 120°55'13.0"E
+('DR. YANGA\'S COLLEGE','Bocaue, Bulacan',    14.801306, 120.922361),  -- 14°48'06.7"N 120°55'19.3"E
 ('BOCAUE MARKET',       'Bocaue, Bulacan',    14.798556, 120.926194),  -- 14°47'54.8"N 120°55'34.3"E
-('BUNLO JIL',           'Bocaue, Bulacan',    14.786611, 120.931778),  -- 14°47'11.8"N 120°55'54.4"E
+('BUNLO JIL',           'Bocaue, Bulacan',    14.786750, 120.931694),  -- 14°47'11.8"N 120°55'54.4"E
 ('JONERS LOLOMBOY',     'Bocaue, Bulacan',    14.781139, 120.935333),  -- 14°46'52.1"N 120°56'07.2"E
 ('TOWN IN COUNTRY',     'Bocaue, Bulacan',    14.771556, 120.940333),  -- 14°46'17.6"N 120°56'25.2"E
 ('MARILAO TULAY',       'Marilao, Bulacan',   14.760833, 120.949583),  -- 14°45'39.0"N 120°56'58.5"E
@@ -189,7 +189,7 @@ INSERT INTO stops (stop_name, municipality, lat, lng) VALUES
 ('SM MARILAO',          'Marilao, Bulacan',   14.754167, 120.954250),  -- 14°45'15.0"N 120°57'15.3"E
 ('MEDALLION HOMES',     'Meycauayan, Bulacan',14.750139, 120.956306),  -- 14°45'00.5"N 120°57'22.7"E
 ('MALHACAN',            'Meycauayan, Bulacan',14.738583, 120.960556),  -- 14°44'18.9"N 120°57'38.0"E
-('BANGCAL',             'Meycauayan, Bulacan',14.723667, 120.959833),  -- 14°43'25.2"N 120°57'35.4"E
+('BANGCAL',             'Meycauayan, Bulacan',14.723667, 120.959833),  -- 14°43'25.2"N 120°57'35.4"E        
 ('MALANDAY',            'Valenzuela City',    14.715278, 120.957917),  -- 14°42'55.0"N 120°57'28.5"E
 ('DALANDANAN',          'Valenzuela City',    14.703583, 120.961667),  -- 14°42'12.9"N 120°57'42.0"E
 ('BALUBARAN',           'Valenzuela City',    14.697306, 120.963639),  -- 14°41'50.3"N 120°57'49.1"E

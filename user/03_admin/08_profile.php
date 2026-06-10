@@ -232,12 +232,13 @@ if ($countResult) {
               />
             </div>
           </div>
-          <button
+          <a
+            href="../../auth/logout.php"
             class="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
           >
             <span class="material-symbols-outlined">logout</span>
             Logout
-          </button>
+          </a>
         </div>
       </aside>
 
@@ -431,8 +432,9 @@ if ($countResult) {
                 </button>
                 <button
                   type="button"
-                  onclick="window.location.href='07_analytics.php'"
-                  class="w-full inline-flex items-center justify-between rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-surface-container transition"
+                  class="hidden"
+                  aria-hidden="true"
+                  tabindex="-1"
                 >
                   <span>View Analytics</span>
                   <span class="material-symbols-outlined">chevron_right</span>
