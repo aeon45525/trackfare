@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
                 $search = $conn->real_escape_string($search);
                 $where .= " AND (u.full_name LIKE '%$search%' OR u.email LIKE '%$search%' OR nc.uid LIKE '%$search%')";
             }
-            $result = $conn->query("SELECT u.user_id, u.full_name, u.email, pp.wallet_balance, COALESCE(nc.uid, 'Not Assigned') as nfc_card_id, COALESCE(nc.is_active, 0) as card_active, u.is_active as user_active, (SELECT COUNT(*) FROM trip_transactions WHERE user_id = u.user_id) as total_trips, (SELECT MAX(transaction_id) FROM trip_transactions WHERE user_id = u.user_id) as last_trip_id FROM users u LEFT JOIN passenger_profiles pp ON u.user_id = pp.user_id LEFT JOIN nfc_cards nc ON u.user_id = nc.user_id $where ORDER BY u.full_name ASC LIMIT $limit OFFSET $offset");
+            $result = $conn->query("SELECT u.user_id, u.full_name, u.email, pp.wallet_balance, COALESCE(nc.uid, 'Not Assigned') as nfc_card_id, COALESCE(nc.is_active, 0) as card_active, u.is_active as user_active, (SELECT COUNT(*) FROM trip_transactions WHERE user_id = u.user_id) as total_trips, COALESCE((SELECT DATE_FORMAT(MAX(tap_in_time), '%b %d %h:%i %p') FROM active_passengers WHERE user_id = u.user_id AND tap_state = 'in'), '—') as last_tap_in FROM users u LEFT JOIN passenger_profiles pp ON u.user_id = pp.user_id LEFT JOIN nfc_cards nc ON u.user_id = nc.user_id $where ORDER BY u.full_name ASC LIMIT $limit OFFSET $offset");
             if ($result) {
                 while ($row = $result->fetch_assoc()) {
                     $passengers[] = $row;
@@ -116,6 +116,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
         return ['success' => false, 'message' => 'Failed to update NFC card'];
     }
 
+    function addPassenger($full_name, $email, $password) {
+        global $conn;
+        try {
+            $full_name = trim($full_name);
+            $email = trim($email);
+            $password = trim($password);
+
+            if ($full_name === '') {
+                return ['success' => false, 'message' => 'Full name is required.'];
+            }
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return ['success' => false, 'message' => 'A valid email address is required.'];
+            }
+            if (strlen($password) < 6) {
+                return ['success' => false, 'message' => 'Password must be at least 6 characters long.'];
+            }
+
+            $stmt = $conn->prepare('SELECT user_id FROM users WHERE email = ? LIMIT 1');
+            $stmt->bind_param('s', $email);
+            $stmt->execute();
+            $stmt->store_result();
+            if ($stmt->num_rows > 0) {
+                return ['success' => false, 'message' => 'A passenger with this email already exists.'];
+            }
+
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+            $insert = $conn->prepare('INSERT INTO users (full_name, email, password, role, is_active) VALUES (?, ?, ?, ?, 1)');
+            $role = 'passenger';
+            $insert->bind_param('ssss', $full_name, $email, $hashedPassword, $role);
+
+            if (!$insert->execute()) {
+                return ['success' => false, 'message' => 'Unable to create passenger account.'];
+            }
+
+            $userId = $conn->insert_id;
+            $profile = $conn->prepare('INSERT INTO passenger_profiles (user_id, wallet_balance) VALUES (?, 0.00)');
+            $profile->bind_param('i', $userId);
+            $profile->execute();
+
+            return ['success' => true, 'message' => 'Passenger added successfully.'];
+        } catch (Exception $e) {
+            error_log('Add passenger error: ' . $e->getMessage());
+        }
+        return ['success' => false, 'message' => 'Failed to add passenger.'];
+    }
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $action = $_POST['action'] ?? '';
         switch ($action) {
@@ -134,6 +180,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
                 $uid = $_POST['uid'] ?? '';
                 $active = $_POST['active'] ?? 0;
                 echo json_encode(updateNfcCard($user_id, $uid, $active));
+                break;
+            case 'add_passenger':
+                $full_name = $_POST['full_name'] ?? '';
+                $email = $_POST['email'] ?? '';
+                $password = $_POST['password'] ?? '';
+                echo json_encode(addPassenger($full_name, $email, $password));
                 break;
             default:
                 echo json_encode(['success' => false, 'message' => 'Unknown action']);
@@ -405,6 +457,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
               </p>
             </div>
             <button
+              id="add-passenger-button"
               class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700"
             >
               <span class="material-symbols-outlined">person_add</span>
@@ -439,47 +492,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
               <thead class="bg-slate-50">
                 <tr>
                   <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
                     Passenger ID
                   </th>
                   <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
                     Name
                   </th>
                   <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
                     Email
                   </th>
                   <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
                     NFC Card ID
                   </th>
                   <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
-                  >
-                    Status
-                  </th>
-                  <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
                     Balance
                   </th>
                   <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
                     Last Tap-In
                   </th>
                   <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
-                  >
-                    Last Active
-                  </th>
-                  <th
-                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
                     Actions
                   </th>
@@ -523,21 +566,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
           tbody.innerHTML = '';
 
           passengers.forEach(p => {
-            const statusColor = p.user_active === 1 ? 'text-emerald-700' : 'text-slate-500';
-            const statusText = p.user_active === 1 ? 'Active' : 'Inactive';
-            
             const row = document.createElement('tr');
             row.className = 'hover:bg-slate-50 transition-colors';
             row.innerHTML = `
-              <td class="px-6 py-5 text-sm font-semibold text-slate-900">P-${String(p.user_id).padStart(5, '0')}</td>
-              <td class="px-6 py-5 text-sm font-semibold text-slate-900">${p.full_name}</td>
-              <td class="px-6 py-5 text-sm text-slate-500">${p.email}</td>
-              <td class="px-6 py-5 text-sm text-slate-700">${p.nfc_card_id || 'Not assigned'}</td>
-              <td class="px-6 py-5 text-sm font-semibold ${statusColor}">${statusText}</td>
-              <td class="px-6 py-5 text-sm font-semibold text-slate-900">₱${parseFloat(p.wallet_balance || 0).toFixed(2)}</td>
-              <td class="px-6 py-5 text-sm text-slate-700">--</td>
-              <td class="px-6 py-5 text-sm text-slate-700">--</td>
-              <td class="px-6 py-5 text-sm flex flex-wrap gap-2">
+              <td class="px-4 py-3 text-sm font-semibold text-slate-900">P-${String(p.user_id).padStart(5, '0')}</td>
+              <td class="px-4 py-3 text-sm font-semibold text-slate-900">${p.full_name}</td>
+              <td class="px-4 py-3 text-sm text-slate-500">${p.email}</td>
+              <td class="px-4 py-3 text-sm text-slate-700">${p.nfc_card_id || 'Not assigned'}</td>
+              <td class="px-4 py-3 text-sm font-semibold text-slate-900">₱${parseFloat(p.wallet_balance || 0).toFixed(2)}</td>
+              <td class="px-4 py-3 text-sm text-slate-700">${p.last_tap_in || '—'}</td>
+              <td class="px-4 py-3 text-sm flex flex-wrap gap-1">
                 <button onclick="viewProfile(${p.user_id})" class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">
                   View Profile
                 </button>
@@ -658,6 +696,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
         }
       }
 
+      function openAddPassengerModal() {
+        openModal('Add Passenger', `
+          <form id="add-passenger-form" class="space-y-4 text-sm text-slate-700">
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Full Name</label>
+              <input name="full_name" type="text" class="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15" placeholder="Enter passenger name" required />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Email</label>
+              <input name="email" type="email" class="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15" placeholder="Enter passenger email" required />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Password</label>
+              <input name="password" type="password" minlength="6" class="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15" placeholder="Set a password" required />
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2">
+              <button type="button" onclick="closeModal()" class="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Cancel</button>
+              <button type="submit" class="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Create Passenger</button>
+            </div>
+          </form>
+        `);
+
+        document.getElementById('add-passenger-form').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const form = event.target;
+          const formData = new URLSearchParams(new FormData(form));
+          formData.append('action', 'add_passenger');
+
+          const res = await fetch('02_passengers.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData.toString()
+          });
+          const result = await res.json();
+          alert(result.message || 'Passenger created successfully.');
+          if (result.success) {
+            closeModal();
+            loadPassengers(currentPage, currentSearch, currentStatus);
+          }
+        });
+      }
+
       function topupBalance(userId) {
         openModal('Top Up Balance', `
           <form id="topup-form" class="space-y-4 text-sm text-slate-700">
@@ -720,6 +800,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
             currentSearch = e.target.value;
             loadPassengers(1, currentSearch, currentStatus);
           });
+        }
+
+        // Add passenger button
+        const addPassengerButton = document.getElementById('add-passenger-button');
+        if (addPassengerButton) {
+          addPassengerButton.addEventListener('click', () => openAddPassengerModal());
         }
 
         // Status filter buttons

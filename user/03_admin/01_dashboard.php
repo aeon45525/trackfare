@@ -448,8 +448,8 @@ if (isset($_GET['action'])) {
             <div
               class="relative h-56 rounded-[1.25rem] bg-surface-container p-4 overflow-hidden"
             >
-              <div id="revenue-chart" class="flex h-full items-end gap-2"></div>
-              <div class="absolute bottom-5 right-5 text-right">
+              <svg id="revenue-chart" class="h-full w-full" viewBox="0 0 340 180" preserveAspectRatio="none"></svg>
+              <div class="absolute top-4 right-4 text-right">
                 <p
                   class="text-[10px] uppercase tracking-[0.3em] text-primary font-semibold"
                 >
@@ -458,6 +458,7 @@ if (isset($_GET['action'])) {
                 <p id="revenue-peak" class="mt-2 text-2xl font-black text-on-surface">₱0.00</p>
               </div>
             </div>
+            <div id="revenue-labels" class="mt-3 grid grid-cols-7 gap-2 text-[11px] text-slate-500"></div>
           </section>
         </div>
         <section
@@ -656,18 +657,70 @@ if (isset($_GET['action'])) {
 
           const weeklyRevenue = await fetchDashboardData('weekly_revenue');
           const revenueChart = document.getElementById('revenue-chart');
+          const revenueLabels = document.getElementById('revenue-labels');
           const revenuePeak = document.getElementById('revenue-peak');
-          if (revenueChart && revenuePeak && weeklyRevenue.length > 0) {
+          if (revenueChart && revenueLabels && revenuePeak && weeklyRevenue.length > 0) {
             revenueChart.innerHTML = '';
+            revenueLabels.innerHTML = '';
+
             const maxRevenue = Math.max(...weeklyRevenue.map(r => r.revenue));
             revenuePeak.textContent = '₱' + maxRevenue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            weeklyRevenue.forEach(day => {
-              const bar = document.createElement('div');
-              bar.className = 'flex-1 rounded-t-3xl bg-primary';
-              const heightPercent = maxRevenue > 0 ? (day.revenue / maxRevenue) * 100 : 10;
-              bar.style.height = Math.max(heightPercent, 10) + '%';
-              bar.title = `${day.day_name}: ₱${day.revenue.toFixed(2)}`;
-              revenueChart.appendChild(bar);
+
+            const width = 340;
+            const height = 180;
+            const padding = { top: 20, bottom: 40, left: 24, right: 16 };
+            const plotWidth = width - padding.left - padding.right;
+            const plotHeight = height - padding.top - padding.bottom;
+
+            const points = weeklyRevenue.map((day, index) => {
+              const x = padding.left + (plotWidth / (weeklyRevenue.length - 1)) * index;
+              const y = padding.top + (maxRevenue > 0 ? plotHeight - (day.revenue / maxRevenue) * plotHeight : plotHeight);
+              return { x, y, label: day.day_name, revenue: day.revenue };
+            });
+
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const grid = document.createElementNS(svgNS, 'g');
+            grid.innerHTML = `
+              <line x1="${padding.left}" y1="${padding.top}" x2="${width - padding.right}" y2="${padding.top}" stroke="#cbd5e1" stroke-width="1" opacity="0.35" />
+              <line x1="${padding.left}" y1="${padding.top + plotHeight / 2}" x2="${width - padding.right}" y2="${padding.top + plotHeight / 2}" stroke="#cbd5e1" stroke-width="1" opacity="0.25" />
+              <line x1="${padding.left}" y1="${padding.top + plotHeight}" x2="${width - padding.right}" y2="${padding.top + plotHeight}" stroke="#cbd5e1" stroke-width="1" opacity="0.25" />
+            `;
+            revenueChart.appendChild(grid);
+
+            const areaPath = document.createElementNS(svgNS, 'path');
+            const linePath = document.createElementNS(svgNS, 'path');
+            const pathPoints = points.map((point, idx) => `${idx === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+            areaPath.setAttribute('d', pathPoints + ` L ${points[points.length - 1].x} ${padding.top + plotHeight} L ${points[0].x} ${padding.top + plotHeight} Z`);
+            areaPath.setAttribute('fill', 'rgba(0, 64, 161, 0.15)');
+            revenueChart.appendChild(areaPath);
+
+            linePath.setAttribute('d', pathPoints);
+            linePath.setAttribute('fill', 'none');
+            linePath.setAttribute('stroke', '#0040a1');
+            linePath.setAttribute('stroke-width', '3');
+            linePath.setAttribute('stroke-linecap', 'round');
+            linePath.setAttribute('stroke-linejoin', 'round');
+            revenueChart.appendChild(linePath);
+
+            points.forEach(point => {
+              const circle = document.createElementNS(svgNS, 'circle');
+              circle.setAttribute('cx', point.x);
+              circle.setAttribute('cy', point.y);
+              circle.setAttribute('r', '4');
+              circle.setAttribute('fill', '#ffffff');
+              circle.setAttribute('stroke', '#0040a1');
+              circle.setAttribute('stroke-width', '2');
+              circle.setAttribute('title', `${point.label}: ₱${point.revenue.toFixed(2)}`);
+              revenueChart.appendChild(circle);
+            });
+
+            points.forEach(point => {
+              const label = document.createElement('span');
+              label.textContent = point.label.slice(0, 3);
+              label.className = 'whitespace-nowrap';
+              label.style.display = 'block';
+              label.style.textAlign = 'center';
+              revenueLabels.appendChild(label);
             });
           }
 
