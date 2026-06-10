@@ -152,8 +152,10 @@
             <span>Transactions</span>
           </a>
           <a
-            class="flex items-center gap-3 px-5 py-3 rounded-r-full bg-blue-50 text-blue-700 font-semibold border-r-4 border-blue-700 transition"
+            class="hidden"
             href="07_analytics.php"
+            aria-hidden="true"
+            tabindex="-1"
           >
             <span class="material-symbols-outlined">insights</span>
             <span>Analytics</span>

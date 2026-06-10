@@ -79,6 +79,7 @@ CREATE TABLE buses (
     bus_id       INT UNSIGNED NOT NULL AUTO_INCREMENT,
     bus_number   VARCHAR(20) NOT NULL,
     plate_number VARCHAR(20),
+    capacity     INT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (bus_id)
 );
 
@@ -212,12 +213,12 @@ SELECT 2, stop_id, ROW_NUMBER() OVER (ORDER BY stop_id DESC) FROM stops;
 -- SEED DATA — BUSES
 -- ============================================================
 
-INSERT INTO buses (bus_number, plate_number) VALUES
-('802', 'ABC-1234'),
-('803', 'DEF-5678'),
-('804', 'GHI-9012'),
-('805', 'JKL-3456'),
-('806', 'MNO-7890');
+INSERT INTO buses (bus_number, plate_number, capacity) VALUES
+('802', 'ABC-1234', 45),
+('803', 'DEF-5678', 45),
+('804', 'GHI-9012', 45),
+('805', 'JKL-3456', 45),
+('806', 'MNO-7890', 45);
 
 -- ============================================================
 -- SEED DATA — DRIVER PROFILES
@@ -332,4 +333,8 @@ INSERT INTO nfc_cards (user_id, uid) VALUES
 --
 -- INSERT INTO route_stops (route_id, stop_id, stop_order)
 -- SELECT 2, stop_id, ROW_NUMBER() OVER (ORDER BY stop_id DESC) FROM stops;
+--
+-- If the existing buses table was created without capacity, run:
+-- ALTER TABLE buses ADD COLUMN capacity INT UNSIGNED NOT NULL DEFAULT 0;
+-- UPDATE buses SET capacity = 45 WHERE plate_number IN ('ABC-1234','DEF-5678','GHI-9012','JKL-3456','MNO-7890');
 -- ============================================================	

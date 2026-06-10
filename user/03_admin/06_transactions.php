@@ -1,3 +1,57 @@
+<?php
+require_once '../../config/db.php';
+
+$exportCsv = isset($_GET['export']) && $_GET['export'] === 'csv';
+
+$sql = "SELECT tt.transaction_id,
+               u.full_name AS passenger_name,
+               nc.uid AS nfc_uid,
+               bs.stop_name AS boarding_stop,
+               as_stop.stop_name AS alighting_stop,
+               tt.fare_amount,
+               t.start_time,
+               COALESCE(r.display_name, r.route_name, 'Unknown Route') AS route_name
+        FROM trip_transactions tt
+        JOIN users u ON tt.user_id = u.user_id
+        LEFT JOIN nfc_cards nc ON tt.card_id = nc.card_id
+        JOIN stops bs ON tt.boarding_stop_id = bs.stop_id
+        JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id
+        LEFT JOIN trips t ON tt.trip_id = t.trip_id
+        LEFT JOIN routes r ON t.route_id = r.route_id
+        ORDER BY tt.transaction_id DESC";
+
+$transactions = [];
+if ($result = $conn->query($sql)) {
+    while ($row = $result->fetch_assoc()) {
+        $transactions[] = $row;
+    }
+    $result->free();
+}
+
+if ($exportCsv) {
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="trackfare-transactions.csv"');
+    $output = fopen('php://output', 'w');
+    fputcsv($output, ['Transaction ID', 'Passenger', 'NFC UID', 'Tap Journey', 'Boarding Stop', 'Alighting Stop', 'Fare', 'Route Direction', 'Timestamp']);
+    foreach ($transactions as $transaction) {
+        fputcsv($output, [
+            $transaction['transaction_id'], 
+            $transaction['passenger_name'],
+            $transaction['nfc_uid'] ?? 'N/A',
+            sprintf('%s → %s', $transaction['boarding_stop'], $transaction['alighting_stop']),
+            $transaction['boarding_stop'],
+            $transaction['alighting_stop'],
+            number_format((float)$transaction['fare_amount'], 2),
+            $transaction['route_name'],
+            $transaction['start_time'] ? date('Y-m-d H:i:s', strtotime($transaction['start_time'])) : '',
+        ]);
+    }
+    fclose($output);
+    exit;
+}
+
+$totalTransactions = count($transactions);
+?>
 <!doctype html>
 
 <html lang="en">
@@ -212,8 +266,9 @@
                   >search</span
                 >
                 <input
+                  id="transaction-search"
                   class="w-full bg-surface-container-low border-none rounded-xl py-3 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
-                  placeholder="Search passenger or NFC tag ID"
+                  placeholder="Search passenger, NFC tag, or route"
                   type="text"
                 />
               </div>
@@ -238,6 +293,8 @@
               </p>
             </div>
             <button
+              type="button"
+              onclick="window.location.href='06_transactions.php?export=csv'"
               class="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
             >
               <span class="material-symbols-outlined">download</span>
@@ -284,7 +341,7 @@
                   <th
                     class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
-                    Distance
+                    NFC UID
                   </th>
                   <th
                     class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
@@ -304,254 +361,57 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-200 bg-white">
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    Aaron
-                  </td>
-                  <td class="px-6 py-5">
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Balagtas</span
-                      >
-                      <span class="material-symbols-outlined text-blue-600"
-                        >arrow_forward</span
-                      >
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Monumento</span
-                      >
-                    </div>
-                    <div
-                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
-                    >
-                      Tap In → Tap Out
-                    </div>
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    18 km
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱54
-                  </td>
-                  <td class="px-6 py-5 text-sm text-slate-600">
-                    2024-05-18 08:32 AM
-                  </td>
-                  <td class="px-6 py-5">
-                    <span
-                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
-                      >Balagtas → Monumento</span
-                    >
-                  </td>
-                </tr>
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    Maria Santos
-                  </td>
-                  <td class="px-6 py-5">
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Bocaue</span
-                      >
-                      <span class="material-symbols-outlined text-blue-600"
-                        >arrow_forward</span
-                      >
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Monumento</span
-                      >
-                    </div>
-                    <div
-                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
-                    >
-                      Tap In → Tap Out
-                    </div>
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    15 km
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱45
-                  </td>
-                  <td class="px-6 py-5 text-sm text-slate-600">
-                    2024-05-18 08:15 AM
-                  </td>
-                  <td class="px-6 py-5">
-                    <span
-                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
-                      >Balagtas → Monumento</span
-                    >
-                  </td>
-                </tr>
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    Juan Dela Cruz
-                  </td>
-                  <td class="px-6 py-5">
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Marilao</span
-                      >
-                      <span class="material-symbols-outlined text-blue-600"
-                        >arrow_forward</span
-                      >
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Monumento</span
-                      >
-                    </div>
-                    <div
-                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
-                    >
-                      Tap In → Tap Out
-                    </div>
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    12 km
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱36
-                  </td>
-                  <td class="px-6 py-5 text-sm text-slate-600">
-                    2024-05-18 07:50 AM
-                  </td>
-                  <td class="px-6 py-5">
-                    <span
-                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
-                      >Balagtas → Monumento</span
-                    >
-                  </td>
-                </tr>
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    Rosa Fernandez
-                  </td>
-                  <td class="px-6 py-5">
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Meycauayan</span
-                      >
-                      <span class="material-symbols-outlined text-blue-600"
-                        >arrow_forward</span
-                      >
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Monumento</span
-                      >
-                    </div>
-                    <div
-                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
-                    >
-                      Tap In → Tap Out
-                    </div>
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    8 km
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱24
-                  </td>
-                  <td class="px-6 py-5 text-sm text-slate-600">
-                    2024-05-18 07:42 AM
-                  </td>
-                  <td class="px-6 py-5">
-                    <span
-                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
-                      >Balagtas → Monumento</span
-                    >
-                  </td>
-                </tr>
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    Miguel Torres
-                  </td>
-                  <td class="px-6 py-5">
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Monumento</span
-                      >
-                      <span class="material-symbols-outlined text-blue-600"
-                        >arrow_forward</span
-                      >
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Bocaue</span
-                      >
-                    </div>
-                    <div
-                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
-                    >
-                      Tap In → Tap Out
-                    </div>
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    15 km
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱45
-                  </td>
-                  <td class="px-6 py-5 text-sm text-slate-600">
-                    2024-05-18 07:28 AM
-                  </td>
-                  <td class="px-6 py-5">
-                    <span
-                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
-                      >Monumento → Balagtas</span
-                    >
-                  </td>
-                </tr>
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    Ana Garcia
-                  </td>
-                  <td class="px-6 py-5">
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Monumento</span
-                      >
-                      <span class="material-symbols-outlined text-blue-600"
-                        >arrow_forward</span
-                      >
-                      <span
-                        class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"
-                        >Marilao</span
-                      >
-                    </div>
-                    <div
-                      class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500"
-                    >
-                      Tap In → Tap Out
-                    </div>
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    12 km
-                  </td>
-                  <td class="px-6 py-5 text-sm font-semibold text-slate-900">
-                    ₱36
-                  </td>
-                  <td class="px-6 py-5 text-sm text-slate-600">
-                    2024-05-18 07:15 AM
-                  </td>
-                  <td class="px-6 py-5">
-                    <span
-                      class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
-                      >Monumento → Balagtas</span
-                    >
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    <?php if (count($transactions) === 0): ?>
+                      <tr>
+                        <td colspan="6" class="px-6 py-5 text-sm text-slate-600">
+                          No transactions found.
+                        </td>
+                      </tr>
+                    <?php else: ?>
+                      <?php foreach ($transactions as $transaction): ?>
+                        <?php
+                          $boarding = htmlspecialchars($transaction['boarding_stop'], ENT_QUOTES, 'UTF-8');
+                          $alighting = htmlspecialchars($transaction['alighting_stop'], ENT_QUOTES, 'UTF-8');
+                          $routeDirection = htmlspecialchars($transaction['route_name'], ENT_QUOTES, 'UTF-8');
+                          $timestamp = $transaction['start_time'] ? date('Y-m-d H:i:s', strtotime($transaction['start_time'])) : '—';
+                        ?>
+                        <tr class="hover:bg-slate-50 transition-colors transaction-row" data-search="<?= htmlspecialchars(strtolower($transaction['passenger_name'] . ' ' . ($transaction['nfc_uid'] ?? '') . ' ' . $boarding . ' ' . $alighting . ' ' . $routeDirection), ENT_QUOTES, 'UTF-8'); ?>">
+                          <td class="px-6 py-5 text-sm font-semibold text-slate-900">
+                            <?= htmlspecialchars($transaction['passenger_name'], ENT_QUOTES, 'UTF-8'); ?>
+                          </td>
+                          <td class="px-6 py-5">
+                            <div class="flex flex-wrap items-center gap-2 text-sm">
+                              <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"><?= $boarding; ?></span>
+                              <span class="material-symbols-outlined text-blue-600">arrow_forward</span>
+                              <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700"><?= $alighting; ?></span>
+                            </div>
+                            <div class="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+                              Tap In → Tap Out
+                            </div>
+                          </td>
+                          <td class="px-6 py-5 text-sm font-semibold text-slate-900">
+                            <?= htmlspecialchars($transaction['nfc_uid'] ?? 'N/A', ENT_QUOTES, 'UTF-8'); ?>
+                          </td>
+                          <td class="px-6 py-5 text-sm font-semibold text-slate-900">
+                            ₱<?= number_format((float)$transaction['fare_amount'], 2); ?>
+                          </td>
+                          <td class="px-6 py-5 text-sm text-slate-600">
+                            <?= htmlspecialchars($timestamp, ENT_QUOTES, 'UTF-8'); ?>
+                          </td>
+                          <td class="px-6 py-5">
+                            <span class="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"><?= $routeDirection; ?></span>
+                          </td>
+                        </tr>
+                      <?php endforeach; ?>
+                    <?php endif; ?>
+                  </tbody>
+                </table>
           </div>
           <div
             class="mt-6 flex items-center justify-between border-t border-slate-200 pt-4"
           >
             <span class="text-xs font-semibold text-slate-500"
-              >Showing 6 of 1,240 transactions</span
+              >Showing <?= $totalTransactions; ?> of <?= $totalTransactions; ?> transactions</span
             >
             <div class="flex items-center gap-2">
               <button
@@ -578,5 +438,22 @@
         </section>
       </main>
     </div>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('transaction-search');
+        const transactionRows = Array.from(document.querySelectorAll('.transaction-row'));
+
+        if (!searchInput) {
+          return;
+        }
+
+        searchInput.addEventListener('input', function () {
+          const query = this.value.trim().toLowerCase();
+          transactionRows.forEach(function (row) {
+            row.style.display = query === '' || row.dataset.search.includes(query) ? '' : 'none';
+          });
+        });
+      });
+    </script>
   </body>
 </html>

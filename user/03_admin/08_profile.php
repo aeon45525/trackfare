@@ -1,3 +1,54 @@
+<?php
+require_once '../../config/db.php';
+
+$profileName = 'Fleet Manager';
+$profileEmail = 'fleet.manager@trackfare.com';
+$profileRole = 'Admin';
+$profileStatus = 'Active';
+$totalPassengers = 0;
+$totalDrivers = 0;
+$totalTransactions = 0;
+$totalRoutes = 0;
+$activeTrips = 0;
+
+$adminResult = $conn->query("SELECT full_name, email, is_active FROM users WHERE role = 'admin' LIMIT 1");
+if ($adminResult && ($adminRow = $adminResult->fetch_assoc())) {
+    $profileName = $adminRow['full_name'] ?: $profileName;
+    $profileEmail = $adminRow['email'] ?: $profileEmail;
+    $profileStatus = $adminRow['is_active'] === '0' ? 'Inactive' : 'Active';
+    $adminResult->free();
+}
+
+$countResult = $conn->query("SELECT COUNT(*) AS count FROM users WHERE role = 'passenger'");
+if ($countResult) {
+    $totalPassengers = (int)$countResult->fetch_assoc()['count'];
+    $countResult->free();
+}
+
+$countResult = $conn->query("SELECT COUNT(*) AS count FROM users WHERE role = 'driver'");
+if ($countResult) {
+    $totalDrivers = (int)$countResult->fetch_assoc()['count'];
+    $countResult->free();
+}
+
+$countResult = $conn->query("SELECT COUNT(*) AS count FROM trip_transactions");
+if ($countResult) {
+    $totalTransactions = (int)$countResult->fetch_assoc()['count'];
+    $countResult->free();
+}
+
+$countResult = $conn->query("SELECT COUNT(*) AS count FROM routes");
+if ($countResult) {
+    $totalRoutes = (int)$countResult->fetch_assoc()['count'];
+    $countResult->free();
+}
+
+$countResult = $conn->query("SELECT COUNT(*) AS count FROM trips WHERE status = 'active'");
+if ($countResult) {
+    $activeTrips = (int)$countResult->fetch_assoc()['count'];
+    $countResult->free();
+}
+?>
 <!doctype html>
 <html lang="en">
   <head>
@@ -153,8 +204,10 @@
             <span>Transactions</span>
           </a>
           <a
-            class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
+            class="hidden"
             href="07_analytics.php"
+            aria-hidden="true"
+            tabindex="-1"
           >
             <span class="material-symbols-outlined">insights</span>
             <span>Analytics</span>
@@ -224,7 +277,7 @@
               </div>
               <div>
                 <h2 class="mt-2 text-3xl font-black text-on-surface">
-                  Fleet Manager
+                  <?= htmlspecialchars($profileName, ENT_QUOTES, 'UTF-8'); ?>
                 </h2>
                 <div class="mt-2 flex items-center gap-3">
                   <div
@@ -233,7 +286,7 @@
                     <span class="material-symbols-outlined text-sm"
                       >shield</span
                     >
-                    Fleet Manager
+                    <?= htmlspecialchars($profileRole, ENT_QUOTES, 'UTF-8'); ?>
                   </div>
                   <div
                     class="inline-flex items-center gap-2 rounded-full bg-surface-container px-3 py-1 text-sm font-semibold text-slate-600"
@@ -245,7 +298,7 @@
                   </div>
                 </div>
                 <p class="mt-3 text-sm text-slate-600">
-                  fleet.manager@trackfare.com
+                  <?= htmlspecialchars($profileEmail, ENT_QUOTES, 'UTF-8'); ?>
                 </p>
               </div>
             </div>
@@ -297,9 +350,10 @@
                 </p>
                 <p class="mt-3">
                   <span
-                    class="inline-flex items-center px-3 py-1 rounded-full bg-green-50 text-green-700 font-semibold"
-                    >Active</span
+                    class="inline-flex items-center px-3 py-1 rounded-full <?= $profileStatus === 'Active' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'; ?> font-semibold"
                   >
+                    <?= htmlspecialchars($profileStatus, ENT_QUOTES, 'UTF-8'); ?>
+                  </span>
                 </p>
               </div>
             </div>
@@ -312,10 +366,10 @@
                 <p
                   class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
                 >
-                  Last Login
+                  Total Passengers
                 </p>
                 <p class="mt-3 text-lg font-semibold text-on-surface">
-                  Today, 08:14 AM
+                  <?= number_format($totalPassengers); ?>
                 </p>
               </div>
               <div
@@ -324,10 +378,10 @@
                 <p
                   class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
                 >
-                  System Access Level
+                  Total Drivers
                 </p>
                 <p class="mt-3 text-lg font-semibold text-on-surface">
-                  Administrative control
+                  <?= number_format($totalDrivers); ?>
                 </p>
               </div>
               <div
@@ -336,13 +390,10 @@
                 <p
                   class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold"
                 >
-                  Admin Status
+                  Total Transactions
                 </p>
-                <p class="mt-3">
-                  <span
-                    class="inline-flex items-center px-3 py-1 rounded-full bg-green-50 text-green-700 font-semibold"
-                    >Active</span
-                  >
+                <p class="mt-3 text-lg font-semibold text-on-surface">
+                  <?= number_format($totalTransactions); ?>
                 </p>
               </div>
             </div>
@@ -355,24 +406,32 @@
               </p>
               <div class="mt-4 grid gap-3 sm:grid-cols-2">
                 <button
+                  type="button"
+                  onclick="window.location.href='01_dashboard.php'"
                   class="w-full inline-flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition"
                 >
                   <span>View Fleet Dashboard</span>
                   <span class="material-symbols-outlined">chevron_right</span>
                 </button>
                 <button
+                  type="button"
+                  onclick="window.location.href='03_drivers.php'"
                   class="w-full inline-flex items-center justify-between rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-surface-container transition"
                 >
                   <span>Manage Drivers</span>
                   <span class="material-symbols-outlined">chevron_right</span>
                 </button>
                 <button
+                  type="button"
+                  onclick="window.location.href='05_routes_fares.php'"
                   class="w-full inline-flex items-center justify-between rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-surface-container transition"
                 >
                   <span>Manage Routes</span>
                   <span class="material-symbols-outlined">chevron_right</span>
                 </button>
                 <button
+                  type="button"
+                  onclick="window.location.href='07_analytics.php'"
                   class="w-full inline-flex items-center justify-between rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-surface-container transition"
                 >
                   <span>View Analytics</span>
