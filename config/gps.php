@@ -308,7 +308,19 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
         'current_stop' => '—',
         'estimated_fare' => '₱0.00',
         'route_id' => null,
+        'wallet_balance' => 0.0,
     ];
+
+    if ($stmt = $conn->prepare(
+        'SELECT wallet_balance FROM passenger_profiles WHERE user_id = ? LIMIT 1'
+    )) {
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $stmt->bind_result($walletBalance);
+        $stmt->fetch();
+        $response['wallet_balance'] = (float) $walletBalance;
+        $stmt->close();
+    }
 
     if ($stmt = $conn->prepare(
         'SELECT ap.trip_id, ap.boarding_stop_id, t.route_id, t.current_stop_index, t.status,

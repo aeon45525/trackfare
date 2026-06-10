@@ -22,3 +22,5 @@ echo json_encode([
     'libraries' => ['marker'],
     'mapId'     => null,
 ], JSON_UNESCAPED_UNICODE);
+
+// backup API = AIzaSyAuvXtccaGYNVFuYXIfYPP8XiRazm5xlXA

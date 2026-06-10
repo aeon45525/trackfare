@@ -41,9 +41,6 @@ function haversine_km(float $lat1, float $lng1, float $lat2, float $lng2): float
 function calculateFare(float $distanceKm): float
 {
     $distanceKm = max(0.0, $distanceKm);
-    if ($distanceKm <= 0.0) {
-        return 0.0;
-    }
     if ($distanceKm <= FARE_INCLUDED_KM) {
         return round(FARE_FIRST_KM_PHP, 2);
     }
@@ -199,19 +196,47 @@ function record_fare_transaction(
     int $alightingStopId,
     float $fare
 ): bool {
-    if ($stmt = $conn->prepare(
-        'INSERT INTO trip_transactions
-         (trip_id, user_id, card_id, boarding_stop_id, alighting_stop_id, fare_amount)
-         VALUES (?, ?, ?, ?, ?, ?)'
-    )) {
-        $stmt->bind_param('iiiidd', $tripId, $userId, $cardId, $boardingStopId, $alightingStopId, $fare);
-        $ok = $stmt->execute();
-        $stmt->close();
-
-        return $ok;
+    if (!$conn->begin_transaction()) {
+        return false;
     }
 
-    return false;
+    try {
+        if ($stmt = $conn->prepare(
+            'INSERT INTO trip_transactions
+             (trip_id, user_id, card_id, boarding_stop_id, alighting_stop_id, fare_amount)
+             VALUES (?, ?, ?, ?, ?, ?)'
+        )) {
+            $stmt->bind_param('iiiidd', $tripId, $userId, $cardId, $boardingStopId, $alightingStopId, $fare);
+            $ok = $stmt->execute();
+            $stmt->close();
+
+            if (!$ok) {
+                throw new Exception('transaction insert failed');
+            }
+        } else {
+            throw new Exception('transaction insert prepare failed');
+        }
+
+        if ($stmt = $conn->prepare(
+            'UPDATE passenger_profiles SET wallet_balance = wallet_balance - ? WHERE user_id = ?'
+        )) {
+            $stmt->bind_param('di', $fare, $userId);
+            $ok = $stmt->execute();
+            $stmt->close();
+
+            if (!$ok) {
+                throw new Exception('wallet update failed');
+            }
+        } else {
+            throw new Exception('wallet update prepare failed');
+        }
+
+        $conn->commit();
+        return true;
+    } catch (Exception $e) {
+        $conn->rollback();
+        return false;
+    }
 }
 
 function remove_active_passenger(mysqli $conn, int $tripId, int $userId): void

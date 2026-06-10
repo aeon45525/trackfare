@@ -1450,7 +1450,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   }
 
   refreshDriverPassengerPanel();
-  setInterval(refreshDriverPassengerPanel, 3000);
+  setInterval(refreshDriverPassengerPanel, 2000);
 
   btnStart .addEventListener('click', startTrip);
   btnArrive.addEventListener('click', arriveStop);

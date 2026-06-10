@@ -54,6 +54,7 @@ if ($stmt = $conn->prepare(
 )) {
     $stmt->bind_param('i', $userId);
     $stmt->execute();
+    $stmt->store_result();
     $stmt->bind_result($tripStatus, $boardedStopResult, $routeName);
     if ($stmt->fetch()) {
         $activeTripStatus = $tripStatus === 'active' ? 'On active trip' : ucfirst($tripStatus);
@@ -64,7 +65,10 @@ if ($stmt = $conn->prepare(
         $hasActiveTrip = true;
         $tapStatus = 'Active';
         $tapStatusClasses = 'status-pill status-active';
+    }
+    $stmt->close();
 
+    if ($hasActiveTrip) {
         $fareInfo = get_passenger_fare_info($conn, $userId);
         if ($fareInfo['ok']) {
             $estimatedFare = '₱' . number_format($fareInfo['fare_now'], 2);
@@ -72,7 +76,6 @@ if ($stmt = $conn->prepare(
             $estimatedFare = '₱0.00';
         }
     }
-    $stmt->close();
 }
 
 $pageTitle = 'Home';
@@ -325,7 +328,7 @@ $activeNav = 'home';
             <div class="flex items-center justify-between gap-4">
               <div>
                 <p class="text-xs font-semibold uppercase tracking-[0.16em] text-white/75">Wallet balance</p>
-                <p class="mt-2 text-[2rem] leading-none font-extrabold tracking-tight">&#8369;<?= number_format($walletBalance, 2) ?></p>
+                <p id="wallet-balance" class="mt-2 text-[2rem] leading-none font-extrabold tracking-tight">&#8369;<?= number_format($walletBalance, 2) ?></p>
               </div>
               <div class="icon-chip bg-white/15 text-white">
                 <span class="material-symbols-outlined"
@@ -523,13 +526,14 @@ $activeNav = 'home';
         var boardedStopEl = document.getElementById('boarded-stop');
         var currentStopEl = document.getElementById('current-stop');
         var fareEl = document.getElementById('fare-display');
+        var walletBalanceEl = document.getElementById('wallet-balance');
 
         function setStatusPill(isActive) {
           return isActive ? 'status-pill status-active' : 'status-pill status-idle';
         }
 
         function refreshPassengerStatus() {
-          fetch(endpoint + '?_' + Date.now(), {
+          fetch(endpoint + '&_' + Date.now(), {
             credentials: 'same-origin',
             headers: { Accept: 'application/json' },
           })
@@ -559,13 +563,16 @@ $activeNav = 'home';
             if (fareEl) {
               fareEl.textContent = data.estimated_fare || '₱0.00';
             }
+            if (walletBalanceEl && typeof data.wallet_balance === 'number') {
+              walletBalanceEl.textContent = '₱' + data.wallet_balance.toFixed(2);
+            }
           })
           .catch(function () {
             // ignore polling errors
           });
         }
 
-        setInterval(refreshPassengerStatus, 3000);
+        setInterval(refreshPassengerStatus, 2000);
         refreshPassengerStatus();
       })();
     </script>
