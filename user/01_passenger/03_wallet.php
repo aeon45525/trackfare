@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount'])) {
     $referenceNumber = trim((string) ($_POST['reference_number'] ?? ''));
     $gcashNumber = trim((string) ($_POST['gcash_number'] ?? ''));
 
-    if ($paymentMethod === 'gcash' && $amount > 0 && !preg_match('/^09\d{9}$/', $gcashNumber)) {
+    if ($paymentMethod === 'gcash' && $amount > 0 && $gcashNumber !== '' && !preg_match('/^09\d{9}$/', $gcashNumber)) {
         $topupError = 'Please enter a valid GCash number in the format 09XXXXXXXXX.';
     } elseif ($paymentMethod === 'gcash' && $amount > 0) {
         $insertStmt = $conn->prepare('INSERT INTO wallet_topups (user_id, amount, payment_method, gcash_number, reference_number, status) VALUES (?, ?, "GCash", ?, ?, "pending")');
@@ -396,6 +396,7 @@ $activeNav = 'wallet';
             </span>
           </div>
           <form method="POST" class="grid grid-cols-3 gap-3">
+            <input type="hidden" name="topup_method" value="gcash" />
             <button
               type="submit"
               name="amount"

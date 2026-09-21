@@ -33,8 +33,10 @@ foreach (explode(',', $headerSignature) as $part) {
     [$key, $value] = array_pad(explode('=', trim($part), 2), 2, '');
     $signatureParts[$key] = $value;
 }
+$event = $payload['data'] ?? [];
+$eventAttributes = $event['attributes'] ?? [];
 $timestamp = $signatureParts['t'] ?? '';
-$modeSignature = ($payload['data']['livemode'] ?? false)
+$modeSignature = ($eventAttributes['livemode'] ?? false)
     ? ($signatureParts['li'] ?? '')
     : ($signatureParts['te'] ?? '');
 if ($timestamp === '' || $modeSignature === '') {
@@ -50,15 +52,14 @@ if (!hash_equals($expected, $modeSignature)) {
     exit;
 }
 
-$event = $payload['data'] ?? [];
-$eventType = (string) ($event['type'] ?? '');
+$eventType = (string) ($eventAttributes['type'] ?? '');
 if ($eventType !== 'checkout_session.payment.paid') {
     http_response_code(200);
     echo json_encode(['success' => true, 'message' => 'Event acknowledged']);
     exit;
 }
 
-$session = $event['data'] ?? [];
+$session = $eventAttributes['data'] ?? [];
 $attributes = $session['attributes'] ?? [];
 $metadata = $attributes['metadata'] ?? [];
 $topupId = (int) ($metadata['trackfare_topup_id'] ?? 0);
