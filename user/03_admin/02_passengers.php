@@ -60,6 +60,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
         return $trips;
     }
 
+    function getPassengerTopups($user_id, $limit = 10) {
+        global $conn;
+        $topups = [];
+        try {
+            $user_id = intval($user_id);
+            $result = $conn->query("SELECT topup_id, amount, payment_method, gcash_number, reference_number, status, created_at FROM wallet_topups WHERE user_id = $user_id ORDER BY created_at DESC LIMIT $limit");
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $topups[] = $row;
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Get passenger topups error: " . $e->getMessage());
+        }
+        return $topups;
+    }
+
     function topupBalance($user_id, $amount) {
         global $conn;
         try {
@@ -70,6 +87,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
             }
             $result = $conn->query("UPDATE passenger_profiles SET wallet_balance = wallet_balance + $amount WHERE user_id = $user_id");
             if ($result) {
+                $adminTopup = $conn->prepare('INSERT INTO wallet_topups (user_id, amount, payment_method, gcash_number, reference_number, status) VALUES (?, ?, "Admin Top-up", NULL, "Admin Adjustment", "completed")');
+                if ($adminTopup) {
+                    $adminTopup->bind_param('id', $user_id, $amount);
+                    $adminTopup->execute();
+                    $adminTopup->close();
+                }
                 return ['success' => true, 'message' => 'Balance topped up successfully'];
             }
         } catch (Exception $e) {
@@ -210,6 +233,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
             $user_id = $_GET['user_id'] ?? 0;
             $limit = intval($_GET['limit'] ?? 10);
             echo json_encode(getPassengerTrips($user_id, $limit));
+            break;
+        case 'topups':
+            $user_id = $_GET['user_id'] ?? 0;
+            $limit = intval($_GET['limit'] ?? 10);
+            echo json_encode(getPassengerTopups($user_id, $limit));
             break;
         default:
             echo json_encode(['error' => 'Unknown action']);
@@ -776,14 +804,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
         try {
           const tripsRes = await fetch(`02_passengers.php?action=trips&user_id=${userId}&limit=10`);
           const trips = await tripsRes.json();
+          const topupsRes = await fetch(`02_passengers.php?action=topups&user_id=${userId}&limit=10`);
+          const topups = await topupsRes.json();
+
           openModal('Passenger Transactions', `
-            <div class="space-y-3 text-sm text-slate-700">
-              ${trips.length ? trips.map(trip => `
-                <div class="rounded-2xl bg-slate-50 p-4">
-                  <div class="font-semibold text-slate-900">${trip.boarding_stop} → ${trip.alighting_stop}</div>
-                  <div class="text-xs text-slate-500">Fare: ₱${parseFloat(trip.fare_amount).toFixed(2)} • ${new Date(trip.start_time).toLocaleString()}</div>
+            <div class="space-y-5 text-sm text-slate-700">
+              <div>
+                <h3 class="mb-2 text-sm font-bold text-slate-900">Wallet Top-ups</h3>
+                <div class="space-y-3">
+                  ${topups.length ? topups.map(topup => `
+                    <div class="rounded-2xl bg-emerald-50 p-4">
+                      <div class="flex items-center justify-between gap-3">
+                        <div class="font-semibold text-slate-900">${topup.payment_method}</div>
+                        <div class="font-bold text-emerald-700">₱${parseFloat(topup.amount || 0).toFixed(2)}</div>
+                      </div>
+                      <div class="mt-1 text-xs text-slate-500">Ref: ${topup.reference_number || 'N/A'} • GCash: ${topup.gcash_number || 'N/A'} • ${new Date(topup.created_at).toLocaleString()}</div>
+                      <div class="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">${topup.status}</div>
+                    </div>
+                  `).join('') : '<div class="text-sm text-slate-500">No wallet top-ups recorded.</div>'}
                 </div>
-              `).join('') : '<div class="text-sm text-slate-500">No transaction records found.</div>'}
+              </div>
+
+              <div>
+                <h3 class="mb-2 text-sm font-bold text-slate-900">Trip Fare Deductions</h3>
+                <div class="space-y-3">
+                  ${trips.length ? trips.map(trip => `
+                    <div class="rounded-2xl bg-slate-50 p-4">
+                      <div class="font-semibold text-slate-900">${trip.boarding_stop} → ${trip.alighting_stop}</div>
+                      <div class="text-xs text-slate-500">Fare: ₱${parseFloat(trip.fare_amount).toFixed(2)} • ${new Date(trip.start_time).toLocaleString()}</div>
+                    </div>
+                  `).join('') : '<div class="text-sm text-slate-500">No trip transaction records found.</div>'}
+                </div>
+              </div>
             </div>
           `);
         } catch (error) {

@@ -749,6 +749,7 @@ $activeNav = 'routes';
       var HAS_ACTIVE_TRIP = <?= $hasActiveTrip ? 'true' : 'false' ?>;
       var ACTIVE_TRIP_ID = <?= (int)($activeTripData['trip_id'] ?? 0) ?>;
       var LAST_PAX_UPDATE = 0;
+      var passengerLocationWatchId = null;
 
       var routeSelect = document.getElementById('route-select');
       var mapEmpty = document.getElementById('map-empty');
@@ -947,11 +948,36 @@ $activeNav = 'routes';
       }
 
       function updatePassengerPosition() {
-        if (!HAS_ACTIVE_TRIP || ACTIVE_TRIP_ID === 0) return;
-
         var now = Date.now();
         if (now - LAST_PAX_UPDATE < 2000) return;
         LAST_PAX_UPDATE = now;
+
+        if (!navigator.geolocation) return;
+
+        navigator.geolocation.getCurrentPosition(function (position) {
+          USER_LAT = position.coords.latitude;
+          USER_LNG = position.coords.longitude;
+          showHumanMarker();
+
+          if (HAS_ACTIVE_TRIP && ACTIVE_TRIP_ID !== 0) {
+            fetch('../../config/gps.php?action=passenger_location', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+              },
+              body: JSON.stringify({
+                lat: USER_LAT,
+                lng: USER_LNG,
+              }),
+            }).catch(function () {});
+          }
+        }, function () {}, {
+          enableHighAccuracy: true,
+          maximumAge: 5000,
+          timeout: 10000,
+        });
 
         fetch('../../config/gps.php?action=passenger_status', {
           credentials: 'same-origin',
@@ -967,6 +993,74 @@ $activeNav = 'routes';
           }
         })
         .catch(function () {});
+      }
+
+      function startPassengerLocationTracking() {
+        if (!HAS_ACTIVE_TRIP || !navigator.geolocation) return;
+
+        updatePassengerPosition();
+        if (passengerLocationWatchId !== null) {
+          navigator.geolocation.clearWatch(passengerLocationWatchId);
+        }
+        passengerLocationWatchId = navigator.geolocation.watchPosition(function (position) {
+          USER_LAT = position.coords.latitude;
+          USER_LNG = position.coords.longitude;
+          showHumanMarker();
+
+          fetch(GPS_URL + '?action=passenger_location', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({ lat: USER_LAT, lng: USER_LNG }),
+          }).catch(function () {});
+        }, function () {}, {
+          enableHighAccuracy: true,
+          maximumAge: 5000,
+          timeout: 10000,
+        });
+      }
+
+      function sharePassengerLocation() {
+        function sendLocation() {
+          if (USER_LAT === null || USER_LNG === null) return Promise.resolve(false);
+
+          return fetch(GPS_URL + '?action=passenger_location', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({ lat: USER_LAT, lng: USER_LNG }),
+          }).then(function (response) {
+            return response.ok;
+          }).catch(function () {
+            return false;
+          });
+        }
+
+        if (USER_LAT !== null && USER_LNG !== null) {
+          return sendLocation();
+        }
+        if (!navigator.geolocation) return Promise.resolve(false);
+
+        return new Promise(function (resolve) {
+          navigator.geolocation.getCurrentPosition(function (position) {
+            USER_LAT = position.coords.latitude;
+            USER_LNG = position.coords.longitude;
+            showHumanMarker();
+            sendLocation().then(resolve);
+          }, function () {
+            resolve(false);
+          }, {
+            enableHighAccuracy: true,
+            maximumAge: 5000,
+            timeout: 10000,
+          });
+        });
       }
 
       function refreshPassengerState() {
@@ -1342,6 +1436,7 @@ $activeNav = 'routes';
 
       if (btnBusNear) {
         btnBusNear.addEventListener('click', function () {
+          sharePassengerLocation();
           if (currentRouteId) {
             if (busMkr) {
               map.panTo(busMkr.getPosition());
@@ -1394,6 +1489,7 @@ $activeNav = 'routes';
       routeSelect.value = '';
       setInterval(refreshPassengerState, 3000);
       refreshPassengerState();
+      startPassengerLocationTracking();
       if (USER_LAT !== null && USER_LNG !== null) {
         showMapPanel(true);
         loadGoogleMaps().then(function () {

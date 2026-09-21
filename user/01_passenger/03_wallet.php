@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/payment.php';
 
 if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
     header('Location: ../../auth/login.php');
@@ -10,6 +11,22 @@ if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
 $userId = $_SESSION['user_id'];
 $walletBalance = 0.00;
 $transactions = [];
+$topupHistory = [];
+$topupMessage = '';
+$topupError = '';
+
+$conn->query("CREATE TABLE IF NOT EXISTS wallet_topups (
+    topup_id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id           INT UNSIGNED NOT NULL,
+    amount            DECIMAL(10,2) NOT NULL,
+    payment_method    VARCHAR(30) NOT NULL DEFAULT 'GCash',
+    gcash_number      VARCHAR(20) NULL,
+    reference_number  VARCHAR(80) NULL,
+    status            ENUM('pending','completed','failed') NOT NULL DEFAULT 'completed',
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (topup_id),
+    KEY idx_user_created (user_id, created_at)
+)");
 
 // Fetch wallet balance
 if ($stmt = $conn->prepare('SELECT wallet_balance FROM passenger_profiles WHERE user_id = ? LIMIT 1')) {
@@ -25,14 +42,69 @@ if ($stmt = $conn->prepare('SELECT wallet_balance FROM passenger_profiles WHERE 
 // Handle top-up button click
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount'])) {
     $amount = (float) $_POST['amount'];
-    if ($amount > 0) {
+    $paymentMethod = trim((string) ($_POST['topup_method'] ?? 'preset'));
+    $referenceNumber = trim((string) ($_POST['reference_number'] ?? ''));
+    $gcashNumber = trim((string) ($_POST['gcash_number'] ?? ''));
+
+    if ($paymentMethod === 'gcash' && $amount > 0 && !preg_match('/^09\d{9}$/', $gcashNumber)) {
+        $topupError = 'Please enter a valid GCash number in the format 09XXXXXXXXX.';
+    } elseif ($paymentMethod === 'gcash' && $amount > 0) {
+        $insertStmt = $conn->prepare('INSERT INTO wallet_topups (user_id, amount, payment_method, gcash_number, reference_number, status) VALUES (?, ?, "GCash", ?, ?, "pending")');
+        if ($insertStmt) {
+            $insertStmt->bind_param('idss', $userId, $amount, $gcashNumber, $referenceNumber);
+            $insertStmt->execute();
+            $topupId = $conn->insert_id;
+            $insertStmt->close();
+
+            try {
+                $invoice = createGcashInvoice(
+                    $userId,
+                    $amount,
+                    $_SESSION['email'] ?? '',
+                    $topupId,
+                    $referenceNumber,
+                    $gcashNumber
+                );
+
+                if (!empty($invoice['checkout_url'])) {
+                    header('Location: ' . $invoice['checkout_url']);
+                    exit;
+                }
+
+                $topupError = 'GCash checkout was created, but the redirect URL was missing.';
+            } catch (Throwable $e) {
+                $topupError = $e->getMessage();
+                $cleanupStmt = $conn->prepare('UPDATE wallet_topups SET status = "failed" WHERE topup_id = ?');
+                if ($cleanupStmt) {
+                    $cleanupStmt->bind_param('i', $topupId);
+                    $cleanupStmt->execute();
+                    $cleanupStmt->close();
+                }
+            }
+        } else {
+            $topupError = 'Unable to create a GCash top-up request.';
+        }
+    } elseif ($amount > 0) {
         $newBalance = $walletBalance + $amount;
         if ($stmt = $conn->prepare('UPDATE passenger_profiles SET wallet_balance = ? WHERE user_id = ?')) {
             $stmt->bind_param('di', $newBalance, $userId);
             $stmt->execute();
             $stmt->close();
             $walletBalance = $newBalance;
+
+            $methodName = 'Quick Top-up';
+
+            $logStmt = $conn->prepare('INSERT INTO wallet_topups (user_id, amount, payment_method, gcash_number, reference_number, status) VALUES (?, ?, ?, ?, ?, "completed")');
+            $logStmt->bind_param('idsss', $userId, $amount, $methodName, $gcashNumber, $referenceNumber);
+            $logStmt->execute();
+            $logStmt->close();
+
+            $topupMessage = 'Wallet topped up by ₱' . number_format($amount, 2) . '.';
+        } else {
+            $topupError = 'Unable to process the top-up at the moment.';
         }
+    } else {
+        $topupError = 'Please enter a valid top-up amount.';
     }
 }
 
@@ -55,6 +127,22 @@ if ($stmt = $conn->prepare(
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
         $transactions[] = $row;
+    }
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare(
+    'SELECT amount, payment_method, gcash_number, reference_number, status, created_at
+     FROM wallet_topups
+     WHERE user_id = ?
+     ORDER BY created_at DESC
+     LIMIT 5'
+)) {
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $topupHistory[] = $row;
     }
     $stmt->close();
 }
@@ -336,6 +424,118 @@ $activeNav = 'wallet';
               &#8369;200
             </button>
           </form>
+
+          <?php if ($topupMessage !== ''): ?>
+            <div class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+              <?= htmlspecialchars($topupMessage, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+          <?php endif; ?>
+          <?php if ($topupError !== ''): ?>
+            <div class="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              <?= htmlspecialchars($topupError, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+          <?php endif; ?>
+
+          <form method="POST" class="mt-5 space-y-3">
+            <input type="hidden" name="topup_method" value="gcash" />
+            <div>
+              <label for="gcash-amount" class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+                GCash amount
+              </label>
+              <div class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-surface-container-low px-3 py-2.5">
+                <span class="text-base font-bold text-primary">₱</span>
+                <input
+                  id="gcash-amount"
+                  type="number"
+                  name="amount"
+                  min="1"
+                  step="0.01"
+                  placeholder="Enter amount"
+                  class="w-full border-0 bg-transparent text-sm font-medium text-on-surface placeholder:text-on-surface-variant focus:ring-0"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label for="gcash-number" class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+                GCash number
+              </label>
+              <input
+                id="gcash-number"
+                type="tel"
+                name="gcash_number"
+                inputmode="numeric"
+                maxlength="11"
+                placeholder="09XXXXXXXXX"
+                class="w-full rounded-2xl border border-slate-200 bg-surface-container-low px-3 py-2.5 text-sm font-medium text-on-surface placeholder:text-on-surface-variant focus:border-primary focus:ring-0"
+                required
+              />
+            </div>
+
+            <div>
+              <label for="gcash-reference" class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+                Reference number
+              </label>
+              <input
+                id="gcash-reference"
+                type="text"
+                name="reference_number"
+                placeholder="Optional receipt code"
+                class="w-full rounded-2xl border border-slate-200 bg-surface-container-low px-3 py-2.5 text-sm font-medium text-on-surface placeholder:text-on-surface-variant focus:border-primary focus:ring-0"
+              />
+            </div>
+
+            <button
+              type="submit"
+              class="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#003a90]"
+            >
+              <span class="material-symbols-outlined text-[18px]">payments</span>
+              Top up with GCash
+            </button>
+          </form>
+        </section>
+
+        <section class="phone-panel p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Top-up history</p>
+              <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface">
+                Payment activity
+              </h2>
+            </div>
+            <span class="status-pill status-idle">GCASH</span>
+          </div>
+          <div class="space-y-3">
+            <?php if (count($topupHistory) > 0): ?>
+              <?php foreach ($topupHistory as $topup): ?>
+                <div class="rounded-2xl bg-emerald-50 p-3.5 border border-emerald-200">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px] text-emerald-700">payments</span>
+                        <p class="font-bold text-xs text-on-surface leading-tight">
+                          <?= htmlspecialchars($topup['payment_method'] ?? 'GCash', ENT_QUOTES, 'UTF-8') ?>
+                        </p>
+                      </div>
+                      <p class="text-[10px] text-on-surface-variant mt-1.5 font-medium truncate">
+                        Ref: <?= htmlspecialchars($topup['reference_number'] ?: 'N/A', ENT_QUOTES, 'UTF-8') ?>
+                      </p>
+                    </div>
+                    <span class="text-xs font-extrabold text-emerald-700 whitespace-nowrap">+&#8369;<?= number_format((float)$topup['amount'], 2) ?></span>
+                  </div>
+                  <div class="mt-3 pt-2.5 border-t border-emerald-200 flex items-center justify-between text-[10px] text-on-surface-variant">
+                    <span><?= htmlspecialchars($topup['gcash_number'] ?: 'No number', ENT_QUOTES, 'UTF-8') ?></span>
+                    <span class="font-medium text-emerald-700"><?= htmlspecialchars(strtoupper($topup['status'] ?? 'completed'), ENT_QUOTES, 'UTF-8') ?></span>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            <?php else: ?>
+              <div class="rounded-2xl bg-surface-container-low p-4 text-center">
+                <p class="text-xs text-on-surface-variant font-medium">No GCash top-up record yet</p>
+              </div>
+            <?php endif; ?>
+          </div>
         </section>
 
         <section class="phone-panel p-5">

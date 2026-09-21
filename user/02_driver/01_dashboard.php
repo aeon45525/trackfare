@@ -475,6 +475,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   var lastGpsSave = 0;
   var lastLineRebuild = { activePartial: null, legRemainder: null, nextLegFrom: 0 };
   var lastPaxUpdate = 0;
+  var latestPassengerData = null;
 
   /* ── DOM ── */
   var btnStart  = document.getElementById('btn-start');
@@ -732,6 +733,9 @@ $routeStopsForMap = array_map(static fn($s) => [
     });
     mapsReady = true;
     google.maps.event.trigger(map, 'resize');
+    if (latestPassengerData) {
+      renderPassengerMarkers(latestPassengerData.passengers || []);
+    }
   }
 
   function loadGoogleMaps() {
@@ -837,37 +841,26 @@ $routeStopsForMap = array_map(static fn($s) => [
   }
 
   function updatePassengerMarkers(lat, lng) {
+    return;
+  }
+
+  function renderPassengerMarkers(passengers) {
     if (!mapsReady || !map) return;
 
-    var now = Date.now();
-    if (now - lastPaxUpdate < 500) return;
-    lastPaxUpdate = now;
-
-    // Clear existing passenger markers
     paxMkrs.forEach(function (m) { m.setMap(null); });
     paxMkrs = [];
 
-    // Update passenger positions in database
-    var formData = new FormData();
-    formData.append('trip_id', ROUTE_ID);
-    formData.append('lat', lat);
-    formData.append('lng', lng);
+    (passengers || []).forEach(function (passenger) {
+      if (passenger.lat === null || passenger.lng === null) return;
 
-    fetch('../../api/update_passenger_positions.php', {
-      method: 'POST',
-      body: formData,
-      credentials: 'same-origin',
-    }).catch(function () {});
-
-    // Add a single passenger marker at bus position to represent all passengers
-    var m = new google.maps.Marker({
-      position: latLng(lat, lng),
-      map: map,
-      title: 'Passengers on board',
-      zIndex: 1500,
-      icon: passengerMarkerIcon(),
+      paxMkrs.push(new google.maps.Marker({
+        position: latLng(parseFloat(passenger.lat), parseFloat(passenger.lng)),
+        map: map,
+        title: passenger.full_name || 'Passenger',
+        zIndex: 1500,
+        icon: passengerMarkerIcon(),
+      }));
     });
-    paxMkrs.push(m);
   }
 
   function refreshStops(nextIdx) {
@@ -1386,6 +1379,8 @@ $routeStopsForMap = array_map(static fn($s) => [
 
   function renderDriverPassengerPanel(data) {
     if (!data || !data.ok) return;
+    latestPassengerData = data;
+    renderPassengerMarkers(data.passengers || []);
     var count = parseInt(data.passenger_count || 0, 10);
     var badge = document.getElementById('pax-count-badge');
     var countMetric = document.getElementById('m-pax');

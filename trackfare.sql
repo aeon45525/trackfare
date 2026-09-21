@@ -24,6 +24,19 @@ CREATE TABLE passenger_profiles (
     PRIMARY KEY (profile_id)
 );
 
+CREATE TABLE wallet_topups (
+    topup_id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id           INT UNSIGNED NOT NULL,
+    amount            DECIMAL(10,2) NOT NULL,
+    payment_method    VARCHAR(30) NOT NULL DEFAULT 'GCash',
+    gcash_number      VARCHAR(20) NULL,
+    reference_number  VARCHAR(80) NULL,
+    status            ENUM('pending','completed','failed') NOT NULL DEFAULT 'completed',
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (topup_id),
+    KEY idx_user_created (user_id, created_at)
+);
+
 CREATE TABLE driver_profiles (
     profile_id      INT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id         INT UNSIGNED NOT NULL UNIQUE,

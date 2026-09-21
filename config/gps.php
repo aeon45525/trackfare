@@ -290,6 +290,68 @@ function gps_write_shared_state(array $payload): void
 }
 
 /* ── passenger / driver status APIs ───────────────────────────── */
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_SESSION['role'] ?? '') === 'passenger'
+    && ($_GET['action'] ?? '') === 'passenger_location'
+) {
+    if (empty($_SESSION['user_id'])) {
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'message' => 'Unauthorized'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $payload = json_decode(file_get_contents('php://input'), true);
+    $lat = isset($payload['lat']) ? (float)$payload['lat'] : NAN;
+    $lng = isset($payload['lng']) ? (float)$payload['lng'] : NAN;
+
+    if (!is_finite($lat) || !is_finite($lng) || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+        http_response_code(422);
+        echo json_encode(['ok' => false, 'message' => 'Invalid coordinates'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $userId = (int)$_SESSION['user_id'];
+    $updated = false;
+    if ($stmt = $conn->prepare(
+        'UPDATE users SET lat = ?, lng = ? WHERE user_id = ? AND role = ?'
+    )) {
+        $role = 'passenger';
+        $stmt->bind_param('ddis', $lat, $lng, $userId, $role);
+        $updated = $stmt->execute();
+        $stmt->close();
+    }
+
+    $hasActiveTrip = false;
+    if ($stmt = $conn->prepare(
+        'SELECT active_id FROM active_passengers
+         WHERE user_id = ? AND tap_state = ? LIMIT 1'
+    )) {
+        $tapState = 'in';
+        $stmt->bind_param('is', $userId, $tapState);
+        $stmt->execute();
+        $hasActiveTrip = $stmt->get_result()->num_rows > 0;
+        $stmt->close();
+    }
+
+    if ($hasActiveTrip && $stmt = $conn->prepare(
+        'UPDATE active_passengers
+         SET lat = ?, lng = ?
+         WHERE user_id = ? AND tap_state = ?'
+    )) {
+        $tapState = 'in';
+        $stmt->bind_param('ddis', $lat, $lng, $userId, $tapState);
+        $updated = $stmt->execute() || $updated;
+        $stmt->close();
+    }
+
+    echo json_encode([
+        'ok' => $updated,
+        'tracking' => $updated,
+        'message' => $updated ? 'Location updated' : 'No active trip',
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET['action'] === 'passenger_status') {
     if (empty($_SESSION['user_id'])) {
         http_response_code(401);
@@ -407,23 +469,33 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'driver' && $_GET['a
         $lastStopId = get_route_last_stop_id($conn, $routeId);
 
         if ($stmt = $conn->prepare(
-            'SELECT u.full_name, ap.boarding_stop_id, bs.stop_name AS boarding_stop
-             FROM active_passengers ap
-             JOIN users u ON ap.user_id = u.user_id
-             LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
-             WHERE ap.trip_id = ?'
+                                'SELECT u.user_id, u.full_name, ap.boarding_stop_id,
+                                        COALESCE(ap.lat, u.lat, bs.lat) AS passenger_lat,
+                                        COALESCE(ap.lng, u.lng, bs.lng) AS passenger_lng,
+                    bs.stop_name AS boarding_stop
+                         FROM users u
+                         LEFT JOIN active_passengers ap
+                             ON ap.user_id = u.user_id AND ap.trip_id = ?
+                         LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
+                         WHERE u.role = ?
+                             AND (ap.user_id IS NOT NULL OR (u.lat IS NOT NULL AND u.lng IS NOT NULL))'
         )) {
-            $stmt->bind_param('i', $trip['trip_id']);
+            $activeTripId = (int) $trip['trip_id'];
+                        $passengerRole = 'passenger';
+            $stmt->bind_param('is', $activeTripId, $passengerRole);
             $stmt->execute();
             $result = $stmt->get_result();
             while ($row = $result->fetch_assoc()) {
-                $boardingStopId = (int) $row['boarding_stop_id'];
+                $boardingStopId = (int) ($row['boarding_stop_id'] ?? 0);
                 $fareNow = fare_estimate_for_active_passenger($conn, $routeId, $boardingStopId, $currentStopId ?? $boardingStopId);
                 $fareMax = fare_estimate_for_active_passenger($conn, $routeId, $boardingStopId, $lastStopId ?? $boardingStopId);
 
                 $response['passengers'][] = [
+                    'user_id' => (int)$row['user_id'],
                     'full_name' => $row['full_name'] ?? 'Passenger',
                     'boarding_stop' => $row['boarding_stop'] ?? 'Unknown',
+                    'lat' => $row['passenger_lat'] === null ? null : (float)$row['passenger_lat'],
+                    'lng' => $row['passenger_lng'] === null ? null : (float)$row['passenger_lng'],
                     'fare_now' => $fareNow['fare'],
                     'fare_max' => $fareMax['fare'],
                 ];
