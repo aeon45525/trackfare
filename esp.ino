@@ -12,7 +12,7 @@
 // =====================================================
 const char* ssid     = "BOOTCAMP";
 const char* password = "Paloadkanalang!01#";
-const char* tapUrl   = "http://192.168.100.103/TrackFare/api/tapin.php";
+const char* tapUrl   = "http://192.168.1.20/TrackFare/api/tapin.php";
 
 #define TRIP_ID            "1"
 #define GPS_PRINT_MS       2000    // GPS status printed to Serial Monitor this often
@@ -90,6 +90,14 @@ struct RecentCard {
   unsigned long lastSeen;
 };
 RecentCard recent[RECENT_MAX];
+struct RecentPhone {
+  bool used;
+  uint8_t credentialId[16];
+  bool hasAccept;
+  unsigned long lastAccept;
+  unsigned long lastSeen;
+};
+RecentPhone recentPhones[RECENT_MAX];
 
 // =====================================================
 // HELPERS
@@ -334,6 +342,159 @@ int sendToServer(String uid, String &body) {
   return code;
 }
 
+String bytesToHex(const uint8_t *bytes, size_t length) {
+  String result;
+  for (size_t i = 0; i < length; i++) {
+    if (bytes[i] < 0x10) result += "0";
+    result += String(bytes[i], HEX);
+  }
+  result.toLowerCase();
+  return result;
+}
+
+String postPhoneTap(const String &payload) {
+  HTTPClient http;
+  http.setTimeout(4000);
+  String endpoint = String(tapUrl);
+  const int lastSlash = endpoint.lastIndexOf('/');
+  endpoint = endpoint.substring(0, lastSlash + 1) + "phone_nfc_tap.php";
+  http.begin(endpoint);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  const int code = http.POST(payload);
+  const String body = code > 0 ? http.getString() : "";
+  Serial.println("PHONE NFC HTTP CODE: " + String(code));
+  Serial.println(body);
+  http.end();
+  return body;
+}
+
+bool responseOk(const uint8_t *response, uint8_t length) {
+  return length >= 2 && response[length - 2] == 0x90 && response[length - 1] == 0x00;
+}
+
+int findRecentPhone(const uint8_t *credentialId) {
+  for (int i = 0; i < RECENT_MAX; i++) {
+    if (recentPhones[i].used && memcmp(recentPhones[i].credentialId, credentialId, 16) == 0) return i;
+  }
+  return -1;
+}
+
+int allocRecentPhone() {
+  int oldest = 0;
+  for (int i = 0; i < RECENT_MAX; i++) {
+    if (!recentPhones[i].used) return i;
+    if (recentPhones[i].lastSeen < recentPhones[oldest].lastSeen) oldest = i;
+  }
+  return oldest;
+}
+
+bool tryPhoneTap(bool &identified, String &message) {
+  identified = false;
+  message = "";
+
+  const uint8_t aid[] = {0xF0, 0x54, 0x52, 0x41, 0x43, 0x4B, 0x46, 0x41, 0x52, 0x45};
+  uint8_t response[64];
+  uint8_t responseLength = sizeof(response);
+  uint8_t selectAid[5 + sizeof(aid) + 1] = {
+    0x00, 0xA4, 0x04, 0x00, sizeof(aid)
+  };
+  memcpy(selectAid + 5, aid, sizeof(aid));
+  selectAid[sizeof(selectAid) - 1] = 0x00;
+
+  if (!nfc.inListPassiveTarget()
+      || !nfc.inDataExchange(selectAid, sizeof(selectAid), response, &responseLength)
+      || !responseOk(response, responseLength)) {
+    return false;
+  }
+
+  identified = true;
+  const unsigned long now = millis();
+  const bool stillHeld = phoneSeen && (now - lastPhoneSeen) < CARD_HOLD_GAP_MS;
+  const bool inLockout = phoneTapAccepted && (now - lastPhoneAccepted) < SAME_CARD_LOCKOUT;
+  phoneSeen = true;
+  lastPhoneSeen = now;
+  if (stillHeld || inLockout) return false;
+
+  if (WiFi.status() != WL_CONNECTED) {
+    message = "NO WIFI";
+    return false;
+  }
+
+  const int activeTripId = String(TRIP_ID).toInt();
+  uint8_t challenge[16];
+  for (size_t i = 0; i < sizeof(challenge); i += 4) {
+    const uint32_t randomValue = esp_random();
+    memcpy(challenge + i, &randomValue, sizeof(randomValue));
+  }
+
+  uint8_t getProof[26] = {0};
+  getProof[0] = 0x80;
+  getProof[1] = 0xCA;
+  getProof[4] = 0x14;
+  getProof[5] = static_cast<uint8_t>((activeTripId >> 24) & 0xFF);
+  getProof[6] = static_cast<uint8_t>((activeTripId >> 16) & 0xFF);
+  getProof[7] = static_cast<uint8_t>((activeTripId >> 8) & 0xFF);
+  getProof[8] = static_cast<uint8_t>(activeTripId & 0xFF);
+  memcpy(getProof + 9, challenge, sizeof(challenge));
+  responseLength = sizeof(response);
+  if (!nfc.inDataExchange(getProof, sizeof(getProof), response, &responseLength)
+      || !responseOk(response, responseLength) || responseLength != 54) {
+    message = "PHONE NFC AUTHENTICATION FAILED";
+    return false;
+  }
+
+  uint8_t credentialId[16];
+  uint8_t signature[80];
+  memcpy(credentialId, response, sizeof(credentialId));
+  memcpy(signature, response + sizeof(credentialId), 36);
+
+  int phoneIndex = findRecentPhone(credentialId);
+  const unsigned long now = millis();
+  if (phoneIndex >= 0) {
+    RecentPhone &phone = recentPhones[phoneIndex];
+    const bool stillHeld = (now - phone.lastSeen) < CARD_HOLD_GAP_MS;
+    const bool inLockout = phone.hasAccept && (now - phone.lastAccept) < SAME_CARD_LOCKOUT;
+    if (stillHeld || inLockout) {
+      phone.lastSeen = now;
+      return false;
+    }
+  } else {
+    phoneIndex = allocRecentPhone();
+    recentPhones[phoneIndex].used = true;
+    memcpy(recentPhones[phoneIndex].credentialId, credentialId, sizeof(credentialId));
+    recentPhones[phoneIndex].hasAccept = false;
+    recentPhones[phoneIndex].lastAccept = 0;
+  }
+  recentPhones[phoneIndex].lastSeen = now;
+
+  uint8_t getSignatureTail[] = {0x80, 0xCA, 0x01, 0x00, 0x00};
+  responseLength = sizeof(response);
+  if (!nfc.inDataExchange(getSignatureTail, sizeof(getSignatureTail), response, &responseLength)
+      || !responseOk(response, responseLength) || responseLength < 2
+      || responseLength - 2 > sizeof(signature) - 36) {
+    message = "PHONE NFC SIGNATURE FAILED";
+    return false;
+  }
+  memcpy(signature + 36, response, responseLength - 2);
+  const size_t signatureLength = 36 + responseLength - 2;
+
+  const String payload = "credential_id=" + bytesToHex(credentialId, sizeof(credentialId))
+      + "&challenge=" + bytesToHex(challenge, sizeof(challenge))
+      + "&signature=" + bytesToHex(signature, signatureLength)
+      + "&trip_id=" + String(activeTripId);
+  message = postPhoneTap(payload);
+  const bool accepted = message.indexOf("\"success\":true") >= 0;
+  RecentPhone &phone = recentPhones[phoneIndex];
+  phone.lastSeen = millis();
+  if (accepted) {
+    phone.hasAccept = true;
+    phone.lastAccept = millis();
+  } else {
+    phone.hasAccept = false;
+  }
+  return accepted;
+}
+
 // =====================================================
 // TAP HANDLING
 // =====================================================
@@ -431,6 +592,21 @@ void checkNFC() {
   uint8_t uidLength;
 
   if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100)) {
+    bool identifiedPhone = false;
+    String phoneMessage;
+    const bool phoneAccepted = tryPhoneTap(identifiedPhone, phoneMessage);
+    if (identifiedPhone) {
+      if (!phoneMessage.isEmpty()) {
+        String upper = phoneMessage;
+        upper.toUpperCase();
+        if (phoneAccepted) {
+          showResultScreen(upper.indexOf("TAP OUT SUCCESS") >= 0 ? "TAP OUT" : "TAP IN", "PHONE NFC ACCEPTED");
+        } else {
+          showTapErrorScreen("PHONE TAP FAILED", phoneMessage.substring(0, 60).c_str());
+        }
+      }
+      return;
+    }
     handleTap(uid, uidLength);
   }
 }
