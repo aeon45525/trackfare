@@ -750,6 +750,10 @@ $activeNav = 'routes';
       var ACTIVE_TRIP_ID = <?= (int)($activeTripData['trip_id'] ?? 0) ?>;
       var LAST_PAX_UPDATE = 0;
       var passengerLocationWatchId = null;
+      var LIVE_URL = '../../api/gps_live.php';   // <-- ADD
+      var LIVE_POLL_MS = 1500;                    // <-- ADD
+      var liveData = null;                        // <-- ADD
+      var liveTimer = null;// <-- ADD
 
       var routeSelect = document.getElementById('route-select');
       var mapEmpty = document.getElementById('map-empty');
@@ -1249,15 +1253,46 @@ $activeNav = 'routes';
         lastBusPoint = null;
       }
 
+      function pollLive() {
+        fetch(LIVE_URL + '?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' })
+          .then(function (r) { if (!r.ok) throw new Error('live'); return r.json(); })
+          .then(function (d) { liveData = d; })
+          .catch(function () { liveData = null; });
+      }
+
+      function startLivePolling() {
+        stopLivePolling();
+        pollLive();
+        liveTimer = setInterval(pollLive, LIVE_POLL_MS);
+      }
+
+      function stopLivePolling() {
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+        liveData = null;
+      }
+      
       function stopBusPolling() {
         if (busPollTimer) {
           clearInterval(busPollTimer);
           busPollTimer = null;
         }
+        stopLivePolling();
       }
 
       function updateBusFromGps(data) {
-        if (!data || !data.busPosition || !mapsReady) return;
+        if (!mapsReady) return;
+
+        // is the dummy simulation currently running for this route?
+        var simActive = !!(data && (data.status === 'running' || data.status === 'paused'));
+
+        // NEO-8M online + has a fix + simulation not running -> real location
+        if (liveData && liveData.useLive && !simActive) {
+          animateBusPosition(liveData.lat, liveData.lng);
+          return;
+        }
+
+        // otherwise use the dummy position stored in the database
+        if (!data || !data.busPosition) return;
         if (String(data.routeId) !== String(currentRouteId)) return;
 
         var lat = data.busPosition.lat;
@@ -1296,6 +1331,7 @@ $activeNav = 'routes';
 
       function startBusPolling() {
         stopBusPolling();
+        startLivePolling();
         fetchBusPosition();
         busPollTimer = setInterval(fetchBusPosition, BUS_POLL_MS);
       }

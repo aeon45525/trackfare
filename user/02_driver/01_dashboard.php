@@ -476,6 +476,9 @@ $routeStopsForMap = array_map(static fn($s) => [
   var lastLineRebuild = { activePartial: null, legRemainder: null, nextLegFrom: 0 };
   var lastPaxUpdate = 0;
   var latestPassengerData = null;
+  var LIVE_URL = '../../api/gps_live.php';
+  var liveTimer = null;
+  var liveActive = false;
 
   /* ── DOM ── */
   var btnStart  = document.getElementById('btn-start');
@@ -1203,6 +1206,48 @@ $routeStopsForMap = array_map(static fn($s) => [
     });
   }
 
+  function backToDummy(d) {
+    if (liveActive) {                      // was showing real GPS -> go back to dummy spot
+      liveActive = false;
+      var p0 = stops[0];
+      setBusPosition(p0.lat, p0.lng, 0);
+      fitOverview();
+    }
+    setChip('idle', (d && d.online) ? 'GPS searching \u00b7 demo location' : 'Trip not started');
+  }
+
+  function pollLiveGps() {
+    if (state !== 'idle' || !mapsReady || !stops.length) return;
+    fetch(LIVE_URL + '?_=' + Date.now(), { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('live ' + r.status); return r.json(); })
+      .then(function (d) {
+        if (state !== 'idle') return;              // simulation started meanwhile
+        if (d.useLive) {
+          setBusPosition(d.lat, d.lng, busHeading);
+          if (!liveActive) { liveActive = true; map.setZoom(NAV_ZOOM); }
+          map.panTo(latLng(d.lat, d.lng));
+          setChip('running', 'Live GPS \u00b7 ' + d.sats + ' sats');
+        } else {
+          backToDummy(d);
+          setChip('idle', 'Demo location \u00b7 ' + (d.reason || 'GPS unavailable'));
+        }
+      })
+      .catch(function () {
+        if (state === 'idle') { backToDummy(null); setChip('idle', 'Demo location \u00b7 GPS check failed'); }
+      });
+  }
+
+  function startLiveGps() {
+    stopLiveGps();
+    pollLiveGps();
+    liveTimer = setInterval(pollLiveGps, 2000);
+  }
+
+  function stopLiveGps() {
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    liveActive = false;
+  }
+
   function startTrip() {
     if (!mapsReady || stops.length < 2) return;
     if (state === 'paused') {
@@ -1210,7 +1255,8 @@ $routeStopsForMap = array_map(static fn($s) => [
       return;
     }
     if (state !== 'idle') return;
-
+  
+    stopLiveGps();
     gpsCall('start').catch(function () {});
     curIdx = 0;
     state  = 'running';
@@ -1300,6 +1346,7 @@ $routeStopsForMap = array_map(static fn($s) => [
         drawOverview();
         setChip('idle', 'Trip not started');
         setBtns('idle');
+        startLiveGps();
         return;
       }
 
@@ -1330,6 +1377,7 @@ $routeStopsForMap = array_map(static fn($s) => [
       drawOverview();
       setChip('idle', 'Trip not started');
       setBtns('idle');
+      startLiveGps();
     });
   }
 
