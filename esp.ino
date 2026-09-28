@@ -191,45 +191,6 @@ void gpsSerialStatus() {
 }
 
 // =====================================================
-// SEND GPS TO SERVER (live location for dashboards)
-// =====================================================
-const char* gpsUrl = "http://192.168.100.103/TrackFare/api/gps_update.php";
-#define DEVICE_KEY   "trackfare-demo-key"   // must match $key in gps_update.php
-#define GPS_SEND_MS  2000
-
-void sendGPS() {
-  static unsigned long last = 0;
-  if (millis() - last < GPS_SEND_MS) return;
-  last = millis();
-
-  if (WiFi.status() != WL_CONNECTED) { Serial.println("GPS SEND: no WiFi"); return; }
-  if (!gpsAlive())                   { Serial.println("GPS SEND: GPS module silent"); return; }
-
-  double lat = 0, lng = 0;
-  bool fix = gpsGetLocation(lat, lng) && gps.location.age() < 5000;
-
-  HTTPClient http;
-  http.setConnectTimeout(800);
-  http.setTimeout(1000);
-  http.begin(gpsUrl);
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-  String p = "key=" + String(DEVICE_KEY)
-           + "&fix=" + String(fix ? 1 : 0)
-           + "&sats=" + String((int)gps.satellites.value());
-  if (fix) {
-    p += "&lat=" + String(lat, 6) + "&lng=" + String(lng, 6)
-       + "&speed=" + String(gps.speed.kmph(), 1);
-  }
-
-  int code = http.POST(p);
-  Serial.printf("GPS SEND: fix=%d -> HTTP %d", fix ? 1 : 0, code);
-  if (code != 200 && code > 0) Serial.print(" " + http.getString());
-  Serial.println();
-  http.end();
-} 
-
-// =====================================================
 // SCREENS
 // =====================================================
 void drawQRButton() {
@@ -553,7 +514,6 @@ void loop() {
 
   readGPS();
   gpsSerialStatus();
-  sendGPS(); 
   wifiMaintain();
 
   // ---- periodic hardware health check ----
