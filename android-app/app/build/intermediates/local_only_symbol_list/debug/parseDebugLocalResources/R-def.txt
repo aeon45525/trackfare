@@ -1,5 +1,0 @@
-R_DEF: Internal format may change without notice
-local
-string phone_nfc_service
-style AppTheme
-xml phone_apdu_service
