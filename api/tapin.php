@@ -1,7 +1,7 @@
 <?php
-require_once '../config/db.php';
-require_once '../config/fare.php';
-require_once '../config/gps_simulation.php';
+require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/fare.php';
+require_once __DIR__ . '/../config/gps_simulation.php';
 
 $uid     = normalize_nfc_uid((string) ($_POST['uid'] ?? ''));
 $trip_id = (int) ($_POST['trip_id'] ?? 0);
@@ -15,7 +15,7 @@ if ($stmt = $conn->prepare(
     'SELECT u.user_id, c.card_id
      FROM users u
      JOIN nfc_cards c ON u.user_id = c.user_id
-     WHERE UPPER(TRIM(c.uid)) = ?'
+    WHERE UPPER(TRIM(c.uid)) = ? AND c.is_active = 1'
 )) {
     $stmt->bind_param('s', $uid);
     $stmt->execute();
@@ -30,84 +30,9 @@ if (!$user) {
 $user_id = (int) $user['user_id'];
 $card_id = (int) $user['card_id'];
 
-function gps_shared_state_path(): string
-{
-    return __DIR__ . '/../config/gps_state.json';
-}
-
-function gps_read_shared_state(): ?array
-{
-    $path = gps_shared_state_path();
-    if (!is_file($path)) {
-        return null;
-    }
-
-    $json = file_get_contents($path);
-    if ($json === false || $json === '') {
-        return null;
-    }
-
-    $data = json_decode($json, true);
-    return is_array($data) ? $data : null;
-}
-
-function find_nearest_route_stop_id_by_position(mysqli $conn, int $routeId, float $lat, float $lng): ?int
-{
-    $stops = fare_route_data($conn, $routeId)['stops'];
-    if ($stops === []) {
-        return null;
-    }
-
-    $closestStopId = null;
-    $closestDistance = INF;
-    foreach ($stops as $stop) {
-        $distance = haversine_km($lat, $lng, (float) $stop['lat'], (float) $stop['lng']);
-        if ($distance < $closestDistance) {
-            $closestDistance = $distance;
-            $closestStopId = (int) $stop['stop_id'];
-        }
-    }
-
-    return $closestStopId;
-}
-
 function resolve_boarding_stop_id(mysqli $conn, array $trip): ?int
 {
-    $routeId = (int) $trip['route_id'];
-    $simulation = gps_simulation_read_state();
-    if (is_array($simulation)
-        && (int) ($simulation['tripId'] ?? 0) === (int) $trip['trip_id']
-        && (int) ($simulation['routeId'] ?? 0) === $routeId
-        && isset($simulation['busPosition']['lat'], $simulation['busPosition']['lng'])
-    ) {
-        $stopId = find_nearest_route_stop_id_by_position(
-            $conn,
-            $routeId,
-            (float) $simulation['busPosition']['lat'],
-            (float) $simulation['busPosition']['lng']
-        );
-        if ($stopId !== null) {
-            return $stopId;
-        }
-    }
-
-    $state = gps_read_shared_state();
-    if (is_array($state)
-        && (int) ($state['routeId'] ?? 0) === $routeId
-        && isset($state['busPosition']['lat'], $state['busPosition']['lng'])
-    ) {
-        $stopId = find_nearest_route_stop_id_by_position(
-            $conn,
-            $routeId,
-            (float) $state['busPosition']['lat'],
-            (float) $state['busPosition']['lng']
-        );
-        if ($stopId !== null) {
-            return $stopId;
-        }
-    }
-
-    return get_route_stop_id_at_index($conn, $routeId, (int) $trip['current_stop_index']);
+    return resolve_trip_current_stop_id($conn, $trip);
 }
 
 function resolve_active_trip(mysqli $conn, int $requestedTripId): ?array
@@ -165,11 +90,12 @@ $boardingStopId = resolve_boarding_stop_id($conn, $trip);
 
 $check = null;
 if ($stmt = $conn->prepare(
-    'SELECT ap.boarding_stop_id, ap.card_id, ap.user_id
+    'SELECT ap.trip_id, ap.boarding_stop_id, ap.card_id, ap.user_id
      FROM active_passengers ap
-     WHERE ap.user_id = ? AND ap.trip_id = ?'
+     WHERE ap.user_id = ?
+     LIMIT 1'
 )) {
-    $stmt->bind_param('ii', $user_id, $activeTripId);
+    $stmt->bind_param('i', $user_id);
     $stmt->execute();
     $check = $stmt->get_result()->fetch_assoc();
     $stmt->close();
@@ -180,12 +106,16 @@ if ($boardingStopId === null) {
 }
 
 if ($check) {
+    if ((int) $check['trip_id'] !== $activeTripId) {
+        exit('ALREADY TAPED IN ON ANOTHER TRIP');
+    }
+
     $result = process_passenger_tap_out(
         $conn,
         $activeTripId,
         $route_id,
         $user_id,
-        $card_id,
+        (int) $check['card_id'],
         (int) $check['boarding_stop_id'],
         $boardingStopId
     );
@@ -209,24 +139,37 @@ if ($stmt = $conn->prepare('SELECT lat, lng FROM stops WHERE stop_id = ?')) {
     $stmt->close();
 }
 
-// Try to insert with location columns (if migration was run)
-if ($stmt = $conn->prepare(
-    'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id, lat, lng, tap_in_time) VALUES (?, ?, ?, ?, ?, ?, NOW())'
-)) {
-    $stmt->bind_param('iiiidd', $activeTripId, $user_id, $card_id, $boardingStopId, $stopLat, $stopLng);
-    $stmt->execute();
-    $stmt->close();
-    echo 'TAP IN SUCCESS';
-} else {
-    // Fallback to old schema if migration not run
+// Try the location-aware schema first, then fall back to older installations.
+$inserted = false;
+try {
     if ($stmt = $conn->prepare(
-        'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id) VALUES (?, ?, ?, ?)'
+        'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id, lat, lng, tap_in_time) VALUES (?, ?, ?, ?, ?, ?, NOW())'
     )) {
-        $stmt->bind_param('iiii', $activeTripId, $user_id, $card_id, $boardingStopId);
-        $stmt->execute();
+        $stmt->bind_param('iiiidd', $activeTripId, $user_id, $card_id, $boardingStopId, $stopLat, $stopLng);
+        $inserted = $stmt->execute();
         $stmt->close();
-        echo 'TAP IN SUCCESS';
-    } else {
-        exit('TAP IN FAILED');
+    }
+} catch (Throwable $e) {
+    $inserted = false;
+}
+
+if (!$inserted) {
+    try {
+        if ($stmt = $conn->prepare(
+            'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id) VALUES (?, ?, ?, ?)'
+        )) {
+        $stmt->bind_param('iiii', $activeTripId, $user_id, $card_id, $boardingStopId);
+            $inserted = $stmt->execute();
+        $stmt->close();
+        }
+    } catch (Throwable $e) {
+        $inserted = false;
     }
 }
+
+if (!$inserted) {
+    exit('TAP IN FAILED');
+}
+
+gps_simulation_tick($conn, $route_id, $activeTripId);
+echo 'TAP IN SUCCESS';

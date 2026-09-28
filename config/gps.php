@@ -410,7 +410,14 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
 
         if ($active) {
             $routeId = (int) $active['route_id'];
+            $simulation = gps_simulation_tick($conn, $routeId, (int) $active['trip_id']);
+            $currentStopIndex = !empty($simulation['available'])
+                ? (int) $simulation['currentStopIndex']
+                : (int) $active['current_stop_index'];
             $currentStopId = get_route_stop_id_at_index($conn, $routeId, (int) $active['current_stop_index']);
+            if ($currentStopIndex !== (int) $active['current_stop_index']) {
+                $currentStopId = get_route_stop_id_at_index($conn, $routeId, $currentStopIndex);
+            }
             $currentStop = 'In transit';
 
             if ($currentStopId !== null) {
@@ -532,6 +539,30 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
 
     $sharedState = gps_read_shared_state();
     $routeId = $requestedRouteId;
+    $simulationTripId = 0;
+    if ($stmt = $conn->prepare(
+        'SELECT t.trip_id, t.route_id
+         FROM active_passengers ap
+         JOIN trips t ON t.trip_id = ap.trip_id
+         WHERE ap.user_id = ? AND t.status = ?
+         LIMIT 1'
+    )) {
+        $passengerId = (int) $_SESSION['user_id'];
+        $active = 'active';
+        $stmt->bind_param('is', $passengerId, $active);
+        $stmt->execute();
+        $passengerTrip = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if ($passengerTrip) {
+            $passengerRouteId = (int) $passengerTrip['route_id'];
+            if ($routeId <= 0) {
+                $routeId = $passengerRouteId;
+            }
+            if ($routeId === $passengerRouteId) {
+                $simulationTripId = (int) $passengerTrip['trip_id'];
+            }
+        }
+    }
     if ($routeId <= 0 && is_array($sharedState) && !empty($sharedState['routeId'])) {
         $routeId = max(1, (int) $sharedState['routeId']);
     }
@@ -567,7 +598,11 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
         exit;
     }
 
-    $simulation = gps_simulation_tick($conn, $routeId);
+    $simulation = gps_simulation_tick(
+        $conn,
+        $routeId,
+        $simulationTripId > 0 ? $simulationTripId : null
+    );
     if (!empty($simulation['available'])) {
         $routeInfo = load_route_info($conn, $routeId);
         echo json_encode([

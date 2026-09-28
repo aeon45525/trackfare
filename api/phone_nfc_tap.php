@@ -96,49 +96,27 @@ if (!$trip) {
 }
 
 $routeId = (int) $trip['route_id'];
-$gpsState = gps_simulation_read_state();
-if (!is_array($gpsState) || (int) ($gpsState['tripId'] ?? 0) !== $tripId) {
-    $statePath = __DIR__ . '/../config/gps_state.json';
-    $gpsState = is_file($statePath) ? json_decode((string) file_get_contents($statePath), true) : null;
-}
-$stopId = null;
-if (is_array($gpsState) && (int) ($gpsState['routeId'] ?? 0) === $routeId
-    && isset($gpsState['busPosition']['lat'], $gpsState['busPosition']['lng'])) {
-    $routeStops = fare_route_data($conn, $routeId)['stops'];
-    $nearestDistance = INF;
-    foreach ($routeStops as $stop) {
-        $distance = haversine_km(
-            (float) $gpsState['busPosition']['lat'],
-            (float) $gpsState['busPosition']['lng'],
-            (float) $stop['lat'],
-            (float) $stop['lng']
-        );
-        if ($distance < $nearestDistance) {
-            $nearestDistance = $distance;
-            $stopId = (int) $stop['stop_id'];
-        }
-    }
-}
-if ($stopId === null) {
-    $stopId = get_route_stop_id_at_index($conn, $routeId, (int) $trip['current_stop_index']);
-}
+$stopId = resolve_trip_current_stop_id($conn, $trip);
 if ($stopId === null) {
     phone_nfc_response(false, 'Unable to determine bus stop.', 409);
 }
 
 $existing = null;
 if ($stmt = $conn->prepare(
-    'SELECT boarding_stop_id FROM active_passengers WHERE user_id = ? AND trip_id = ? LIMIT 1'
+    'SELECT trip_id, card_id, boarding_stop_id FROM active_passengers WHERE user_id = ? LIMIT 1'
 )) {
-    $stmt->bind_param('ii', $userId, $tripId);
+    $stmt->bind_param('i', $userId);
     $stmt->execute();
     $existing = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 }
 
 if ($existing) {
+    if ((int) $existing['trip_id'] !== $tripId) {
+        phone_nfc_response(false, 'Already tapped in on another trip.', 409);
+    }
     $result = process_passenger_tap_out(
-        $conn, $tripId, $routeId, $userId, $cardId,
+        $conn, $tripId, $routeId, $userId, (int) $existing['card_id'],
         (int) $existing['boarding_stop_id'], $stopId
     );
     if (!$result['ok']) {
@@ -170,4 +148,5 @@ if (!$stmt->execute()) {
     phone_nfc_response(false, 'Unable to start trip.', 409);
 }
 $stmt->close();
+gps_simulation_tick($conn, $routeId, $tripId);
 phone_nfc_response(true, 'TAP IN SUCCESS');

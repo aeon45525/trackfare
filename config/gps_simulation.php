@@ -21,10 +21,24 @@ function gps_simulation_read_state(): ?array
     return is_array($state) ? $state : null;
 }
 
-function gps_simulation_tick(mysqli $conn, int $routeId): array
+function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId = null): array
 {
     $trip = null;
-    if ($stmt = $conn->prepare(
+    if ($requestedTripId !== null && $requestedTripId > 0) {
+        $stmt = $conn->prepare(
+            'SELECT trip_id, bus_id, current_stop_index
+             FROM trips
+             WHERE trip_id = ? AND route_id = ? AND status = ?
+             LIMIT 1'
+        );
+        if ($stmt) {
+            $active = 'active';
+            $stmt->bind_param('iis', $requestedTripId, $routeId, $active);
+            $stmt->execute();
+            $trip = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+        }
+    } elseif ($stmt = $conn->prepare(
         'SELECT trip_id, bus_id, current_stop_index
          FROM trips
          WHERE route_id = ? AND status = ?
@@ -74,7 +88,7 @@ function gps_simulation_tick(mysqli $conn, int $routeId): array
     }
 
     $deviceStatePath = __DIR__ . '/gps_state.json';
-    if (is_file($deviceStatePath)) {
+    if ($passengerCount === 0 && is_file($deviceStatePath)) {
         $deviceJson = file_get_contents($deviceStatePath);
         $deviceState = $deviceJson === false ? null : json_decode($deviceJson, true);
         $devicePosition = is_array($deviceState) ? ($deviceState['busPosition'] ?? null) : null;
@@ -162,6 +176,24 @@ function gps_simulation_tick(mysqli $conn, int $routeId): array
     }
 
     $lastIndex = count($stops) - 1;
+    $tripStopIndex = max(0, min($lastIndex, (int) $trip['current_stop_index']));
+    if ($passengerCount > 0
+        && $sameTrip
+        && (int) ($state['currentStopIndex'] ?? 0) >= $lastIndex
+        && $tripStopIndex < $lastIndex
+    ) {
+        $state['status'] = 'paused';
+        $state['currentStopIndex'] = $tripStopIndex;
+        $state['legFrom'] = null;
+        $state['legTo'] = null;
+        $state['legProgress'] = 0.0;
+        $state['busPosition'] = [
+            'lat' => $stops[$tripStopIndex]['lat'],
+            'lng' => $stops[$tripStopIndex]['lng'],
+        ];
+        $state['lastTick'] = $now;
+    }
+
     if ($passengerCount === 0) {
         $state['status'] = 'paused';
         $state['lastTick'] = $now;
@@ -180,7 +212,7 @@ function gps_simulation_tick(mysqli $conn, int $routeId): array
             $state['lastTick'] = $now;
         } else {
             $elapsed = max(0.0, min(5.0, $now - (float) ($state['lastTick'] ?? $now)));
-            $state['legProgress'] = (float) ($state['legProgress'] ?? 0.0) + ($elapsed / 6.0);
+            $state['legProgress'] = (float) ($state['legProgress'] ?? 0.0) + ($elapsed / 60.0);
             $state['lastTick'] = $now;
 
             while ($state['legProgress'] >= 1.0) {

@@ -15,17 +15,27 @@ if ($userId < 1 || !in_array($role, ['driver', 'passenger'], true)) {
 }
 
 $routeId = max(0, (int) ($_GET['route_id'] ?? 0));
-if ($routeId < 1 && $role === 'driver') {
-    if ($stmt = $conn->prepare('SELECT route_id FROM trips WHERE driver_id = ? AND status = ? LIMIT 1')) {
+$tripId = 0;
+if ($role === 'driver') {
+    if ($stmt = $conn->prepare('SELECT trip_id, route_id FROM trips WHERE driver_id = ? AND status = ? LIMIT 1')) {
         $active = 'active';
         $stmt->bind_param('is', $userId, $active);
         $stmt->execute();
-        $routeId = (int) ($stmt->get_result()->fetch_assoc()['route_id'] ?? 0);
+        $driverTrip = $stmt->get_result()->fetch_assoc();
         $stmt->close();
+        if ($driverTrip) {
+            $driverRouteId = (int) $driverTrip['route_id'];
+            if ($routeId < 1) {
+                $routeId = $driverRouteId;
+            }
+            if ($routeId === $driverRouteId) {
+                $tripId = (int) $driverTrip['trip_id'];
+            }
+        }
     }
-} elseif ($routeId < 1 && $role === 'passenger') {
+} else {
     if ($stmt = $conn->prepare(
-        'SELECT t.route_id
+        'SELECT t.trip_id, t.route_id
          FROM active_passengers ap
          JOIN trips t ON t.trip_id = ap.trip_id
          WHERE ap.user_id = ? AND t.status = ?
@@ -35,8 +45,17 @@ if ($routeId < 1 && $role === 'driver') {
         $active = 'active';
         $stmt->bind_param('is', $userId, $active);
         $stmt->execute();
-        $routeId = (int) ($stmt->get_result()->fetch_assoc()['route_id'] ?? 0);
+        $passengerTrip = $stmt->get_result()->fetch_assoc();
         $stmt->close();
+        if ($passengerTrip) {
+            $passengerRouteId = (int) $passengerTrip['route_id'];
+            if ($routeId < 1) {
+                $routeId = $passengerRouteId;
+            }
+            if ($routeId === $passengerRouteId) {
+                $tripId = (int) $passengerTrip['trip_id'];
+            }
+        }
     }
 }
 
@@ -46,4 +65,7 @@ if ($routeId < 1) {
     exit;
 }
 
-echo json_encode(gps_simulation_tick($conn, $routeId), JSON_UNESCAPED_UNICODE);
+echo json_encode(
+    gps_simulation_tick($conn, $routeId, $tripId > 0 ? $tripId : null),
+    JSON_UNESCAPED_UNICODE
+);

@@ -160,6 +160,66 @@ function get_route_stop_id_at_index(mysqli $conn, int $routeId, int $index): ?in
     return (int) $stops[$index]['stop_id'];
 }
 
+function resolve_trip_current_stop_id(mysqli $conn, array $trip): ?int
+{
+    $tripId = (int) ($trip['trip_id'] ?? 0);
+    $routeId = (int) ($trip['route_id'] ?? 0);
+    if ($tripId > 0 && $routeId > 0) {
+        foreach ([__DIR__ . '/gps_simulation_state.json', __DIR__ . '/gps_state.json'] as $statePath) {
+            if (!is_file($statePath)) {
+                continue;
+            }
+
+            $state = json_decode((string) file_get_contents($statePath), true);
+            $position = is_array($state) ? ($state['busPosition'] ?? null) : null;
+            $updatedAt = (int) (is_array($state) ? ($state['updatedAt'] ?? 0) : 0);
+            if (!is_array($state)
+                || (int) ($state['tripId'] ?? 0) !== $tripId
+                || (int) ($state['routeId'] ?? 0) !== $routeId
+                || $updatedAt < time() - 30
+                || $updatedAt > time() + 5
+                || !is_array($position)
+                || !isset($position['lat'], $position['lng'])
+                || !is_numeric($position['lat'])
+                || !is_numeric($position['lng'])
+                || !is_finite((float) $position['lat'])
+                || !is_finite((float) $position['lng'])
+                || (float) $position['lat'] < -90
+                || (float) $position['lat'] > 90
+                || (float) $position['lng'] < -180
+                || (float) $position['lng'] > 180
+            ) {
+                continue;
+            }
+
+            $nearestStopId = null;
+            $nearestDistance = INF;
+            foreach (fare_route_data($conn, $routeId)['stops'] as $stop) {
+                $distance = haversine_km(
+                    (float) $position['lat'],
+                    (float) $position['lng'],
+                    (float) $stop['lat'],
+                    (float) $stop['lng']
+                );
+                if ($distance < $nearestDistance) {
+                    $nearestDistance = $distance;
+                    $nearestStopId = (int) $stop['stop_id'];
+                }
+            }
+
+            if ($nearestStopId !== null) {
+                return $nearestStopId;
+            }
+        }
+    }
+
+    return get_route_stop_id_at_index(
+        $conn,
+        $routeId,
+        (int) ($trip['current_stop_index'] ?? -1)
+    );
+}
+
 function fare_distance_between_stops(mysqli $conn, int $routeId, int $boardingStopId, int $alightingStopId): float
 {
     $data = fare_route_data($conn, $routeId);
@@ -195,12 +255,47 @@ function record_fare_transaction(
     int $boardingStopId,
     int $alightingStopId,
     float $fare
-): bool {
+): ?string {
     if (!$conn->begin_transaction()) {
-        return false;
+        return 'TRANSACTION FAILED';
     }
 
     try {
+        if ($stmt = $conn->prepare(
+            'SELECT active_id
+             FROM active_passengers
+             WHERE trip_id = ? AND user_id = ? AND card_id = ? AND boarding_stop_id = ? AND tap_state = ?
+             FOR UPDATE'
+        )) {
+            $tapState = 'in';
+            $stmt->bind_param('iiiis', $tripId, $userId, $cardId, $boardingStopId, $tapState);
+            $stmt->execute();
+            $active = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if (!$active) {
+                throw new RuntimeException('NOT TAPED IN');
+            }
+        } else {
+            throw new RuntimeException('TRANSACTION FAILED');
+        }
+
+        if ($stmt = $conn->prepare(
+            'SELECT wallet_balance FROM passenger_profiles WHERE user_id = ? FOR UPDATE'
+        )) {
+            $stmt->bind_param('i', $userId);
+            $stmt->execute();
+            $wallet = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if (!$wallet) {
+                throw new RuntimeException('WALLET NOT FOUND');
+            }
+            if ((float) $wallet['wallet_balance'] < $fare) {
+                throw new RuntimeException('INSUFFICIENT BALANCE');
+            }
+        } else {
+            throw new RuntimeException('TRANSACTION FAILED');
+        }
+
         if ($stmt = $conn->prepare(
             'INSERT INTO trip_transactions
              (trip_id, user_id, card_id, boarding_stop_id, alighting_stop_id, fare_amount)
@@ -218,35 +313,49 @@ function record_fare_transaction(
         }
 
         if ($stmt = $conn->prepare(
-            'UPDATE passenger_profiles SET wallet_balance = wallet_balance - ? WHERE user_id = ?'
+            'UPDATE passenger_profiles
+             SET wallet_balance = wallet_balance - ?
+             WHERE user_id = ? AND wallet_balance >= ?'
         )) {
-            $stmt->bind_param('di', $fare, $userId);
+            $stmt->bind_param('did', $fare, $userId, $fare);
             $ok = $stmt->execute();
+            $updated = $stmt->affected_rows === 1;
             $stmt->close();
 
-            if (!$ok) {
+            if (!$ok || !$updated) {
                 throw new Exception('wallet update failed');
             }
         } else {
             throw new Exception('wallet update prepare failed');
         }
 
-        $conn->commit();
-        return true;
-    } catch (Exception $e) {
-        $conn->rollback();
-        return false;
-    }
-}
+        if ($stmt = $conn->prepare(
+            'DELETE FROM active_passengers
+             WHERE trip_id = ? AND user_id = ? AND card_id = ? AND boarding_stop_id = ? AND tap_state = ?'
+        )) {
+            $tapState = 'in';
+            $stmt->bind_param('iiiis', $tripId, $userId, $cardId, $boardingStopId, $tapState);
+            $ok = $stmt->execute();
+            $deleted = $stmt->affected_rows === 1;
+            $stmt->close();
+            if (!$ok || !$deleted) {
+                throw new Exception('active passenger removal failed');
+            }
+        } else {
+            throw new Exception('active passenger removal prepare failed');
+        }
 
-function remove_active_passenger(mysqli $conn, int $tripId, int $userId): void
-{
-    if ($stmt = $conn->prepare(
-        'DELETE FROM active_passengers WHERE trip_id = ? AND user_id = ?'
-    )) {
-        $stmt->bind_param('ii', $tripId, $userId);
-        $stmt->execute();
-        $stmt->close();
+        if (!$conn->commit()) {
+            throw new Exception('transaction commit failed');
+        }
+        return null;
+    } catch (Throwable $e) {
+        $conn->rollback();
+        return $e->getMessage() === 'INSUFFICIENT BALANCE'
+            || $e->getMessage() === 'WALLET NOT FOUND'
+            || $e->getMessage() === 'NOT TAPED IN'
+            ? $e->getMessage()
+            : 'TRANSACTION FAILED';
     }
 }
 
@@ -269,7 +378,7 @@ function process_passenger_tap_out(
         return ['ok' => false, 'fare' => 0.0, 'distance_km' => 0.0, 'message' => 'INVALID STOPS'];
     }
 
-    if (!record_fare_transaction(
+    $transactionError = record_fare_transaction(
         $conn,
         $tripId,
         $userId,
@@ -277,11 +386,10 @@ function process_passenger_tap_out(
         $boardingStopId,
         $alightingStopId,
         $calc['fare']
-    )) {
-        return ['ok' => false, 'fare' => 0.0, 'distance_km' => 0.0, 'message' => 'TRANSACTION FAILED'];
+    );
+    if ($transactionError !== null) {
+        return ['ok' => false, 'fare' => 0.0, 'distance_km' => 0.0, 'message' => $transactionError];
     }
-
-    remove_active_passenger($conn, $tripId, $userId);
 
     return [
         'ok'          => true,
