@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/fare.php';
+require_once __DIR__ . '/../config/gps_simulation.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -19,10 +20,11 @@ $credentialId = strtolower(trim((string) ($_POST['credential_id'] ?? '')));
 $challengeHex = strtolower(trim((string) ($_POST['challenge'] ?? '')));
 $signatureHex = strtolower(trim((string) ($_POST['signature'] ?? '')));
 $tripId = (int) ($_POST['trip_id'] ?? 0);
+$busId = (int) ($_POST['bus_id'] ?? 0);
 
 if (!preg_match('/^[a-f0-9]{32}$/', $credentialId)
     || !preg_match('/^[a-f0-9]{32}$/', $challengeHex)
-    || $tripId < 1) {
+    || $tripId < 1 || $busId < 1) {
     phone_nfc_response(false, 'Invalid phone tap request.', 400);
 }
 
@@ -80,10 +82,10 @@ $cardId = (int) $credential['card_id'];
 $trip = null;
 if ($stmt = $conn->prepare(
     'SELECT trip_id, bus_id, route_id, current_stop_index, status, driver_id
-     FROM trips WHERE trip_id = ? AND status = ? LIMIT 1'
+     FROM trips WHERE trip_id = ? AND bus_id = ? AND status = ? LIMIT 1'
 )) {
     $activeStatus = 'active';
-    $stmt->bind_param('is', $tripId, $activeStatus);
+    $stmt->bind_param('iis', $tripId, $busId, $activeStatus);
     $stmt->execute();
     $trip = $stmt->get_result()->fetch_assoc();
     $stmt->close();
@@ -94,8 +96,11 @@ if (!$trip) {
 }
 
 $routeId = (int) $trip['route_id'];
-$statePath = __DIR__ . '/../config/gps_state.json';
-$gpsState = is_file($statePath) ? json_decode((string) file_get_contents($statePath), true) : null;
+$gpsState = gps_simulation_read_state();
+if (!is_array($gpsState) || (int) ($gpsState['tripId'] ?? 0) !== $tripId) {
+    $statePath = __DIR__ . '/../config/gps_state.json';
+    $gpsState = is_file($statePath) ? json_decode((string) file_get_contents($statePath), true) : null;
+}
 $stopId = null;
 if (is_array($gpsState) && (int) ($gpsState['routeId'] ?? 0) === $routeId
     && isset($gpsState['busPosition']['lat'], $gpsState['busPosition']['lng'])) {

@@ -1,6 +1,7 @@
 <?php
 require_once '../config/db.php';
 require_once '../config/fare.php';
+require_once '../config/gps_simulation.php';
 
 $uid     = normalize_nfc_uid((string) ($_POST['uid'] ?? ''));
 $trip_id = (int) ($_POST['trip_id'] ?? 0);
@@ -73,6 +74,23 @@ function find_nearest_route_stop_id_by_position(mysqli $conn, int $routeId, floa
 function resolve_boarding_stop_id(mysqli $conn, array $trip): ?int
 {
     $routeId = (int) $trip['route_id'];
+    $simulation = gps_simulation_read_state();
+    if (is_array($simulation)
+        && (int) ($simulation['tripId'] ?? 0) === (int) $trip['trip_id']
+        && (int) ($simulation['routeId'] ?? 0) === $routeId
+        && isset($simulation['busPosition']['lat'], $simulation['busPosition']['lng'])
+    ) {
+        $stopId = find_nearest_route_stop_id_by_position(
+            $conn,
+            $routeId,
+            (float) $simulation['busPosition']['lat'],
+            (float) $simulation['busPosition']['lng']
+        );
+        if ($stopId !== null) {
+            return $stopId;
+        }
+    }
+
     $state = gps_read_shared_state();
     if (is_array($state)
         && (int) ($state['routeId'] ?? 0) === $routeId

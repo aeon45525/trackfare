@@ -1,0 +1,202 @@
+<?php
+
+function gps_simulation_state_file(): string
+{
+    return __DIR__ . '/gps_simulation_state.json';
+}
+
+function gps_simulation_read_state(): ?array
+{
+    $path = gps_simulation_state_file();
+    if (!is_file($path)) {
+        return null;
+    }
+
+    $json = file_get_contents($path);
+    if ($json === false || $json === '') {
+        return null;
+    }
+
+    $state = json_decode($json, true);
+    return is_array($state) ? $state : null;
+}
+
+function gps_simulation_tick(mysqli $conn, int $routeId): array
+{
+    $trip = null;
+    if ($stmt = $conn->prepare(
+        'SELECT trip_id, bus_id, current_stop_index
+         FROM trips
+         WHERE route_id = ? AND status = ?
+         ORDER BY start_time DESC, trip_id DESC
+         LIMIT 1'
+    )) {
+        $active = 'active';
+        $stmt->bind_param('is', $routeId, $active);
+        $stmt->execute();
+        $trip = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+    }
+
+    $stops = [];
+    if ($stmt = $conn->prepare(
+        'SELECT s.stop_id, s.stop_name, s.lat, s.lng
+         FROM route_stops rs
+         JOIN stops s ON s.stop_id = rs.stop_id
+         WHERE rs.route_id = ?
+         ORDER BY rs.stop_order'
+    )) {
+        $stmt->bind_param('i', $routeId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($stop = $result->fetch_assoc()) {
+            $stops[] = [
+                'stop_id' => (int) $stop['stop_id'],
+                'name' => $stop['stop_name'],
+                'lat' => (float) $stop['lat'],
+                'lng' => (float) $stop['lng'],
+            ];
+        }
+        $stmt->close();
+    }
+
+    if (!$trip || count($stops) < 2) {
+        return ['available' => false, 'routeId' => $routeId, 'stops' => $stops];
+    }
+
+    $tripId = (int) $trip['trip_id'];
+    $passengerCount = 0;
+    if ($stmt = $conn->prepare('SELECT COUNT(*) AS passenger_count FROM active_passengers WHERE trip_id = ?')) {
+        $stmt->bind_param('i', $tripId);
+        $stmt->execute();
+        $passengerCount = (int) ($stmt->get_result()->fetch_assoc()['passenger_count'] ?? 0);
+        $stmt->close();
+    }
+
+    if ($passengerCount === 0 && !is_file(gps_simulation_state_file())) {
+        return ['available' => false, 'routeId' => $routeId, 'stops' => $stops];
+    }
+
+    $file = fopen(gps_simulation_state_file(), 'c+');
+    if (!$file || !flock($file, LOCK_EX)) {
+        if ($file) {
+            fclose($file);
+        }
+        return ['available' => false, 'routeId' => $routeId, 'stops' => $stops];
+    }
+
+    $raw = stream_get_contents($file);
+    $state = $raw === false ? null : json_decode($raw, true);
+    $sameTrip = is_array($state)
+        && (int) ($state['tripId'] ?? 0) === $tripId
+        && (int) ($state['routeId'] ?? 0) === $routeId;
+    $now = microtime(true);
+
+    if ($passengerCount === 0 && !$sameTrip) {
+        flock($file, LOCK_UN);
+        fclose($file);
+        return ['available' => false, 'routeId' => $routeId, 'stops' => $stops];
+    }
+
+    if (!$sameTrip) {
+        $index = max(0, min(count($stops) - 1, (int) $trip['current_stop_index']));
+        $state = [
+            'source' => 'tap-simulation',
+            'routeId' => $routeId,
+            'tripId' => $tripId,
+            'busId' => (int) $trip['bus_id'],
+            'status' => 'running',
+            'currentStopIndex' => $index,
+            'legFrom' => $index,
+            'legTo' => min($index + 1, count($stops) - 1),
+            'legProgress' => 0.0,
+            'busPosition' => ['lat' => $stops[$index]['lat'], 'lng' => $stops[$index]['lng']],
+            'lastTick' => $now,
+        ];
+    }
+
+    $lastIndex = count($stops) - 1;
+    if ($passengerCount === 0) {
+        $state['status'] = 'paused';
+        $state['lastTick'] = $now;
+    } elseif ((int) ($state['currentStopIndex'] ?? 0) < $lastIndex) {
+        if (($state['status'] ?? '') !== 'running') {
+            $from = (int) ($state['legFrom'] ?? -1);
+            $to = (int) ($state['legTo'] ?? -1);
+            if ($from < 0 || $to !== $from + 1 || $to > $lastIndex) {
+                $from = max(0, min($lastIndex - 1, (int) $state['currentStopIndex']));
+                $to = $from + 1;
+                $state['legProgress'] = 0.0;
+            }
+            $state['status'] = 'running';
+            $state['legFrom'] = $from;
+            $state['legTo'] = $to;
+            $state['lastTick'] = $now;
+        } else {
+            $elapsed = max(0.0, min(5.0, $now - (float) ($state['lastTick'] ?? $now)));
+            $state['legProgress'] = (float) ($state['legProgress'] ?? 0.0) + ($elapsed / 6.0);
+            $state['lastTick'] = $now;
+
+            while ($state['legProgress'] >= 1.0) {
+                $state['legProgress'] -= 1.0;
+                $index = min($lastIndex, (int) $state['legTo']);
+                $state['currentStopIndex'] = $index;
+                if ($index >= $lastIndex) {
+                    $state['status'] = 'paused';
+                    $state['legFrom'] = null;
+                    $state['legTo'] = null;
+                    $state['legProgress'] = 0.0;
+                    break;
+                }
+                $state['legFrom'] = $index;
+                $state['legTo'] = $index + 1;
+            }
+        }
+    } else {
+        $state['status'] = 'paused';
+        $state['legFrom'] = null;
+        $state['legTo'] = null;
+        $state['legProgress'] = 0.0;
+        $state['lastTick'] = $now;
+    }
+
+    $state['source'] = 'tap-simulation';
+    $state['passengerCount'] = $passengerCount;
+    $state['updatedAt'] = time();
+    if (($state['status'] ?? '') === 'running') {
+        $from = max(0, min($lastIndex, (int) $state['legFrom']));
+        $to = max(0, min($lastIndex, (int) $state['legTo']));
+        $progress = max(0.0, min(1.0, (float) $state['legProgress']));
+        $state['currentStopIndex'] = $from;
+        $state['busPosition'] = [
+            'lat' => $stops[$from]['lat'] + (($stops[$to]['lat'] - $stops[$from]['lat']) * $progress),
+            'lng' => $stops[$from]['lng'] + (($stops[$to]['lng'] - $stops[$from]['lng']) * $progress),
+        ];
+    } else {
+        $index = max(0, min($lastIndex, (int) ($state['currentStopIndex'] ?? 0)));
+        $state['currentStopIndex'] = $index;
+        $state['busPosition'] = ['lat' => $stops[$index]['lat'], 'lng' => $stops[$index]['lng']];
+    }
+
+    $json = json_encode($state, JSON_UNESCAPED_UNICODE);
+    if ($json !== false) {
+        ftruncate($file, 0);
+        rewind($file);
+        fwrite($file, $json);
+        fflush($file);
+    }
+    flock($file, LOCK_UN);
+    fclose($file);
+
+    $stopIndex = (int) $state['currentStopIndex'];
+    if ($passengerCount > 0 && $stopIndex !== (int) $trip['current_stop_index']) {
+        if ($stmt = $conn->prepare('UPDATE trips SET current_stop_index = ? WHERE trip_id = ? AND status = ?')) {
+            $active = 'active';
+            $stmt->bind_param('iis', $stopIndex, $tripId, $active);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+
+    return array_merge($state, ['available' => true, 'stops' => $stops]);
+}

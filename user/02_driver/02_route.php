@@ -630,6 +630,7 @@ $routeStopsForMap = array_map(static fn($s) => [
 
       var MAP_CFG_URL = '../../api/map.php';
       var GPS_URL     = '../../config/gps.php';
+      var SIMULATION_URL = '../../api/bus_simulation.php';
       var STOPS_FALLBACK = <?php echo json_encode($routeStopsForMap, JSON_UNESCAPED_UNICODE); ?>;
       var TOTAL_KM    = <?php echo (float) $totalRouteDistance; ?>;
       var ROUTE_ID    = <?php echo (int) ($activeTrip['route_id'] ?? 1); ?>;
@@ -659,6 +660,7 @@ $routeStopsForMap = array_map(static fn($s) => [
       var currentLegPath = null;
       var lastGpsSave = 0;
       var lastLineRebuild = { activePartial: null, legRemainder: null, nextLegFrom: 0 };
+      var tapSimulationActive = false;
 
       var chipEl    = document.getElementById('status-chip');
       var chipLbl   = document.getElementById('chip-label');
@@ -929,6 +931,54 @@ $routeStopsForMap = array_map(static fn($s) => [
           if (!r.ok) throw new Error('GPS error');
           return r.json();
         });
+      }
+
+      function pollTapSimulation() {
+        if (!mapsReady) return;
+        var params = new URLSearchParams({ route_id: ROUTE_ID, _: Date.now() });
+        fetch(SIMULATION_URL + '?' + params.toString(), {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+          .then(function (response) {
+            if (!response.ok) throw new Error('Simulation unavailable');
+            return response.json();
+          })
+          .then(function (data) {
+            if (!data.available || !data.busPosition) {
+              if (tapSimulationActive) {
+                tapSimulationActive = false;
+                state = 'idle';
+                curIdx = 0;
+                setBtns('idle');
+                setChip('idle', 'Trip not started');
+                drawOverview();
+              }
+              return;
+            }
+
+            tapSimulationActive = true;
+            stopLeg();
+            state = 'tap-simulation';
+            stops = data.stops || stops;
+            curIdx = Number(data.currentStopIndex) || 0;
+            var position = data.busPosition;
+            var nextStop = stops[Math.min(curIdx + 1, stops.length - 1)];
+            var heading = nextStop ? bearing(position.lat, position.lng, nextStop.lat, nextStop.lng) : 0;
+            setBusPosition(position.lat, position.lng, heading);
+            followBus(position.lat, position.lng);
+            rebuildLines(null, null, curIdx);
+            updateUI(data.legProgress || 0, data.legFrom == null ? curIdx : data.legFrom, data.legTo == null ? Math.min(curIdx + 1, stops.length - 1) : data.legTo);
+            if (btnStart) btnStart.disabled = true;
+            if (btnArrive) btnArrive.disabled = true;
+            if (btnDepart) btnDepart.disabled = true;
+            if (btnEnd) btnEnd.disabled = true;
+            setChip(data.status === 'running' ? 'running' : 'paused', data.status === 'running'
+              ? 'Tap simulation: ' + (nextStop ? 'en route to ' + nextStop.name : 'moving')
+              : (data.passengerCount > 0 ? 'Bus waiting at route end' : 'Bus stopped: no passengers onboard'));
+          })
+          .catch(function () {});
       }
 
       function persistGps(lat, lng, from, to, progress) {
@@ -1398,6 +1448,7 @@ $routeStopsForMap = array_map(static fn($s) => [
         loadGoogleMaps()
           .then(function () {
             initGoogleMap();
+            setInterval(pollTapSimulation, 1000);
             return bootTripState();
           })
           .catch(function () {

@@ -1,8 +1,8 @@
 <?php
 /**
- * gps.php — Simulated trip state (no real GPS).
- * Uses stop coordinates from the DB. The dashboard animates the bus
- * client-side; this file persists status / currentStopIndex only.
+ * gps.php — Trip state shared by the driver dashboard and passenger map.
+ * The dashboard can simulate movement; fresh authenticated ESP32 GPS fixes
+ * take precedence in the shared state file.
  *
  * Actions (GET ?action=):
  *   start         – begin trip from stop 0 (only when idle)
@@ -16,6 +16,7 @@
 session_start();
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/fare.php';
+require_once __DIR__ . '/gps_simulation.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -269,6 +270,15 @@ function gps_read_shared_state(): ?array
 
 function gps_write_shared_state(array $payload): void
 {
+    $current = gps_read_shared_state();
+    if (is_array($current)
+        && ($current['source'] ?? '') === 'device'
+        && (int)($current['updatedAt'] ?? 0) > time() - 15
+        && ($payload['source'] ?? '') !== 'device'
+    ) {
+        return;
+    }
+
     $payload['updatedAt'] = time();
     $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
     if ($json === false) {
@@ -554,6 +564,26 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
     if ($stops === []) {
         http_response_code(404);
         echo json_encode(['error' => 'Route not found'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $simulation = gps_simulation_tick($conn, $routeId);
+    if (!empty($simulation['available'])) {
+        $routeInfo = load_route_info($conn, $routeId);
+        echo json_encode([
+            'routeId' => $routeId,
+            'routeName' => $routeInfo['route_name'],
+            'displayName' => $routeInfo['display_name'],
+            'stops' => $stops,
+            'status' => $simulation['status'],
+            'currentStopIndex' => $simulation['currentStopIndex'],
+            'busPosition' => $simulation['busPosition'],
+            'legFrom' => $simulation['legFrom'],
+            'legTo' => $simulation['legTo'],
+            'legProgress' => $simulation['legProgress'],
+            'updatedAt' => $simulation['updatedAt'],
+            'source' => 'tap-simulation',
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 

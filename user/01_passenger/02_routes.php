@@ -742,7 +742,7 @@ $activeNav = 'routes';
       var ROUTES = <?= json_encode($routesCatalog, JSON_UNESCAPED_UNICODE) ?>;
       var OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
       var OV_ZOOM = 12;
-      var BUS_POLL_MS = 350;
+      var BUS_POLL_MS = 1000;
       var BUS_ANIM_MS = 320;
       var USER_LAT = <?= json_encode($userLat) ?>;
       var USER_LNG = <?= json_encode($userLng) ?>;
@@ -1437,52 +1437,35 @@ $activeNav = 'routes';
       if (btnBusNear) {
         btnBusNear.addEventListener('click', function () {
           sharePassengerLocation();
-          if (currentRouteId) {
-            if (busMkr) {
-              map.panTo(busMkr.getPosition());
-              map.setZoom(15);
-            } else {
-              fetchBusPosition().then(function() {
-                if (busMkr) {
-                  map.panTo(busMkr.getPosition());
-                  map.setZoom(15);
-                } else {
-                  alert('No active bus found on this route.');
-                }
-              });
-            }
-          } else {
-            btnBusNear.disabled = true;
-            fetch(GPS_URL + '?_' + Date.now(), {
-              cache: 'no-store',
-              credentials: 'same-origin',
-              headers: { Accept: 'application/json' },
-            })
-            .then(function (r) {
-              if (!r.ok) throw new Error('GPS unavailable');
-              return r.json();
+          btnBusNear.disabled = true;
+          fetch(GPS_URL + '?_' + Date.now(), {
+            cache: 'no-store',
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+          })
+            .then(function (response) {
+              if (!response.ok) throw new Error('GPS unavailable');
+              return response.json();
             })
             .then(function (data) {
-              btnBusNear.disabled = false;
-              if (data && data.routeId) {
-                routeSelect.value = data.routeId;
-                drawSelectedRoute(data.routeId).then(function() {
-                  fetchBusPosition().then(function() {
-                    if (busMkr) {
-                      map.panTo(busMkr.getPosition());
-                      map.setZoom(15);
-                    }
-                  });
-                });
-              } else {
-                alert('No active buses found.');
+              var activeRouteId = parseInt(data && data.routeId, 10);
+              if (!activeRouteId || !data.busPosition) {
+                throw new Error('No active bus position');
               }
+              routeSelect.value = String(activeRouteId);
+              return drawSelectedRoute(activeRouteId).then(function () {
+                updateBusFromGps(data);
+                if (!busMkr) throw new Error('Bus marker unavailable');
+                map.panTo(busMkr.getPosition());
+                map.setZoom(15);
+              });
             })
             .catch(function () {
+              alert('Could not locate an active bus. Please try again.');
+            })
+            .finally(function () {
               btnBusNear.disabled = false;
-              alert('Could not locate nearby buses. Please try again.');
             });
-          }
         });
       }
 
