@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "com.trackfare.passenger.app-debug-4:/xml_phone_apdu_service.xml.flat",
+        "source": "com.trackfare.passenger.app-main-6:/xml/phone_apdu_service.xml"
+    }
+]

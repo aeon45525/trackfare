@@ -1,0 +1,3 @@
+com.trackfare.passenger:xml/phone_apdu_service = 0x7f030000
+com.trackfare.passenger:style/AppTheme = 0x7f020000
+com.trackfare.passenger:string/phone_nfc_service = 0x7f010000

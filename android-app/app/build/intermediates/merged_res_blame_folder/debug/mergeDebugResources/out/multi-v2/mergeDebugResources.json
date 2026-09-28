@@ -1,0 +1,66 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.trackfare.passenger.app-debug-4:/values_values.arsc.flat",
+            "map": [
+                {
+                    "source": "C:\\xampp\\htdocs\\trackfare\\android-app\\app\\src\\main\\res\\values\\strings.xml",
+                    "from": {
+                        "startLines": "1",
+                        "startColumns": "4",
+                        "startOffsets": "17",
+                        "endColumns": "69",
+                        "endOffsets": "82"
+                    },
+                    "to": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "69",
+                        "endOffsets": "120"
+                    }
+                },
+                {
+                    "source": "C:\\xampp\\htdocs\\trackfare\\android-app\\app\\src\\main\\res\\values\\styles.xml",
+                    "from": {
+                        "startLines": "-1",
+                        "startColumns": "-1",
+                        "startOffsets": "-1"
+                    },
+                    "to": {
+                        "startLines": "3",
+                        "startColumns": "4",
+                        "startOffsets": "125",
+                        "endLines": "10",
+                        "endColumns": "12",
+                        "endOffsets": "574"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "C:\\Users\\jayem\\.gradle\\daemon\\8.13\\com.trackfare.passenger.app-debug-4:\\values_values.arsc.flat",
+            "map": [
+                {
+                    "source": "C:\\xampp\\htdocs\\trackfare\\android-app\\app\\src\\main\\res\\values\\styles.xml",
+                    "from": {
+                        "startLines": "1",
+                        "startColumns": "4",
+                        "startOffsets": "17",
+                        "endLines": "8",
+                        "endColumns": "12",
+                        "endOffsets": "473"
+                    },
+                    "to": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "9",
+                        "endColumns": "12",
+                        "endOffsets": "504"
+                    }
+                }
+            ]
+        }
+    ]
+}

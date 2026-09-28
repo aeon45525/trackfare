@@ -10,8 +10,8 @@
 // =====================================================
 // SETTINGS
 // =====================================================
-const char* ssid     = "WILMASTORE";
-const char* password = "edertgt01614";
+const char* ssid     = "BOOTCAMP";
+const char* password = "Paloadkanalang!01#";
 const char* tapUrl   = "http://192.168.100.103/TrackFare/api/tapin.php";
 
 #define TRIP_ID            "1"
