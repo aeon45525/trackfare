@@ -975,8 +975,8 @@ $routeStopsForMap = array_map(static fn($s) => [
             if (btnDepart) btnDepart.disabled = true;
             if (btnEnd) btnEnd.disabled = true;
             setChip(data.status === 'running' ? 'running' : 'paused', data.status === 'running'
-              ? 'Tap simulation: ' + (nextStop ? 'en route to ' + nextStop.name : 'moving')
-              : (data.passengerCount > 0 ? 'Bus waiting at route end' : 'Bus stopped: no passengers onboard'));
+              ? (data.source === 'device' ? 'Live GPS: ' : 'Tap simulation: ') + (nextStop ? 'en route to ' + nextStop.name : 'moving')
+              : (data.source === 'device' ? 'Live GPS: bus stopped' : (data.passengerCount > 0 ? 'Bus waiting at route end' : 'Bus stopped: no passengers onboard')));
           })
           .catch(function () {});
       }

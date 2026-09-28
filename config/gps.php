@@ -582,7 +582,7 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
             'legTo' => $simulation['legTo'],
             'legProgress' => $simulation['legProgress'],
             'updatedAt' => $simulation['updatedAt'],
-            'source' => 'tap-simulation',
+            'source' => $simulation['source'] ?? 'tap-simulation',
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }

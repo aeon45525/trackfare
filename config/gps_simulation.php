@@ -73,6 +73,52 @@ function gps_simulation_tick(mysqli $conn, int $routeId): array
         $stmt->close();
     }
 
+    $deviceStatePath = __DIR__ . '/gps_state.json';
+    if (is_file($deviceStatePath)) {
+        $deviceJson = file_get_contents($deviceStatePath);
+        $deviceState = $deviceJson === false ? null : json_decode($deviceJson, true);
+        $devicePosition = is_array($deviceState) ? ($deviceState['busPosition'] ?? null) : null;
+        $updatedAt = (int) (is_array($deviceState) ? ($deviceState['updatedAt'] ?? 0) : 0);
+        if (is_array($deviceState)
+            && ($deviceState['source'] ?? '') === 'device'
+            && (int) ($deviceState['tripId'] ?? 0) === $tripId
+            && (int) ($deviceState['busId'] ?? 0) === (int) $trip['bus_id']
+            && (int) ($deviceState['routeId'] ?? 0) === $routeId
+            && $updatedAt >= time() - 15
+            && $updatedAt <= time() + 5
+            && is_array($devicePosition)
+            && isset($devicePosition['lat'], $devicePosition['lng'])
+            && is_numeric($devicePosition['lat'])
+            && is_numeric($devicePosition['lng'])
+            && is_finite((float) $devicePosition['lat'])
+            && is_finite((float) $devicePosition['lng'])
+            && (float) $devicePosition['lat'] >= -90
+            && (float) $devicePosition['lat'] <= 90
+            && (float) $devicePosition['lng'] >= -180
+            && (float) $devicePosition['lng'] <= 180
+        ) {
+            return [
+                'available' => true,
+                'routeId' => $routeId,
+                'tripId' => $tripId,
+                'busId' => (int) $trip['bus_id'],
+                'stops' => $stops,
+                'status' => 'running',
+                'currentStopIndex' => max(0, min(count($stops) - 1, (int) ($deviceState['currentStopIndex'] ?? 0))),
+                'busPosition' => [
+                    'lat' => (float) $devicePosition['lat'],
+                    'lng' => (float) $devicePosition['lng'],
+                ],
+                'legFrom' => null,
+                'legTo' => null,
+                'legProgress' => 0.0,
+                'updatedAt' => $updatedAt,
+                'source' => 'device',
+                'passengerCount' => $passengerCount,
+            ];
+        }
+    }
+
     if ($passengerCount === 0 && !is_file(gps_simulation_state_file())) {
         return ['available' => false, 'routeId' => $routeId, 'stops' => $stops];
     }
