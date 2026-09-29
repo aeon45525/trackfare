@@ -21,6 +21,61 @@ function gps_simulation_read_state(): ?array
     return is_array($state) ? $state : null;
 }
 
+function gps_simulation_start(mysqli $conn, int $routeId, int $tripId, int $busId): bool
+{
+    $stops = [];
+    if ($stmt = $conn->prepare(
+        'SELECT s.lat, s.lng
+         FROM route_stops rs
+         JOIN stops s ON s.stop_id = rs.stop_id
+         WHERE rs.route_id = ?
+         ORDER BY rs.stop_order'
+    )) {
+        $stmt->bind_param('i', $routeId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($stop = $result->fetch_assoc()) {
+            $stops[] = ['lat' => (float) $stop['lat'], 'lng' => (float) $stop['lng']];
+        }
+        $stmt->close();
+    }
+
+    if (count($stops) < 2) {
+        return false;
+    }
+
+    $now = microtime(true);
+    $state = [
+        'source' => 'tap-simulation',
+        'routeId' => $routeId,
+        'tripId' => $tripId,
+        'busId' => $busId,
+        'status' => 'running',
+        'currentStopIndex' => 0,
+        'legFrom' => 0,
+        'legTo' => 1,
+        'legProgress' => 0.0,
+        'busPosition' => $stops[0],
+        'lastTick' => $now,
+    ];
+
+    $file = fopen(gps_simulation_state_file(), 'c+');
+    if (!$file || !flock($file, LOCK_EX)) {
+        if ($file) {
+            fclose($file);
+        }
+        return false;
+    }
+
+    $json = json_encode($state, JSON_UNESCAPED_UNICODE);
+    $saved = $json !== false && ftruncate($file, 0) && rewind($file)
+        && fwrite($file, $json) !== false && fflush($file);
+    flock($file, LOCK_UN);
+    fclose($file);
+
+    return $saved;
+}
+
 function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId = null): array
 {
     $trip = null;
@@ -165,7 +220,7 @@ function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId =
             'routeId' => $routeId,
             'tripId' => $tripId,
             'busId' => (int) $trip['bus_id'],
-            'status' => 'running',
+            'status' => 'paused',
             'currentStopIndex' => $index,
             'legFrom' => $index,
             'legTo' => min($index + 1, count($stops) - 1),
@@ -194,43 +249,28 @@ function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId =
         $state['lastTick'] = $now;
     }
 
-    if ($passengerCount === 0) {
-        $state['status'] = 'paused';
+    if (($state['status'] ?? '') === 'running'
+        && (int) ($state['currentStopIndex'] ?? 0) < $lastIndex
+    ) {
+        $elapsed = max(0.0, min(5.0, $now - (float) ($state['lastTick'] ?? $now)));
+        $state['legProgress'] = (float) ($state['legProgress'] ?? 0.0) + ($elapsed / 60.0);
         $state['lastTick'] = $now;
-    } elseif ((int) ($state['currentStopIndex'] ?? 0) < $lastIndex) {
-        if (($state['status'] ?? '') !== 'running') {
-            $from = (int) ($state['legFrom'] ?? -1);
-            $to = (int) ($state['legTo'] ?? -1);
-            if ($from < 0 || $to !== $from + 1 || $to > $lastIndex) {
-                $from = max(0, min($lastIndex - 1, (int) $state['currentStopIndex']));
-                $to = $from + 1;
-                $state['legProgress'] = 0.0;
-            }
-            $state['status'] = 'running';
-            $state['legFrom'] = $from;
-            $state['legTo'] = $to;
-            $state['lastTick'] = $now;
-        } else {
-            $elapsed = max(0.0, min(5.0, $now - (float) ($state['lastTick'] ?? $now)));
-            $state['legProgress'] = (float) ($state['legProgress'] ?? 0.0) + ($elapsed / 60.0);
-            $state['lastTick'] = $now;
 
-            while ($state['legProgress'] >= 1.0) {
-                $state['legProgress'] -= 1.0;
-                $index = min($lastIndex, (int) $state['legTo']);
-                $state['currentStopIndex'] = $index;
-                if ($index >= $lastIndex) {
-                    $state['status'] = 'paused';
-                    $state['legFrom'] = null;
-                    $state['legTo'] = null;
-                    $state['legProgress'] = 0.0;
-                    break;
-                }
-                $state['legFrom'] = $index;
-                $state['legTo'] = $index + 1;
+        while ($state['legProgress'] >= 1.0) {
+            $state['legProgress'] -= 1.0;
+            $index = min($lastIndex, (int) $state['legTo']);
+            $state['currentStopIndex'] = $index;
+            if ($index >= $lastIndex) {
+                $state['status'] = 'paused';
+                $state['legFrom'] = null;
+                $state['legTo'] = null;
+                $state['legProgress'] = 0.0;
+                break;
             }
+            $state['legFrom'] = $index;
+            $state['legTo'] = $index + 1;
         }
-    } else {
+    } elseif ((int) ($state['currentStopIndex'] ?? 0) >= $lastIndex) {
         $state['status'] = 'paused';
         $state['legFrom'] = null;
         $state['legTo'] = null;

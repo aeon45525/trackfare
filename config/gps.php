@@ -748,6 +748,15 @@ switch ($action) {
         unset($_SESSION['gps_leg_completed']);
         if ($driverId > 0 && ($_SESSION['role'] ?? '') === 'driver') {
             record_trip_start($conn, $driverId);
+            $trip = get_active_trip($conn, $driverId);
+            if ($trip) {
+                gps_simulation_start(
+                    $conn,
+                    (int) $trip['route_id'],
+                    (int) $trip['trip_id'],
+                    (int) $trip['bus_id']
+                );
+            }
         }
         if (($state['status'] ?? 'idle') === 'idle') {
             $state['status']           = 'running';

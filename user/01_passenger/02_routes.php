@@ -1257,13 +1257,63 @@ $activeNav = 'routes';
       }
 
       function updateBusFromGps(data) {
-        if (!data || !data.busPosition || !mapsReady) return;
-        if (String(data.routeId) !== String(currentRouteId)) return;
+        if (!data || !data.busPosition || !mapsReady) return Promise.resolve(false);
+        if (String(data.routeId) !== String(currentRouteId)) return Promise.resolve(false);
 
-        var lat = data.busPosition.lat;
-        var lng = data.busPosition.lng;
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        var from = Number(data.legFrom);
+        var to = Number(data.legTo);
+        if (data.source === 'tap-simulation' && Number.isInteger(from)
+            && Number.isInteger(to) && to === from + 1 && currentStops[from] && currentStops[to]
+        ) {
+          return fetchOsrmRoute(from, to).then(function (path) {
+            if (String(data.routeId) !== String(currentRouteId)) return;
+            var position = positionAtFraction(path, Number(data.legProgress) || 0);
+            animateBusPosition(position.lat, position.lng);
+            return true;
+          });
+        }
+
+        var lat = Number(data.busPosition.lat);
+        var lng = Number(data.busPosition.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return Promise.resolve(false);
         animateBusPosition(lat, lng);
+        return Promise.resolve(true);
+      }
+
+      function haversineKm(a, b) {
+        var radius = 6371;
+        var latDelta = (b.lat - a.lat) * Math.PI / 180;
+        var lngDelta = (b.lng - a.lng) * Math.PI / 180;
+        var latA = a.lat * Math.PI / 180;
+        var latB = b.lat * Math.PI / 180;
+        var value = Math.sin(latDelta / 2) ** 2
+          + Math.cos(latA) * Math.cos(latB) * Math.sin(lngDelta / 2) ** 2;
+        return radius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+      }
+
+      function positionAtFraction(path, fraction) {
+        if (!path.length) return { lat: 0, lng: 0 };
+        if (path.length === 1 || fraction <= 0) return path[0];
+
+        var distances = [0];
+        for (var i = 1; i < path.length; i++) {
+          distances.push(distances[i - 1] + haversineKm(path[i - 1], path[i]));
+        }
+        var total = distances[distances.length - 1];
+        if (fraction >= 1 || total <= 0) return path[path.length - 1];
+
+        var target = fraction * total;
+        for (var segment = 1; segment < distances.length; segment++) {
+          if (distances[segment] >= target) {
+            var length = distances[segment] - distances[segment - 1];
+            var progress = length > 0 ? (target - distances[segment - 1]) / length : 0;
+            return {
+              lat: path[segment - 1].lat + (path[segment].lat - path[segment - 1].lat) * progress,
+              lng: path[segment - 1].lng + (path[segment].lng - path[segment - 1].lng) * progress,
+            };
+          }
+        }
+        return path[path.length - 1];
       }
 
       function fetchBusPosition() {
@@ -1454,7 +1504,8 @@ $activeNav = 'routes';
               }
               routeSelect.value = String(activeRouteId);
               return drawSelectedRoute(activeRouteId).then(function () {
-                updateBusFromGps(data);
+                return updateBusFromGps(data);
+              }).then(function () {
                 if (!busMkr) throw new Error('Bus marker unavailable');
                 map.panTo(busMkr.getPosition());
                 map.setZoom(15);

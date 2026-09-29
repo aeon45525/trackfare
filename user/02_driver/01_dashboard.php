@@ -1120,6 +1120,20 @@ $routeStopsForMap = array_map(static fn($s) => [
     });
   }
 
+  function tapSimulationPosition(data) {
+    var from = Number(data.legFrom);
+    var to = Number(data.legTo);
+    if (data.source !== 'tap-simulation' || !Number.isInteger(from)
+        || !Number.isInteger(to) || to !== from + 1 || !stops[from] || !stops[to]
+    ) {
+      return Promise.resolve(data.busPosition);
+    }
+
+    return fetchOsrmRoute(from, to).then(function (path) {
+      return positionAtFraction(path, buildCumulativeDistances(path), Number(data.legProgress) || 0).point;
+    });
+  }
+
   function pollTapSimulation() {
     if (!mapsReady) return;
     var params = new URLSearchParams({ route_id: ROUTE_ID, _: Date.now() });
@@ -1145,27 +1159,28 @@ $routeStopsForMap = array_map(static fn($s) => [
           return;
         }
 
-        tapSimulationActive = true;
-        stopLeg();
-        state = 'tap-simulation';
         stops = data.stops || stops;
-        curIdx = data.currentStopIndex || 0;
-        var position = data.busPosition;
-        var nextIndex = Math.min(curIdx + 1, stops.length - 1);
-        var nextStop = stops[nextIndex];
-        var heading = nextStop ? bearing(position.lat, position.lng, nextStop.lat, nextStop.lng) : 0;
-        setBusPosition(position.lat, position.lng, heading);
-        followBus(position.lat, position.lng);
-        rebuildLines(null, null, curIdx);
-        updateUI(data.legProgress || 0, data.legFrom == null ? curIdx : data.legFrom, data.legTo == null ? nextIndex : data.legTo);
-        renderStopList(nextIndex);
-        btnStart.disabled = true;
-        btnArrive.disabled = true;
-        btnDepart.disabled = true;
-        btnEnd.disabled = true;
-        setChip(data.status === 'running' ? 'running' : 'paused', data.status === 'running'
-          ? (data.source === 'device' ? 'Live GPS: ' : 'Tap simulation: ') + (nextStop ? 'en route to ' + nextStop.name : 'moving')
-          : (data.source === 'device' ? 'Live GPS: bus stopped' : 'Bus stopped: no passengers onboard'));
+        return tapSimulationPosition(data).then(function (position) {
+          tapSimulationActive = true;
+          stopLeg();
+          state = 'tap-simulation';
+          curIdx = data.currentStopIndex || 0;
+          var nextIndex = Math.min(curIdx + 1, stops.length - 1);
+          var nextStop = stops[nextIndex];
+          var heading = nextStop ? bearing(position.lat, position.lng, nextStop.lat, nextStop.lng) : 0;
+          setBusPosition(position.lat, position.lng, heading);
+          followBus(position.lat, position.lng);
+          rebuildLines(null, null, curIdx);
+          updateUI(data.legProgress || 0, data.legFrom == null ? curIdx : data.legFrom, data.legTo == null ? nextIndex : data.legTo);
+          renderStopList(nextIndex);
+          btnStart.disabled = true;
+          btnArrive.disabled = true;
+          btnDepart.disabled = true;
+          btnEnd.disabled = false;
+          setChip(data.status === 'running' ? 'running' : 'paused', data.status === 'running'
+            ? (data.source === 'device' ? 'Live GPS: ' : 'Tap simulation: ') + (nextStop ? 'en route to ' + nextStop.name : 'moving')
+            : (data.source === 'device' ? 'Live GPS: bus stopped' : 'Bus stopped: no passengers onboard'));
+        });
       })
       .catch(function () {});
   }

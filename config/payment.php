@@ -13,6 +13,38 @@ function trackfare_payment_env($key, $default = '')
     return $default;
 }
 
+function trackfare_payment_return_url($key, $status)
+{
+    $url = trackfare_payment_env($key, '');
+    $parts = $url !== '' ? parse_url($url) : false;
+    $host = is_array($parts) ? strtolower((string) ($parts['host'] ?? '')) : '';
+    $localHosts = ['localhost', '127.0.0.1', '::1', '[::1]'];
+
+    if ($url !== '' && !in_array($host, $localHosts, true)) {
+        return $url;
+    }
+
+    $requestHost = trim((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    if (!preg_match('/^(?:[a-z0-9.-]+|\[[a-f0-9:]+\])(?::\d{1,5})?$/i', $requestHost)) {
+        $requestHost = 'localhost';
+    }
+
+    $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || $forwardedProto === 'https';
+    $scheme = $isHttps ? 'https' : 'http';
+    $path = is_array($parts) ? (string) ($parts['path'] ?? '') : '';
+    $query = is_array($parts) ? (string) ($parts['query'] ?? '') : '';
+    if ($path === '') {
+        $path = '/trackfare/user/01_passenger/03_wallet.php';
+    }
+    if ($query === '') {
+        $query = 'gcash=' . rawurlencode((string) $status);
+    }
+
+    return $scheme . '://' . $requestHost . $path . '?' . $query;
+}
+
 function is_gcash_configured()
 {
     $apiKey = trackfare_payment_env('PAYMONGO_SECRET_KEY', '');
@@ -33,8 +65,8 @@ function createGcashInvoice($userId, $amount, $payerEmail, $topupId, $referenceN
 
     $apiKey = trackfare_payment_env('PAYMONGO_SECRET_KEY');
     $baseUrl = rtrim(trackfare_payment_env('PAYMONGO_API_BASE_URL', 'https://api.paymongo.com/v2'), '/');
-    $successUrl = trackfare_payment_env('TRACKFARE_GCASH_SUCCESS_URL', 'http://localhost/trackfare/user/01_passenger/03_wallet.php?gcash=success');
-    $failureUrl = trackfare_payment_env('TRACKFARE_GCASH_FAILURE_URL', 'http://localhost/trackfare/user/01_passenger/03_wallet.php?gcash=failed');
+    $successUrl = trackfare_payment_return_url('TRACKFARE_GCASH_SUCCESS_URL', 'success');
+    $failureUrl = trackfare_payment_return_url('TRACKFARE_GCASH_FAILURE_URL', 'failed');
 
     $checkoutReference = 'trackfare-gcash-' . (int) $topupId;
     $description = 'TrackFare wallet top-up';

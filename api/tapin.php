@@ -15,7 +15,8 @@ if ($stmt = $conn->prepare(
     'SELECT u.user_id, c.card_id
      FROM users u
      JOIN nfc_cards c ON u.user_id = c.user_id
-    WHERE UPPER(TRIM(c.uid)) = ? AND c.is_active = 1'
+        WHERE UPPER(REPLACE(REPLACE(REPLACE(TRIM(c.uid), " ", ""), ":", ""), "-", "")) = ?
+            AND c.is_active = 1'
 )) {
     $stmt->bind_param('s', $uid);
     $stmt->execute();

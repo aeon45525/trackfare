@@ -9,13 +9,10 @@ const FARE_FIRST_KM_PHP       = 15.00;
 const FARE_PER_KM_AFTER_PHP    = 2.50;
 const FARE_INCLUDED_KM         = 5.0;
 
-/** Normalize UID from PN532 POST body (e.g. "62 BB 1D 07") for nfc_cards lookup. */
+/** Normalize a PN532 UID so spaces, colons, and hyphens do not affect lookup. */
 function normalize_nfc_uid(string $raw): string
 {
-    $uid = strtoupper(trim($raw));
-    $uid = preg_replace('/\s+/', ' ', $uid) ?? $uid;
-
-    return $uid;
+    return preg_replace('/[^0-9A-F]/', '', strtoupper(trim($raw))) ?? '';
 }
 
 function fare_policy_label(): string
