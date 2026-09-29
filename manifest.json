@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "TrackFare",
+  "short_name": "TrackFare",
+  "start_url": "./user/01_passenger/01_home.php",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8f9fa",
+  "theme_color": "#0040a1",
+  "icons": [
+    {
+      "src": "./images/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

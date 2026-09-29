@@ -373,6 +373,7 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
     $response = [
         'ok' => true,
         'has_active_trip' => false,
+        'has_tap_record' => false,
         'active_trip_id' => 0,
         'active_trip_status' => 'No active trip',
         'active_trip_badge' => 'Idle',
@@ -395,7 +396,7 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
     }
 
     if ($stmt = $conn->prepare(
-        'SELECT ap.trip_id, ap.boarding_stop_id, t.route_id, t.current_stop_index, t.status,
+        'SELECT ap.trip_id, ap.boarding_stop_id, t.route_id, t.current_stop_index, t.status, t.start_time,
                 bs.stop_name AS boarding_stop_name
          FROM active_passengers ap
          JOIN trips t ON ap.trip_id = t.trip_id
@@ -409,6 +410,13 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
         $stmt->close();
 
         if ($active) {
+            $response['has_tap_record'] = true;
+        }
+
+        if ($active && $active['status'] === 'active' && empty($active['start_time'])) {
+            $response['active_trip_status'] = 'Waiting for driver';
+            $response['active_trip_badge'] = 'Waiting';
+        } elseif ($active) {
             $routeId = (int) $active['route_id'];
             $simulation = gps_simulation_tick($conn, $routeId, (int) $active['trip_id']);
             $currentStopIndex = !empty($simulation['available'])
@@ -467,7 +475,7 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'driver' && $_GET['a
 
     $trip = null;
     if ($stmt = $conn->prepare(
-        'SELECT trip_id, route_id, current_stop_index
+        'SELECT trip_id, route_id, current_stop_index, start_time
          FROM trips
          WHERE driver_id = ? AND status = ?
          LIMIT 1'
@@ -479,7 +487,7 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'driver' && $_GET['a
         $stmt->close();
     }
 
-    if ($trip) {
+    if ($trip && !empty($trip['start_time'])) {
         $routeId = (int) $trip['route_id'];
         $currentStopIndex = max(0, min((int) $trip['current_stop_index'], PHP_INT_MAX));
         $currentStopId = get_route_stop_id_at_index($conn, $routeId, $currentStopIndex);

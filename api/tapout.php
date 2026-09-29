@@ -45,7 +45,7 @@ if (!$active) {
 
 $trip = null;
 if ($stmt = $conn->prepare(
-    'SELECT trip_id, route_id, current_stop_index FROM trips WHERE trip_id = ? AND status = ?'
+    'SELECT trip_id, route_id, current_stop_index, start_time FROM trips WHERE trip_id = ? AND status = ?'
 )) {
     $status = 'active';
     $stmt->bind_param('is', $trip_id, $status);
@@ -56,6 +56,9 @@ if ($stmt = $conn->prepare(
 
 if (!$trip) {
     exit('INVALID TRIP');
+}
+if (empty($trip['start_time'])) {
+    exit('WAIT FOR DRIVER TO START');
 }
 
 $route_id      = (int) $trip['route_id'];

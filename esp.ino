@@ -10,10 +10,10 @@
 // =====================================================
 // SETTINGS
 // =====================================================
-const char* ssid     = "BOOTCAMP 2.4G";
-const char* password = "Paloadkanalang!01#";
-const char* tapUrl   = "http://192.168.1.20/TrackFare/api/tapin.php";
-const char* gpsUrl    = "http://192.168.1.20/TrackFare/api/gps_update.php";
+const char* ssid     = "PLDTHOMEFIBRB6AgP-EXT";
+const char* password = "P@ssword01";
+const char* tapUrl   = "http://192.168.1.56/TrackFare/api/tapin.php";
+const char* gpsUrl    = "http://192.168.1.56/TrackFare/api/gps_update.php";
 const char* gpsToken  = "8f71a65d9c3e42b7a104de5f6c98a231d72b4e0f9a53c681e2f07b4a9d6c1358";
 
 #define BUS_ID             1

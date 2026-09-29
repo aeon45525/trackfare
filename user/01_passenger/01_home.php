@@ -22,6 +22,29 @@ $estimatedFare = '₱0.00';
 $nfcCardUid = null;
 $nfcCardStatus = 'No card linked';
 $hasActiveTrip = false;
+$hasPendingTap = false;
+$availableTrips = [];
+if (empty($_SESSION['passenger_tap_csrf'])) {
+    $_SESSION['passenger_tap_csrf'] = bin2hex(random_bytes(32));
+}
+
+if ($stmt = $conn->prepare(
+    'SELECT t.trip_id, r.display_name, b.bus_number
+     FROM trips t
+     JOIN routes r ON r.route_id = t.route_id
+     JOIN buses b ON b.bus_id = t.bus_id
+     WHERE t.status = ?
+     ORDER BY t.start_time DESC, t.trip_id DESC'
+)) {
+    $tripStatus = 'active';
+    $stmt->bind_param('s', $tripStatus);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($trip = $result->fetch_assoc()) {
+        $availableTrips[] = $trip;
+    }
+    $stmt->close();
+}
 
 if ($stmt = $conn->prepare('SELECT wallet_balance FROM passenger_profiles WHERE user_id = ? LIMIT 1')) {
     $stmt->bind_param('i', $userId);
@@ -44,7 +67,7 @@ if ($stmt = $conn->prepare('SELECT uid, is_active FROM nfc_cards WHERE user_id =
 }
 
 if ($stmt = $conn->prepare(
-    'SELECT t.status, bs.stop_name AS boarded_stop, r.display_name AS route_name
+    'SELECT t.status, t.start_time, bs.stop_name AS boarded_stop, r.display_name AS route_name
      FROM active_passengers ap
      JOIN trips t ON ap.trip_id = t.trip_id
      LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
@@ -55,16 +78,22 @@ if ($stmt = $conn->prepare(
     $stmt->bind_param('i', $userId);
     $stmt->execute();
     $stmt->store_result();
-    $stmt->bind_result($tripStatus, $boardedStopResult, $routeName);
+    $stmt->bind_result($tripStatus, $tripStartTime, $boardedStopResult, $routeName);
     if ($stmt->fetch()) {
+      if ($tripStatus === 'active' && empty($tripStartTime)) {
+        $activeTripStatus = 'Waiting for driver';
+        $activeTripBadge = 'Waiting';
+        $hasPendingTap = true;
+      } else {
         $activeTripStatus = $tripStatus === 'active' ? 'On active trip' : ucfirst($tripStatus);
         $activeTripBadge = $tripStatus === 'active' ? 'Active' : ucfirst($tripStatus);
         $activeTripBadgeClasses = $tripStatus === 'active' ? 'status-pill status-active' : 'status-pill status-idle';
         $boardedStop = $boardedStopResult ?: '—';
         $currentStop = $routeName ?: 'In transit';
         $hasActiveTrip = true;
-        $tapStatus = 'Active';
+        $tapStatus = 'On board';
         $tapStatusClasses = 'status-pill status-active';
+      }
     }
     $stmt->close();
 
@@ -91,6 +120,10 @@ $activeNav = 'home';
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>TrackFare - <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="icon" type="image/png" href="../../images/logo.png" />
+    <link rel="manifest" href="../../manifest.json" />
+    <meta name="theme-color" content="#0040a1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap"
@@ -371,13 +404,32 @@ $activeNav = 'home';
             </div>
             <div class="mt-3 rounded-2xl bg-surface-container-low p-3 space-y-2">
               <p class="text-xs leading-relaxed text-on-surface-variant">
-                Place your linked card or phone over the bus reader when you board.
+                Use this button, or tap your linked NFC card at the bus reader.
               </p>
               <?php if ($nfcCardUid): ?>
                 <p class="text-xs text-on-surface-variant">
                   NFC UID: <?= htmlspecialchars($nfcCardUid, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($nfcCardStatus, ENT_QUOTES, 'UTF-8') ?>
                 </p>
               <?php endif; ?>
+              <div id="mobile-trip-selection" class="space-y-1" <?= $hasActiveTrip || $hasPendingTap ? 'hidden' : '' ?>>
+                <label for="mobile-trip-select" class="block text-xs font-semibold text-on-surface">Active bus</label>
+                <select id="mobile-trip-select" class="w-full rounded-xl border-slate-300 bg-white text-sm text-slate-900">
+                  <option value="">Choose your bus</option>
+                  <?php foreach ($availableTrips as $trip): ?>
+                    <option value="<?= (int) $trip['trip_id'] ?>" <?= count($availableTrips) === 1 ? 'selected' : '' ?>>
+                      <?= htmlspecialchars(trim(($trip['display_name'] ?? 'Route') . ' · ' . ($trip['bus_number'] ?? 'Bus')), ENT_QUOTES, 'UTF-8') ?>
+                    </option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <button id="mobile-tap-button" type="button" class="home-action w-full bg-primary text-white disabled:cursor-not-allowed disabled:opacity-50" <?= !$hasActiveTrip && !$hasPendingTap && count($availableTrips) !== 1 ? 'disabled' : '' ?> <?= $hasPendingTap ? 'disabled' : '' ?>>
+                <?= $hasActiveTrip ? 'Tap out' : ($hasPendingTap ? 'Waiting for driver' : 'Tap in') ?>
+              </button>
+              <p id="mobile-tap-feedback" class="text-xs text-on-surface-variant" role="status" aria-live="polite"></p>
+              <button id="pwa-install-button" type="button" class="home-action w-full border border-slate-200 bg-white text-slate-700" hidden>
+                <span class="material-symbols-outlined text-[18px]">download</span>
+                Install TrackFare
+              </button>
             </div>
           </div>
 
@@ -527,6 +579,14 @@ $activeNav = 'home';
         var currentStopEl = document.getElementById('current-stop');
         var fareEl = document.getElementById('fare-display');
         var walletBalanceEl = document.getElementById('wallet-balance');
+        var tapButton = document.getElementById('mobile-tap-button');
+        var tripSelect = document.getElementById('mobile-trip-select');
+        var tripSelection = document.getElementById('mobile-trip-selection');
+        var tapFeedback = document.getElementById('mobile-tap-feedback');
+        var installButton = document.getElementById('pwa-install-button');
+        var csrfToken = <?= json_encode($_SESSION['passenger_tap_csrf']) ?>;
+        var installPrompt = null;
+        var tapRequestInFlight = false;
 
         function setStatusPill(isActive) {
           return isActive ? 'status-pill status-active' : 'status-pill status-idle';
@@ -544,7 +604,7 @@ $activeNav = 'home';
           .then(function (data) {
             if (!data.ok) return;
             if (tapStatusEl) {
-              tapStatusEl.textContent = data.has_active_trip ? 'Active' : 'Waiting';
+              tapStatusEl.textContent = data.has_active_trip ? 'On board' : 'Waiting';
               tapStatusEl.className = setStatusPill(data.has_active_trip);
             }
             if (tripStatusEl) {
@@ -566,10 +626,91 @@ $activeNav = 'home';
             if (walletBalanceEl && typeof data.wallet_balance === 'number') {
               walletBalanceEl.textContent = '₱' + data.wallet_balance.toFixed(2);
             }
+            if (tapButton && !tapRequestInFlight) {
+              if (data.has_active_trip) {
+                tapButton.textContent = 'Tap out';
+                tapButton.disabled = false;
+                if (tripSelection) tripSelection.hidden = true;
+              } else if (data.has_tap_record) {
+                tapButton.textContent = 'Waiting for driver';
+                tapButton.disabled = true;
+                if (tripSelection) tripSelection.hidden = true;
+              } else {
+                tapButton.textContent = 'Tap in';
+                tapButton.disabled = !tripSelect || !tripSelect.value;
+                if (tripSelection) tripSelection.hidden = false;
+              }
+            }
           })
           .catch(function () {
             // ignore polling errors
           });
+        }
+
+        if (tripSelect) {
+          tripSelect.addEventListener('change', function () {
+            if (tapButton && tapButton.textContent === 'Tap in') {
+              tapButton.disabled = !tripSelect.value;
+            }
+          });
+        }
+
+        if (tapButton) {
+          tapButton.addEventListener('click', function () {
+            if (tapRequestInFlight) return;
+            tapRequestInFlight = true;
+            var payload = new URLSearchParams({ csrf_token: csrfToken });
+            if (tripSelect && tripSelection && !tripSelection.hidden) payload.set('trip_id', tripSelect.value);
+            tapButton.disabled = true;
+            tapButton.textContent = 'Processing...';
+            if (tapFeedback) tapFeedback.textContent = '';
+
+            fetch('../../api/passenger_tap.php', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+              },
+              body: payload.toString(),
+            })
+            .then(function (response) {
+              return response.json().then(function (data) {
+                return { ok: response.ok, data: data };
+              });
+            })
+            .then(function (result) {
+              if (tapFeedback) tapFeedback.textContent = result.data.message || 'Tap request complete.';
+              tapRequestInFlight = false;
+              refreshPassengerStatus();
+            })
+            .catch(function () {
+              if (tapFeedback) tapFeedback.textContent = 'Could not reach TrackFare. Check your connection and try again.';
+              tapRequestInFlight = false;
+              refreshPassengerStatus();
+            });
+          });
+        }
+
+        window.addEventListener('beforeinstallprompt', function (event) {
+          event.preventDefault();
+          installPrompt = event;
+          if (installButton) installButton.hidden = false;
+        });
+
+        if (installButton) {
+          installButton.addEventListener('click', function () {
+            if (!installPrompt) return;
+            installPrompt.prompt();
+            installPrompt.userChoice.finally(function () {
+              installPrompt = null;
+              installButton.hidden = true;
+            });
+          });
+        }
+
+        if ('serviceWorker' in navigator && window.isSecureContext) {
+          navigator.serviceWorker.register('../../service-worker.js', { scope: '../../' }).catch(function () {});
         }
 
         setInterval(refreshPassengerStatus, 2000);

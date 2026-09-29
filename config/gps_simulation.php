@@ -26,7 +26,7 @@ function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId =
     $trip = null;
     if ($requestedTripId !== null && $requestedTripId > 0) {
         $stmt = $conn->prepare(
-            'SELECT trip_id, bus_id, current_stop_index
+            'SELECT trip_id, bus_id, current_stop_index, start_time
              FROM trips
              WHERE trip_id = ? AND route_id = ? AND status = ?
              LIMIT 1'
@@ -39,7 +39,7 @@ function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId =
             $stmt->close();
         }
     } elseif ($stmt = $conn->prepare(
-        'SELECT trip_id, bus_id, current_stop_index
+        'SELECT trip_id, bus_id, current_stop_index, start_time
          FROM trips
          WHERE route_id = ? AND status = ?
          ORDER BY start_time DESC, trip_id DESC
@@ -74,7 +74,7 @@ function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId =
         $stmt->close();
     }
 
-    if (!$trip || count($stops) < 2) {
+    if (!$trip || empty($trip['start_time']) || count($stops) < 2) {
         return ['available' => false, 'routeId' => $routeId, 'stops' => $stops];
     }
 

@@ -33,7 +33,7 @@ if ($stmt = $conn->prepare(
      FROM active_passengers ap
      JOIN trips t ON ap.trip_id = t.trip_id
      LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
-     WHERE ap.user_id = ? AND t.status = ?'
+      WHERE ap.user_id = ? AND t.status = ? AND t.start_time IS NOT NULL'
 )) {
     $status = 'active';
     $stmt->bind_param('is', $userId, $status);

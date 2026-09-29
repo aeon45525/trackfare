@@ -81,7 +81,7 @@ $userId = (int) $credential['user_id'];
 $cardId = (int) $credential['card_id'];
 $trip = null;
 if ($stmt = $conn->prepare(
-    'SELECT trip_id, bus_id, route_id, current_stop_index, status, driver_id
+    'SELECT trip_id, bus_id, route_id, current_stop_index, status, driver_id, start_time
      FROM trips WHERE trip_id = ? AND bus_id = ? AND status = ? LIMIT 1'
 )) {
     $activeStatus = 'active';
@@ -114,6 +114,9 @@ if ($stmt = $conn->prepare(
 if ($existing) {
     if ((int) $existing['trip_id'] !== $tripId) {
         phone_nfc_response(false, 'Already tapped in on another trip.', 409);
+    }
+    if (empty($trip['start_time'])) {
+        phone_nfc_response(false, 'Wait for the driver to start before tapping out.', 409);
     }
     $result = process_passenger_tap_out(
         $conn, $tripId, $routeId, $userId, (int) $existing['card_id'],
@@ -148,5 +151,4 @@ if (!$stmt->execute()) {
     phone_nfc_response(false, 'Unable to start trip.', 409);
 }
 $stmt->close();
-gps_simulation_tick($conn, $routeId, $tripId);
 phone_nfc_response(true, 'TAP IN SUCCESS');

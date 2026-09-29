@@ -39,7 +39,7 @@ function resolve_active_trip(mysqli $conn, int $requestedTripId): ?array
 {
     $trip = null;
     if ($stmt = $conn->prepare(
-        'SELECT trip_id, bus_id, route_id, current_stop_index, status, driver_id
+        'SELECT trip_id, bus_id, route_id, current_stop_index, status, driver_id, start_time
          FROM trips WHERE trip_id = ? AND status = ? LIMIT 1'
     )) {
         $active = 'active';
@@ -64,7 +64,7 @@ function resolve_active_trip(mysqli $conn, int $requestedTripId): ?array
 
     if ($fallback && isset($fallback['bus_id'], $fallback['driver_id'])) {
         if ($stmt = $conn->prepare(
-            'SELECT trip_id, route_id, current_stop_index, status
+            'SELECT trip_id, route_id, current_stop_index, status, start_time
              FROM trips WHERE bus_id = ? AND driver_id = ? AND status = ? LIMIT 1'
         )) {
             $active = 'active';
@@ -108,6 +108,9 @@ if ($boardingStopId === null) {
 if ($check) {
     if ((int) $check['trip_id'] !== $activeTripId) {
         exit('ALREADY TAPED IN ON ANOTHER TRIP');
+    }
+    if (empty($trip['start_time'])) {
+        exit('WAIT FOR DRIVER TO START');
     }
 
     $result = process_passenger_tap_out(
@@ -171,5 +174,4 @@ if (!$inserted) {
     exit('TAP IN FAILED');
 }
 
-gps_simulation_tick($conn, $route_id, $activeTripId);
 echo 'TAP IN SUCCESS';

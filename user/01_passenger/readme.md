@@ -1,5 +1,11 @@
 
-- The passenger URL changed from `localhost`/HTTPS to `192.168.1.182` over HTTP.
+## Phone App
+
+- Open the passenger home page in Chrome on Android and use **Install TrackFare** when the browser offers it.
+- Installation and service-worker support require HTTPS (or `localhost`). The current LAN address over HTTP can still use the tap buttons, but it cannot install the PWA.
+- The passenger home page supports authenticated Tap In and Tap Out actions. Presenting the phone itself as a contactless card to the bus reader still requires a native Android HCE app.
+
+- The passenger URL is `192.168.1.56` over HTTP on the current Wi-Fi network.
 - Chrome/Edge updated or reset location permissions.
 - The passenger is using a different browser/device/network.
 - The browser cached an earlier permission, but now correctly reports the IP site as insecure.
@@ -12,7 +18,7 @@ For immediate testing:
    `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
 2. Enable the setting.
 3. Add:
-   `http://192.168.1.182`
+   `http://192.168.1.56`
 4. Restart Chrome.
 5. Open the passenger page and choose **Allow** for Location.
 6. Tap in again, then refresh the driver page.

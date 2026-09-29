@@ -88,7 +88,9 @@ if ($activeTrip) {
          FROM active_passengers ap
          JOIN users u  ON ap.user_id         = u.user_id
          JOIN stops st ON ap.boarding_stop_id = st.stop_id
-         WHERE ap.trip_id = ? ORDER BY u.full_name'
+         WHERE ap.trip_id = ?
+           AND EXISTS (SELECT 1 FROM trips started_trip WHERE started_trip.trip_id = ap.trip_id AND started_trip.start_time IS NOT NULL)
+         ORDER BY u.full_name'
     )) {
         $stmt->bind_param('i', $tripId);
         $stmt->execute();
