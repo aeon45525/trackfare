@@ -748,6 +748,7 @@ $activeNav = 'routes';
       var USER_LNG = <?= json_encode($userLng) ?>;
       var HAS_ACTIVE_TRIP = <?= $hasActiveTrip ? 'true' : 'false' ?>;
       var ACTIVE_TRIP_ID = <?= (int)($activeTripData['trip_id'] ?? 0) ?>;
+      var ACTIVE_TRIP_ROUTE_ID = <?= (int)($activeTripData['route_id'] ?? 0) ?>;
       var LAST_PAX_UPDATE = 0;
       var passengerLocationWatchId = null;
 
@@ -1520,11 +1521,14 @@ $activeNav = 'routes';
         });
       }
 
-      routeSelect.value = '';
       setInterval(refreshPassengerState, 3000);
       refreshPassengerState();
       startPassengerLocationTracking();
-      if (USER_LAT !== null && USER_LNG !== null) {
+      if (ACTIVE_TRIP_ROUTE_ID && ROUTES[ACTIVE_TRIP_ROUTE_ID]) {
+        routeSelect.value = String(ACTIVE_TRIP_ROUTE_ID);
+        onRouteChange();
+      } else if (USER_LAT !== null && USER_LNG !== null) {
+        routeSelect.value = '';
         showMapPanel(true);
         loadGoogleMaps().then(function () {
           initGoogleMap();

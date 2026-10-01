@@ -89,7 +89,6 @@ if ($activeTrip) {
          JOIN users u  ON ap.user_id         = u.user_id
          JOIN stops st ON ap.boarding_stop_id = st.stop_id
          WHERE ap.trip_id = ?
-           AND EXISTS (SELECT 1 FROM trips started_trip WHERE started_trip.trip_id = ap.trip_id AND started_trip.start_time IS NOT NULL)
          ORDER BY u.full_name'
     )) {
         $stmt->bind_param('i', $tripId);
@@ -480,6 +479,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   var lastPaxUpdate = 0;
   var latestPassengerData = null;
   var tapSimulationActive = false;
+  var driverLocationTimer = null;
 
   /* ── DOM ── */
   var btnStart  = document.getElementById('btn-start');
@@ -970,7 +970,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   }
 
   function setBtns(s) {
-    btnStart.disabled  = s !== 'idle';
+    btnStart.disabled  = false;
     btnArrive.disabled = s !== 'running';
     btnDepart.disabled = s !== 'paused';
     btnEnd.disabled    = s === 'idle';
@@ -1173,16 +1173,46 @@ $routeStopsForMap = array_map(static fn($s) => [
           rebuildLines(null, null, curIdx);
           updateUI(data.legProgress || 0, data.legFrom == null ? curIdx : data.legFrom, data.legTo == null ? nextIndex : data.legTo);
           renderStopList(nextIndex);
-          btnStart.disabled = true;
+          btnStart.disabled = false;
           btnArrive.disabled = true;
           btnDepart.disabled = true;
           btnEnd.disabled = false;
+          var liveGps = data.source === 'device' || data.source === 'driver-browser';
           setChip(data.status === 'running' ? 'running' : 'paused', data.status === 'running'
-            ? (data.source === 'device' ? 'Live GPS: ' : 'Tap simulation: ') + (nextStop ? 'en route to ' + nextStop.name : 'moving')
-            : (data.source === 'device' ? 'Live GPS: bus stopped' : 'Bus stopped: no passengers onboard'));
+            ? (liveGps ? 'Live GPS: ' : 'Tap simulation: ') + (nextStop ? 'en route to ' + nextStop.name : 'moving')
+            : (liveGps ? 'Live GPS: bus stopped' : 'Bus stopped: no passengers onboard'));
         });
       })
       .catch(function () {});
+  }
+
+  function updateDriverLocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(function (position) {
+      fetch(GPS_URL + '?action=driver_location', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        }),
+      }).catch(function () {});
+    }, function () {}, {
+      enableHighAccuracy: true,
+      maximumAge: 3000,
+      timeout: 10000,
+    });
+  }
+
+  function startDriverLocationTracking() {
+    if (!navigator.geolocation) return;
+    updateDriverLocation();
+    if (driverLocationTimer !== null) clearInterval(driverLocationTimer);
+    driverLocationTimer = setInterval(updateDriverLocation, 5000);
   }
 
   function persistGps(lat, lng, from, to, progress) {
@@ -1273,28 +1303,19 @@ $routeStopsForMap = array_map(static fn($s) => [
   }
 
   function startTrip() {
-    if (!mapsReady || stops.length < 2) return;
-    if (state === 'paused') {
-      departStop();
-      return;
-    }
-    if (state !== 'idle') return;
-
-    gpsCall('start').catch(function () {});
-    curIdx = 0;
-    state  = 'running';
-    setBtns('running');
-    traveledTrail = [{ lat: stops[0].lat, lng: stops[0].lng }];
-    currentLegPath = null;
-    legRoutesCache = {};
-    legRoutesPending = {};
-
-    var p0 = stops[0];
-    setBusPosition(p0.lat, p0.lng, 0);
-    rebuildLines(null, null, 0);
-    followBus(p0.lat, p0.lng);
-    prefetchAllLegRoutes();
-    startLeg(0, 1);
+    btnStart.disabled = true;
+    gpsCall('start').then(function (data) {
+      if (data.error) throw new Error(data.error);
+      btnStart.disabled = false;
+      if (mapsReady) {
+        pollTapSimulation();
+      } else {
+        setChip('running', 'Simulation started');
+      }
+    }).catch(function () {
+      btnStart.disabled = false;
+      setChip('idle', 'Could not start simulation');
+    });
   }
 
   function endTrip() {
@@ -1403,6 +1424,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   }
 
   function boot() {
+    startDriverLocationTracking();
     loadGoogleMaps()
       .then(function () {
         initGoogleMap();

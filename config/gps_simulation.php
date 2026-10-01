@@ -129,7 +129,7 @@ function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId =
         $stmt->close();
     }
 
-    if (!$trip || empty($trip['start_time']) || count($stops) < 2) {
+    if (!$trip || count($stops) < 2) {
         return ['available' => false, 'routeId' => $routeId, 'stops' => $stops];
     }
 
@@ -142,14 +142,21 @@ function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId =
         $stmt->close();
     }
 
+    $simulationState = gps_simulation_read_state();
+    $simulationOngoing = !empty($trip['start_time'])
+        && is_array($simulationState)
+        && (int) ($simulationState['tripId'] ?? 0) === $tripId
+        && (int) ($simulationState['routeId'] ?? 0) === $routeId
+        && ($simulationState['status'] ?? '') === 'running';
+
     $deviceStatePath = __DIR__ . '/gps_state.json';
-    if ($passengerCount === 0 && is_file($deviceStatePath)) {
+    if (!$simulationOngoing && is_file($deviceStatePath)) {
         $deviceJson = file_get_contents($deviceStatePath);
         $deviceState = $deviceJson === false ? null : json_decode($deviceJson, true);
         $devicePosition = is_array($deviceState) ? ($deviceState['busPosition'] ?? null) : null;
         $updatedAt = (int) (is_array($deviceState) ? ($deviceState['updatedAt'] ?? 0) : 0);
         if (is_array($deviceState)
-            && ($deviceState['source'] ?? '') === 'device'
+            && in_array(($deviceState['source'] ?? ''), ['device', 'driver-browser'], true)
             && (int) ($deviceState['tripId'] ?? 0) === $tripId
             && (int) ($deviceState['busId'] ?? 0) === (int) $trip['bus_id']
             && (int) ($deviceState['routeId'] ?? 0) === $routeId
@@ -182,10 +189,14 @@ function gps_simulation_tick(mysqli $conn, int $routeId, ?int $requestedTripId =
                 'legTo' => null,
                 'legProgress' => 0.0,
                 'updatedAt' => $updatedAt,
-                'source' => 'device',
+                'source' => $deviceState['source'],
                 'passengerCount' => $passengerCount,
             ];
         }
+    }
+
+    if (empty($trip['start_time'])) {
+        return ['available' => false, 'routeId' => $routeId, 'stops' => $stops];
     }
 
     if ($passengerCount === 0 && !is_file(gps_simulation_state_file())) {

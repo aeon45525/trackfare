@@ -1,0 +1,82 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.trackfare.phone"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="23"
+9        android:targetSdkVersion="35" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:2:5-67
+11-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:2:22-64
+12
+13    <uses-feature
+13-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:3:5-81
+14        android:name="android.hardware.nfc"
+14-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:3:19-54
+15        android:required="true" />
+15-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:3:55-78
+16    <uses-feature
+16-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:4:5-85
+17        android:name="android.hardware.nfc.hce"
+17-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:4:19-58
+18        android:required="true" />
+18-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:4:59-82
+19
+20    <application
+20-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:6:5-30:19
+21        android:allowBackup="false"
+21-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:7:9-36
+22        android:debuggable="true"
+23        android:extractNativeLibs="false"
+24        android:label="TrackFare Phone"
+24-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:8:9-40
+25        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+25-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:9:9-72
+26        android:usesCleartextTraffic="true" >
+26-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:10:9-44
+27        <activity
+27-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:11:9-18:20
+28            android:name="com.trackfare.phone.MainActivity"
+28-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:12:13-41
+29            android:exported="true" >
+29-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:13:13-36
+30            <intent-filter>
+30-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:14:13-17:29
+31                <action android:name="android.intent.action.MAIN" />
+31-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:15:17-69
+31-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:15:25-66
+32
+33                <category android:name="android.intent.category.LAUNCHER" />
+33-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:16:17-77
+33-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:16:27-74
+34            </intent-filter>
+35        </activity>
+36
+37        <service
+37-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:19:9-29:19
+38            android:name="com.trackfare.phone.TrackFareHostApduService"
+38-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:20:13-53
+39            android:exported="true"
+39-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:21:13-36
+40            android:permission="android.permission.BIND_NFC_SERVICE" >
+40-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:22:13-69
+41            <intent-filter>
+41-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:23:13-25:29
+42                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+42-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:24:17-93
+42-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:24:25-90
+43            </intent-filter>
+44
+45            <meta-data
+45-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:26:13-28:55
+46                android:name="android.nfc.cardemulation.host_apdu_service"
+46-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:27:17-75
+47                android:resource="@xml/apduservice" />
+47-->C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:28:17-52
+48        </service>
+49    </application>
+50
+51</manifest>

@@ -99,15 +99,6 @@ if ($stmt = $conn->prepare(
     }
 }
 
-if ($stmt = $conn->prepare(
-    'UPDATE active_passengers SET lat = ?, lng = ? WHERE trip_id = ? AND tap_state = ?'
-)) {
-    $tapState = 'in';
-    $stmt->bind_param('ddis', $lat, $lng, $tripId, $tapState);
-    $stmt->execute();
-    $stmt->close();
-}
-
 $state = [
     'routeId' => $routeId,
     'tripId' => $tripId,

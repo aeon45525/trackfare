@@ -1,0 +1,3 @@
+com.trackfare.phone:xml/apduservice = 0x7f020000
+com.trackfare.phone:string/hce_service_description = 0x7f010001
+com.trackfare.phone:string/hce_aid_description = 0x7f010000

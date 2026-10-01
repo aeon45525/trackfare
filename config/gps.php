@@ -271,10 +271,13 @@ function gps_read_shared_state(): ?array
 function gps_write_shared_state(array $payload): void
 {
     $current = gps_read_shared_state();
+    $currentSource = is_array($current) ? (string) ($current['source'] ?? '') : '';
+    $incomingSource = (string) ($payload['source'] ?? '');
     if (is_array($current)
-        && ($current['source'] ?? '') === 'device'
+        && in_array($currentSource, ['device', 'driver-browser'], true)
         && (int)($current['updatedAt'] ?? 0) > time() - 15
-        && ($payload['source'] ?? '') !== 'device'
+        && $incomingSource !== $currentSource
+        && ($currentSource === 'device' || $incomingSource !== 'device')
     ) {
         return;
     }
@@ -359,6 +362,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         'tracking' => $updated,
         'message' => $updated ? 'Location updated' : 'No active trip',
     ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_SESSION['role'] ?? '') === 'driver'
+    && ($_GET['action'] ?? '') === 'driver_location'
+) {
+    $payload = json_decode(file_get_contents('php://input'), true);
+    $lat = isset($payload['lat']) ? (float) $payload['lat'] : NAN;
+    $lng = isset($payload['lng']) ? (float) $payload['lng'] : NAN;
+    if (!is_finite($lat) || !is_finite($lng) || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+        http_response_code(422);
+        echo json_encode(['ok' => false, 'message' => 'Invalid coordinates'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $driverId = (int) ($_SESSION['user_id'] ?? 0);
+    $trip = null;
+    if ($driverId > 0 && ($stmt = $conn->prepare(
+        'SELECT trip_id, bus_id, route_id, current_stop_index
+         FROM trips WHERE driver_id = ? AND status = ? LIMIT 1'
+    ))) {
+        $active = 'active';
+        $stmt->bind_param('is', $driverId, $active);
+        $stmt->execute();
+        $trip = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+    }
+    if (!$trip) {
+        http_response_code(409);
+        echo json_encode(['ok' => false, 'message' => 'No active trip'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    gps_write_shared_state([
+        'routeId' => (int) $trip['route_id'],
+        'tripId' => (int) $trip['trip_id'],
+        'busId' => (int) $trip['bus_id'],
+        'status' => 'running',
+        'currentStopIndex' => (int) $trip['current_stop_index'],
+        'busPosition' => ['lat' => $lat, 'lng' => $lng],
+        'legFrom' => null,
+        'legTo' => null,
+        'legProgress' => 0.0,
+        'source' => 'driver-browser',
+    ]);
+
+    echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -487,7 +538,7 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'driver' && $_GET['a
         $stmt->close();
     }
 
-    if ($trip && !empty($trip['start_time'])) {
+    if ($trip) {
         $routeId = (int) $trip['route_id'];
         $currentStopIndex = max(0, min((int) $trip['current_stop_index'], PHP_INT_MAX));
         $currentStopId = get_route_stop_id_at_index($conn, $routeId, $currentStopIndex);

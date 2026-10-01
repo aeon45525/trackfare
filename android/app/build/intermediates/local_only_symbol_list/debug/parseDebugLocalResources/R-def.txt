@@ -1,0 +1,5 @@
+R_DEF: Internal format may change without notice
+local
+string hce_aid_description
+string hce_service_description
+xml apduservice

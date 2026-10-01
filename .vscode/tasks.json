@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build TrackFare Android APK",
+			"type": "shell",
+			"command": "$env:ANDROID_HOME = $env:LOCALAPPDATA + [char]92 + 'Android' + [char]92 + 'Sdk'; $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME; & ($env:LOCALAPPDATA + [char]92 + 'TrackFareAndroidTools' + [char]92 + 'gradle-8.9' + [char]92 + 'bin' + [char]92 + 'gradle.bat') --no-daemon -p android assembleDebug",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

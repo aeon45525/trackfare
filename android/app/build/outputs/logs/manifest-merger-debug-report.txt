@@ -1,0 +1,87 @@
+-- Merging decision tree log ---
+manifest
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:1:1-31:12
+INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:1:1-31:12
+INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:1:1-31:12
+INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:1:1-31:12
+	package
+		INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml
+	android:versionName
+		INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml
+	android:versionCode
+		INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml
+	xmlns:android
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:1:11-69
+uses-permission#android.permission.INTERNET
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:2:5-67
+	android:name
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:2:22-64
+uses-feature#android.hardware.nfc
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:3:5-81
+	android:required
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:3:55-78
+	android:name
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:3:19-54
+uses-feature#android.hardware.nfc.hce
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:4:5-85
+	android:required
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:4:59-82
+	android:name
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:4:19-58
+application
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:6:5-30:19
+INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:6:5-30:19
+	android:extractNativeLibs
+		INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml
+	android:label
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:8:9-40
+	android:allowBackup
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:7:9-36
+	android:theme
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:9:9-72
+	android:usesCleartextTraffic
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:10:9-44
+activity#com.trackfare.phone.MainActivity
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:11:9-18:20
+	android:exported
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:13:13-36
+	android:name
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:12:13-41
+intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:14:13-17:29
+action#android.intent.action.MAIN
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:15:17-69
+	android:name
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:15:25-66
+category#android.intent.category.LAUNCHER
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:16:17-77
+	android:name
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:16:27-74
+service#com.trackfare.phone.TrackFareHostApduService
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:19:9-29:19
+	android:exported
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:21:13-36
+	android:permission
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:22:13-69
+	android:name
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:20:13-53
+intent-filter#action:name:android.nfc.cardemulation.action.HOST_APDU_SERVICE
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:23:13-25:29
+action#android.nfc.cardemulation.action.HOST_APDU_SERVICE
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:24:17-93
+	android:name
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:24:25-90
+meta-data#android.nfc.cardemulation.host_apdu_service
+ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:26:13-28:55
+	android:resource
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:28:17-52
+	android:name
+		ADDED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml:27:17-75
+uses-sdk
+INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml
+INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from C:\xampp\htdocs\trackfare\android\app\src\main\AndroidManifest.xml

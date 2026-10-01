@@ -10,23 +10,27 @@
 // =====================================================
 // SETTINGS
 // =====================================================
-const char* ssid     = "PLDTHOMEFIBRB6AgP-EXT";
-const char* password = "P@ssword01";
-const char* tapUrl   = "http://192.168.1.56/TrackFare/api/tapin.php";
-const char* gpsUrl    = "http://192.168.1.56/TrackFare/api/gps_update.php";
-const char* gpsToken  = "8f71a65d9c3e42b7a104de5f6c98a231d72b4e0f9a53c681e2f07b4a9d6c1358";
+const char* ssid     = "BOOTCAMP 2.4G";
+const char* password = "Paloadkanalang!01#";
+const char* tapUrl   = "http://192.168.1.20/TrackFare/api/tapin.php";
+const char* gpsUrl   = "http://192.168.1.20/TrackFare/api/gps_update.php";
+const char* gpsToken = "8f71a65d9c3e42b7a104de5f6c98a231d72b4e0f9a53c681e2f07b4a9d6c1358";
 
 #define BUS_ID             1
-#define GPS_PRINT_MS       2000    // GPS status printed to Serial Monitor this often
-#define GPS_REQUIRED       true    // true = red screen when GPS wiring/serial is lost
+#define GPS_PRINT_MS       2000
+#define GPS_REQUIRED       true
 
-#define RESULT_SCREEN_MS   5000    // green (tap in/out) screen time
-#define SAME_CARD_LOCKOUT  5000    // same card can't tap again within this time (prevents in->out instantly)
-#define CARD_HOLD_GAP_MS   1000    // card seen again within this gap = still being held on the reader
-#define HW_CHECK_MS        2000    // how often PN532 is health-checked
-#define GPS_TIMEOUT_MS     10000   // tolerate brief loop/network delays before declaring GPS disconnected
+#define RESULT_SCREEN_MS   5000
+#define SAME_CARD_LOCKOUT  5000
+#define CARD_HOLD_GAP_MS   1000
+#define HW_CHECK_MS        2000
+#define GPS_TIMEOUT_MS     10000
 #define GPS_UPLOAD_INTERVAL_MS 5000
 #define PN532_MISSES_BEFORE_ERROR 3
+
+// Trip cache: refreshed from loop(), never during a tap
+#define TRIP_REFRESH_MS    3000
+#define TRIP_STALE_MS      180000   // cache older than this with no server reply = unknown
 
 // =====================================================
 // TFT
@@ -71,7 +75,6 @@ unsigned long lastGPSData = 0;
 #define BUTTON_W 150
 #define BUTTON_H 35
 
-
 // =====================================================
 // STATE
 // =====================================================
@@ -90,7 +93,11 @@ bool pnConfigured = false;
 uint8_t pnFailureCount = 0;
 uint8_t shownErrMask = 0;   // bit0 = PN532, bit1 = GPS
 
-// recent cards (per-UID debounce so A,B,A within lockout still can't double-tap A)
+// Trip cache: -1 = unknown/server unreachable, 0 = no active trip, >0 = trip id
+int cachedTripId = -1;
+unsigned long tripCachedAt = 0;      // last refresh attempt
+unsigned long tripLastGoodAt = 0;    // last successful server reply
+
 #define RECENT_MAX 6
 struct RecentCard {
   bool used;
@@ -134,7 +141,7 @@ void drawCentered(const String &text, int cy, uint8_t size) {
 }
 
 // =====================================================
-// GPS READING (normalizes $GN.. talker IDs so TinyGPS++ parses them)
+// GPS READING
 // =====================================================
 void processNMEALine(String line) {
   line.trim();
@@ -181,7 +188,6 @@ bool gpsAlive() {
   return (millis() - lastGPSData) < GPS_TIMEOUT_MS;
 }
 
-// Ready for porting later: returns true and fills lat/lng when a fix exists
 double gpsDistanceMeters(double lat1, double lng1, double lat2, double lng2) {
   const double meanLatRadians = ((lat1 + lat2) * 0.5) * PI / 180.0;
   const double northMeters = (lat2 - lat1) * 111320.0;
@@ -235,7 +241,6 @@ bool gpsGetLocation(double &lat, double &lng) {
   return true;
 }
 
-// Serial Monitor only (not used anywhere else yet)
 void gpsSerialStatus() {
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint < GPS_PRINT_MS) return;
@@ -293,7 +298,6 @@ void drawQRScreen() {
   drawCentered("ADD QR HERE", 140, 2);
 }
 
-// Green confirmation screen (tap in / tap out)
 void showResultScreen(const char *headline, const char *sub) {
   currentScreen = S_RESULT;
   resultUntil = millis() + RESULT_SCREEN_MS;
@@ -304,7 +308,6 @@ void showResultScreen(const char *headline, const char *sub) {
   drawCentered(sub, 150, 2);
 }
 
-// Red screen for a problem with a tap (server/WiFi) - auto returns like the green one
 void showTapErrorScreen(const char *headline, const char *sub) {
   currentScreen = S_RESULT;
   resultUntil = millis() + 3000;
@@ -317,7 +320,6 @@ void showTapErrorScreen(const char *headline, const char *sub) {
   tft.print(sub);
 }
 
-// Persistent red hardware error screen
 void showHardwareError(uint8_t mask) {
   currentScreen = S_HW_ERROR;
 
@@ -342,7 +344,6 @@ void showHardwareError(uint8_t mask) {
 // HARDWARE HEALTH
 // =====================================================
 void checkHardware() {
-  // --- PN532 ---
   bool alive = (nfc.getFirmwareVersion() != 0);
 
   if (alive) {
@@ -371,7 +372,6 @@ void checkHardware() {
     }
   }
 
-  // --- GPS ---
   bool gpsOK = gpsAlive() || !GPS_REQUIRED;
 
   uint8_t mask = 0;
@@ -393,53 +393,41 @@ void checkHardware() {
 // =====================================================
 // SERVER
 // =====================================================
-int getActiveTripId();
 
-int sendToServer(String uid, String &body) {
-  HTTPClient http;
-  http.setTimeout(4000);
-  http.begin(tapUrl);
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-  int tripId = getActiveTripId();
-  if (tripId < 1) {
-    body = tripId == 0 ? "NO ACTIVE TRIP" : "SERVER CONNECTION FAILED";
-    http.end();
-    return tripId == 0 ? 200 : -1;
-  }
-  String payload = "uid=" + uid + "&trip_id=" + String(tripId) + "&bus_id=" + String(BUS_ID);
-
-  int code = http.POST(payload);
-  body = (code > 0) ? http.getString() : "";
-
-  Serial.println("HTTP CODE: " + String(code));
-  Serial.println(body);
-
-  http.end();
-  return code;
+// Prints why a connection might be failing: ESP32 side (heap, WiFi) vs server side (raw TCP test).
+void netDiag(const char *tag) {
+  Serial.printf("NETDIAG[%s] heap=%u minHeap=%u wifi=%d rssi=%d\n",
+                tag, ESP.getFreeHeap(), ESP.getMinFreeHeap(), (int)WiFi.status(), WiFi.RSSI());
+  WiFiClient probe;
+  unsigned long t = millis();
+  bool ok = probe.connect(IPAddress(192, 168, 1, 20), 80, 2000);
+  Serial.printf("NETDIAG[%s] raw TCP to server:80 = %s (%lu ms)\n", tag, ok ? "OK" : "FAILED", millis() - t);
+  probe.stop();
 }
 
-int getActiveTripId() {
+// Returns: >0 trip id, 0 = no active trip, -1 = server unreachable.
+// Only called from refreshTripId() / setup, never in the middle of an NFC exchange.
+int getActiveTripId(int maxAttempts = 1) {
   HTTPClient http;
   String url = String(gpsUrl) + "?bus_id=" + String(BUS_ID) + "&token=" + String(gpsToken);
   int tripId = 0;
   int code = -1;
   String body;
-  for (int attempt = 1; attempt <= 3; attempt++) {
+  for (int attempt = 1; attempt <= maxAttempts; attempt++) {
     if (WiFi.status() != WL_CONNECTED) {
       code = -4;
       break;
     }
-    http.setTimeout(4000);
+    http.setTimeout(2500);
     http.begin(url);
     code = http.GET();
     body = code > 0 ? http.getString() : "";
     http.end();
     if (code >= 0) break;
     Serial.printf("ACTIVE TRIP LOOKUP attempt=%d HTTP=%d\n", attempt, code);
-    if (attempt < 3) delay(500 * attempt);
+    netDiag("trip-lookup");
+    if (attempt < maxAttempts) delay(200);
   }
-  Serial.printf("ACTIVE TRIP LOOKUP bus=%d HTTP=%d\n", BUS_ID, code);
   if (code == 200) {
     int key = body.indexOf("\"trip_id\":");
     if (key >= 0) {
@@ -449,48 +437,87 @@ int getActiveTripId() {
       if (end > start) tripId = body.substring(start, end).toInt();
     }
   }
-  if (tripId < 1) {
-    Serial.println(body.isEmpty() ? "ACTIVE TRIP LOOKUP: no response body" : body);
-  }
   if (code < 0) return -1;
   return tripId;
 }
 
+// Called from loop(). Keeps cachedTripId fresh so taps never wait on HTTP.
+void refreshTripId() {
+  unsigned long now = millis();
+  if (WiFi.status() != WL_CONNECTED) {
+    if (cachedTripId >= 0 && now - tripLastGoodAt > TRIP_STALE_MS) cachedTripId = -1;
+    return;
+  }
+  if (now - tripCachedAt < TRIP_REFRESH_MS) return;
+
+  int id = getActiveTripId(1);
+  tripCachedAt = millis();
+
+  if (id >= 0) {
+    if (id != cachedTripId) Serial.printf("TRIP CACHE: %d -> %d\n", cachedTripId, id);
+    cachedTripId = id;
+    tripLastGoodAt = tripCachedAt;
+  } else if (cachedTripId >= 0 && tripCachedAt - tripLastGoodAt > TRIP_STALE_MS) {
+    Serial.println("TRIP CACHE: stale, marking unknown");
+    cachedTripId = -1;
+  }
+}
+
+int sendToServer(String uid, String &body) {
+  int tripId = cachedTripId;
+  if (tripId < 1) {
+    body = tripId == 0 ? "NO ACTIVE TRIP" : "SERVER CONNECTION FAILED";
+    return tripId == 0 ? 200 : -1;
+  }
+
+  HTTPClient http;
+  http.setTimeout(4000);
+  String payload = "uid=" + uid + "&trip_id=" + String(tripId) + "&bus_id=" + String(BUS_ID);
+
+  int code = -1;
+  for (int attempt = 1; attempt <= 3; attempt++) {
+    http.begin(tapUrl);
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    code = http.POST(payload);
+    if (code != HTTPC_ERROR_CONNECTION_REFUSED) break;   // -1: never reached the server, safe to retry
+    Serial.printf("CARD POST refused, retry %d/3\n", attempt);
+    http.end();
+    delay(200 * attempt);
+  }
+  body = (code > 0) ? http.getString() : "";
+
+  Serial.println("HTTP CODE: " + String(code));
+  Serial.println(body);
+
+  http.end();
+  return code;
+}
+
+// Single attempt: the next upload is only GPS_UPLOAD_INTERVAL_MS away anyway,
+// and long retries would block NFC polling.
 void sendGpsPosition() {
   double lat, lng;
-  if (WiFi.status() != WL_CONNECTED || !gpsAlive() || !gpsGetLocation(lat, lng)) return;
+  if (WiFi.status() != WL_CONNECTED || !gpsAlive()) return;
   if (millis() - lastGpsUpload < GPS_UPLOAD_INTERVAL_MS) return;
+  if (!gpsGetLocation(lat, lng)) return;
+
   String payload = "token=" + String(gpsToken)
       + "&bus_id=" + String(BUS_ID)
       + "&lat=" + String(lat, 6)
       + "&lng=" + String(lng, 6);
 
-  int code = -1;
-  for (int attempt = 1; attempt <= 3; attempt++) {
-    HTTPClient http;
-    http.setTimeout(5000);
-    http.begin(gpsUrl);
-    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-    code = http.POST(payload);
-    String response = code > 0 ? http.getString() : "";
-    http.end();
-    if (code == 200) {
-      lastGpsUpload = millis();
-      return;
-    }
-    if (code > 0 && code < 500) {
-      Serial.printf("GPS UPLOAD REJECTED: HTTP %d %s\n", code, response.c_str());
-      lastGpsUpload = millis();
-      return;
-    }
-    Serial.printf("GPS UPLOAD RETRY %d/3: HTTP %d\n", attempt, code);
-    if (attempt < 3) {
-      readGPS();
-      delay(500 * attempt);
-    }
-  }
+  HTTPClient http;
+  http.setTimeout(2500);
+  http.begin(gpsUrl);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  int code = http.POST(payload);
+  String response = code > 0 ? http.getString() : "";
+  http.end();
+
   lastGpsUpload = millis();
-  Serial.printf("GPS UPLOAD FAILED AFTER RETRIES: HTTP %d\n", code);
+  if (code != 200) {
+    Serial.printf("GPS UPLOAD FAILED: HTTP %d %s\n", code, response.c_str());
+  }
 }
 
 String bytesToHex(const uint8_t *bytes, size_t length) {
@@ -509,9 +536,18 @@ String postPhoneTap(const String &payload) {
   String endpoint = String(tapUrl);
   const int lastSlash = endpoint.lastIndexOf('/');
   endpoint = endpoint.substring(0, lastSlash + 1) + "phone_nfc_tap.php";
-  http.begin(endpoint);
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-  const int code = http.POST(payload);
+
+  int code = -1;
+  for (int attempt = 1; attempt <= 3; attempt++) {
+    http.begin(endpoint);
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    code = http.POST(payload);
+    if (code != HTTPC_ERROR_CONNECTION_REFUSED) break;   // -1: never reached the server, safe to retry
+    Serial.printf("PHONE NFC POST refused, retry %d/3\n", attempt);
+    if (attempt == 1) netDiag("phone-post");
+    http.end();
+    delay(200 * attempt);
+  }
   String body = code > 0 ? http.getString() : "";
   Serial.println("PHONE NFC HTTP CODE: " + String(code));
   if (code < 0) body = "CHECK TAP STATUS";
@@ -540,6 +576,17 @@ int allocRecentPhone() {
   return oldest;
 }
 
+// Sends an APDU with a few quick retries. Phones sometimes NAK the first
+// frame right after activation.
+bool exchange(uint8_t *cmd, uint8_t cmdLen, uint8_t *resp, uint8_t &respLen, int tries) {
+  for (int i = 0; i < tries; i++) {
+    respLen = 64;
+    if (nfc.inDataExchange(cmd, cmdLen, resp, &respLen)) return true;
+    delay(15);
+  }
+  return false;
+}
+
 bool tryPhoneTap(bool &identified, String &message) {
   identified = false;
   message = "";
@@ -553,9 +600,25 @@ bool tryPhoneTap(bool &identified, String &message) {
   memcpy(selectAid + 5, aid, sizeof(aid));
   selectAid[sizeof(selectAid) - 1] = 0x00;
 
-  if (!nfc.inListPassiveTarget()
-      || !nfc.inDataExchange(selectAid, sizeof(selectAid), response, &responseLength)
-      || !responseOk(response, responseLength)) {
+  bool selected = exchange(selectAid, sizeof(selectAid), response, responseLength, 2)
+                  && responseOk(response, responseLength);
+
+  if (!selected) {
+    // Fallback (this is what the original code always did): re-activate the
+    // target, then select again. Some PN532 + phone combos need this.
+    Serial.println("PHONE: SELECT failed, re-listing target");
+    if (nfc.inListPassiveTarget()) {
+      selected = exchange(selectAid, sizeof(selectAid), response, responseLength, 2)
+                 && responseOk(response, responseLength);
+    } else {
+      Serial.println("PHONE: re-list failed (phone left the field?)");
+    }
+  }
+
+  if (!selected) {
+    Serial.printf("PHONE: SELECT AID failed, last response len=%u:", responseLength);
+    for (uint8_t i = 0; i < responseLength && i < 8; i++) Serial.printf(" %02X", response[i]);
+    Serial.println();
     return false;
   }
 
@@ -566,7 +629,8 @@ bool tryPhoneTap(bool &identified, String &message) {
     return false;
   }
 
-  const int activeTripId = getActiveTripId();
+  // Cached trip id: no HTTP request in the middle of the NFC exchange.
+  const int activeTripId = cachedTripId;
   if (activeTripId == 0) {
     message = "NO ACTIVE TRIP";
     return false;
@@ -575,6 +639,7 @@ bool tryPhoneTap(bool &identified, String &message) {
     message = "SERVER CONNECTION FAILED";
     return false;
   }
+
   uint8_t challenge[16];
   for (size_t i = 0; i < sizeof(challenge); i += 4) {
     const uint32_t randomValue = esp_random();
@@ -590,9 +655,10 @@ bool tryPhoneTap(bool &identified, String &message) {
   getProof[7] = static_cast<uint8_t>((activeTripId >> 8) & 0xFF);
   getProof[8] = static_cast<uint8_t>(activeTripId & 0xFF);
   memcpy(getProof + 9, challenge, sizeof(challenge));
-  responseLength = sizeof(response);
-  if (!nfc.inDataExchange(getProof, sizeof(getProof), response, &responseLength)
+
+  if (!exchange(getProof, sizeof(getProof), response, responseLength, 2)
       || !responseOk(response, responseLength) || responseLength != 54) {
+    Serial.printf("PHONE: GET PROOF failed (len=%u)\n", responseLength);
     message = "PHONE NFC AUTHENTICATION FAILED";
     return false;
   }
@@ -610,7 +676,7 @@ bool tryPhoneTap(bool &identified, String &message) {
     const bool inLockout = phone.hasAccept && (now - phone.lastAccept) < SAME_CARD_LOCKOUT;
     if (stillHeld || inLockout) {
       phone.lastSeen = now;
-      return false;
+      return false;   // identified = true, message empty -> silently ignored
     }
   } else {
     phoneIndex = allocRecentPhone();
@@ -622,10 +688,10 @@ bool tryPhoneTap(bool &identified, String &message) {
   recentPhones[phoneIndex].lastSeen = now;
 
   uint8_t getSignatureTail[] = {0x80, 0xCA, 0x01, 0x00, 0x00};
-  responseLength = sizeof(response);
-  if (!nfc.inDataExchange(getSignatureTail, sizeof(getSignatureTail), response, &responseLength)
+  if (!exchange(getSignatureTail, sizeof(getSignatureTail), response, responseLength, 2)
       || !responseOk(response, responseLength) || responseLength < 2
       || responseLength - 2 > sizeof(signature) - 36) {
+    Serial.printf("PHONE: GET SIGNATURE failed (len=%u)\n", responseLength);
     message = "PHONE NFC SIGNATURE FAILED";
     return false;
   }
@@ -652,7 +718,7 @@ bool tryPhoneTap(bool &identified, String &message) {
 }
 
 // =====================================================
-// TAP HANDLING
+// TAP HANDLING (physical cards)
 // =====================================================
 int findRecent(uint8_t *uid, uint8_t len) {
   for (int i = 0; i < RECENT_MAX; i++) {
@@ -681,7 +747,7 @@ void handleTap(uint8_t *uid, uint8_t uidLength) {
     bool inLockout  = r.hasAccept && (now - r.lastAccept) < SAME_CARD_LOCKOUT;
 
     if (stillHeld || inLockout) {
-      r.lastSeen = now;     // keep "held" tracking alive, but do NOT process again
+      r.lastSeen = now;
       return;
     }
   } else {
@@ -703,7 +769,7 @@ void handleTap(uint8_t *uid, uint8_t uidLength) {
     showTapErrorScreen("NO WIFI", "TRY AGAIN");
   }
   else {
-        String body;
+    String body;
     int code = sendToServer(uidStr, body);
     body.trim();
     String up = body;
@@ -725,7 +791,6 @@ void handleTap(uint8_t *uid, uint8_t uidLength) {
       showResultScreen("TAP OUT", fare.c_str());
     }
     else if (code == 200) {
-      // server replied with a reason (INVALID CARD, NO ACTIVE TRIP, insufficient balance, ...)
       showTapErrorScreen("TAP FAILED", body.substring(0, 60).c_str());
     }
     else {
@@ -739,8 +804,39 @@ void handleTap(uint8_t *uid, uint8_t uidLength) {
     r.hasAccept = true;
     r.lastAccept = millis();
   } else {
-    r.hasAccept = false;   // failed tap can be retried after removing the card
+    r.hasAccept = false;
   }
+}
+
+// Pulls the fare amount out of the server response (JSON or "FARE: 12.00" text).
+// Returns "" if nothing is found.
+String extractFare(const String &msg) {
+  String low = msg;
+  low.toLowerCase();
+
+  const char *keys[] = {"\"fare\"", "\"fare_amount\"", "\"total_fare\"", "\"amount\""};
+  for (int i = 0; i < 4; i++) {
+    int k = low.indexOf(keys[i]);
+    if (k < 0) continue;
+    int colon = low.indexOf(':', k + strlen(keys[i]));
+    if (colon < 0) continue;
+    int s = colon + 1;
+    while (s < (int)msg.length() && (msg[s] == ' ' || msg[s] == '"')) s++;
+    int e = s;
+    while (e < (int)msg.length() && (isDigit(msg[e]) || msg[e] == '.')) e++;
+    if (e > s) return msg.substring(s, e);
+  }
+
+  int f = low.indexOf("fare:");
+  if (f >= 0) {
+    int s = f + 5;
+    int limit = min((int)msg.length(), s + 8);
+    while (s < limit && !isDigit(msg[s])) s++;      // skip spaces or "PHP"
+    int e = s;
+    while (e < (int)msg.length() && (isDigit(msg[e]) || msg[e] == '.')) e++;
+    if (e > s) return msg.substring(s, e);
+  }
+  return "";
 }
 
 void checkNFC() {
@@ -748,21 +844,41 @@ void checkNFC() {
   uint8_t uidLength;
 
   if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100)) {
+    // Android HCE phones report a random 4-byte UID that starts with 0x08.
+    // Real cards never do, so never send that UID to the card endpoint.
+    const bool randomUid = (uidLength == 4 && uid[0] == 0x08);
+    Serial.println("NFC target: " + uidToString(uid, uidLength));
+
     bool identifiedPhone = false;
     String phoneMessage;
     const bool phoneAccepted = tryPhoneTap(identifiedPhone, phoneMessage);
+
     if (identifiedPhone) {
       if (!phoneMessage.isEmpty()) {
         String upper = phoneMessage;
         upper.toUpperCase();
         if (phoneAccepted) {
-          showResultScreen(upper.indexOf("TAP OUT SUCCESS") >= 0 ? "TAP OUT" : "TAP IN", "PHONE NFC ACCEPTED");
+          const bool isOut = upper.indexOf("TAP OUT SUCCESS") >= 0;
+          if (isOut) {
+            String fare = extractFare(phoneMessage);
+            Serial.println("PHONE TAP OUT fare=" + fare);
+            String sub = fare.length() ? ("FARE: PHP " + fare) : String("TAP OUT DONE");
+            showResultScreen("TAP OUT", sub.c_str());
+          } else {
+            showResultScreen("TAP IN", "PHONE NFC ACCEPTED");
+          }
         } else {
           showTapErrorScreen("PHONE TAP FAILED", phoneMessage.substring(0, 60).c_str());
         }
       }
       return;
     }
+
+    if (randomUid) {
+      Serial.println("PHONE: not ready (random UID), will retry on next poll");
+      return;
+    }
+
     handleTap(uid, uidLength);
   }
 }
@@ -821,7 +937,7 @@ void setup() {
   // ---- GPS ----
   GPS.setRxBufferSize(1024);
   GPS.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX);
-  lastGPSData = millis();   // grace period before "no data" counts as an error
+  lastGPSData = millis();
 
   // ---- WiFi ----
   drawCentered("Connecting WiFi...", 170, 2);
@@ -850,13 +966,23 @@ void setup() {
   lastWifiTry = millis();
   Serial.println(WiFi.status() == WL_CONNECTED ? "WiFi: CONNECTED" : "WiFi: NOT CONNECTED (will keep retrying)");
 
-  // give GPS a moment of data before the first health check
+  // Prime the trip cache so the first tap works right away
+  if (WiFi.status() == WL_CONNECTED) {
+    int id = getActiveTripId(3);
+    tripCachedAt = millis();
+    if (id >= 0) {
+      cachedTripId = id;
+      tripLastGoodAt = tripCachedAt;
+    }
+    Serial.printf("TRIP CACHE initial: %d\n", cachedTripId);
+  }
+
   unsigned long g = millis();
   while (millis() - g < 1500) readGPS();
 
   shownErrMask = 0;
   drawHomeScreen();
-  checkHardware();          // shows red screen immediately if something is wrong
+  checkHardware();
   lastHwCheck = millis();
 }
 
@@ -867,7 +993,6 @@ void loop() {
 
   readGPS();
   gpsSerialStatus();
-  sendGpsPosition();
   wifiMaintain();
 
   // ---- periodic hardware health check ----
@@ -881,7 +1006,7 @@ void loop() {
     return;
   }
 
-  // ---- result screen timeout (5s) -> back to initial screen ----
+  // ---- result screen timeout -> back to initial screen ----
   if (currentScreen == S_RESULT && (long)(millis() - resultUntil) >= 0) {
     drawHomeScreen();
   }
@@ -894,7 +1019,10 @@ void loop() {
     drawHomeScreen();
   }
 
-  // ---- NFC is always polled, so a new tap works even while the previous
-  //      confirmation is still on screen ----
+  // ---- NFC first, so taps always get priority over network work ----
   checkNFC();
+
+  // ---- network housekeeping (short, single-attempt requests) ----
+  refreshTripId();
+  sendGpsPosition();
 }
