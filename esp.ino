@@ -12,8 +12,7 @@
 // =====================================================
 const char* ssid     = "BOOTCAMP 2.4G";
 const char* password = "Paloadkanalang!01#";
-const char* tapUrl   = "http://192.168.1.20/TrackFare/api/tap.php?action=card";
-const char* phoneTapUrl = "http://192.168.1.20/TrackFare/api/tap.php?action=phone_nfc";
+const char* tapUrl   = "http://192.168.1.20/TrackFare/api/tapin.php";
 const char* gpsUrl   = "http://192.168.1.20/TrackFare/api/gps_update.php";
 const char* gpsToken = "8f71a65d9c3e42b7a104de5f6c98a231d72b4e0f9a53c681e2f07b4a9d6c1358";
 
@@ -536,7 +535,9 @@ String bytesToHex(const uint8_t *bytes, size_t length) {
 String postPhoneTap(const String &payload) {
   HTTPClient http;
   http.setTimeout(15000);
-  String endpoint = String(phoneTapUrl);
+  String endpoint = String(tapUrl);
+  const int lastSlash = endpoint.lastIndexOf('/');
+  endpoint = endpoint.substring(0, lastSlash + 1) + "phone_nfc_tap.php";
 
   int code = -1;
   for (int attempt = 1; attempt <= 3; attempt++) {
