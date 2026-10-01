@@ -84,27 +84,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount'])) {
         } else {
             $topupError = 'Unable to create a GCash top-up request.';
         }
-    } elseif ($amount > 0) {
-        $newBalance = $walletBalance + $amount;
-        if ($stmt = $conn->prepare('UPDATE passenger_profiles SET wallet_balance = ? WHERE user_id = ?')) {
-            $stmt->bind_param('di', $newBalance, $userId);
-            $stmt->execute();
-            $stmt->close();
-            $walletBalance = $newBalance;
-
-            $methodName = 'Quick Top-up';
-
-            $logStmt = $conn->prepare('INSERT INTO wallet_topups (user_id, amount, payment_method, gcash_number, reference_number, status) VALUES (?, ?, ?, ?, ?, "completed")');
-            $logStmt->bind_param('idsss', $userId, $amount, $methodName, $gcashNumber, $referenceNumber);
-            $logStmt->execute();
-            $logStmt->close();
-
-            $topupMessage = 'Wallet topped up by ₱' . number_format($amount, 2) . '.';
-        } else {
-            $topupError = 'Unable to process the top-up at the moment.';
-        }
     } else {
-        $topupError = 'Please enter a valid top-up amount.';
+      $topupError = $paymentMethod === 'gcash'
+        ? 'Please enter a valid top-up amount.'
+        : 'Wallet top-ups must be completed through GCash checkout.';
     }
 }
 

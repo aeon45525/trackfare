@@ -5,7 +5,7 @@
 - Installation and service-worker support require HTTPS (or `localhost`). The current LAN address over HTTP can still use the tap buttons, but it cannot install the PWA.
 - The passenger home page supports authenticated Tap In and Tap Out actions. Presenting the phone itself as a contactless card to the bus reader still requires a native Android HCE app.
 
-- The passenger URL is `192.168.1.56` over HTTP on the current Wi-Fi network.
+- The ESP32 currently posts taps to `192.168.1.20/TrackFare`; set the passenger app's Server address to this same host and database. Different hosts can show different wallet balances and phone-NFC links.
 - Chrome/Edge updated or reset location permissions.
 - The passenger is using a different browser/device/network.
 - The browser cached an earlier permission, but now correctly reports the IP site as insecure.
@@ -18,7 +18,7 @@ For immediate testing:
    `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
 2. Enable the setting.
 3. Add:
-   `http://192.168.1.56`
+   `http://192.168.1.20`
 4. Restart Chrome.
 5. Open the passenger page and choose **Allow** for Location.
 6. Tap in again, then refresh the driver page.
@@ -291,3 +291,9 @@ SetEnv PAYMONGO_WEBHOOK_SECRET "whsec_YOUR_SECRET"
 9. Make a new GCash top-up and complete payment.
 
 Check `http://127.0.0.1:4040` to see whether PayMongo reaches your webhook. A successful request should return HTTP `200`.
+
+const char* ssid     = "BOOTCAMP 2.4G";
+const char* password = "Paloadkanalang!01#";
+const char* tapUrl   = "http://192.168.1.20/TrackFare/api/tapin.php";
+const char* gpsUrl   = "http://192.168.1.20/TrackFare/api/gps_update.php";
+const char* gpsToken = "8f71a65d9c3e42b7a104de5f6c98a231d72b4e0f9a53c681e2f07b4a9d6c1358";

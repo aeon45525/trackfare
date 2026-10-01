@@ -385,7 +385,30 @@ function process_passenger_tap_out(
         $calc['fare']
     );
     if ($transactionError !== null) {
-        return ['ok' => false, 'fare' => 0.0, 'distance_km' => 0.0, 'message' => $transactionError];
+        $message = $transactionError;
+        if ($transactionError === 'INSUFFICIENT BALANCE') {
+            $walletBalance = 0.0;
+            if ($stmt = $conn->prepare('SELECT wallet_balance FROM passenger_profiles WHERE user_id = ? LIMIT 1')) {
+                $stmt->bind_param('i', $userId);
+                $stmt->execute();
+                $stmt->bind_result($walletBalance);
+                $stmt->fetch();
+                $stmt->close();
+            }
+            $shortfall = max(0.0, $calc['fare'] - (float) $walletBalance);
+            $message = sprintf(
+                'Insufficient balance. Fare: ₱%s; wallet: ₱%s. Top up ₱%s, then settle this fare again.',
+                number_format($calc['fare'], 2),
+                number_format((float) $walletBalance, 2),
+                number_format($shortfall, 2)
+            );
+        }
+        return [
+            'ok' => false,
+            'fare' => $calc['fare'],
+            'distance_km' => $calc['distance_km'],
+            'message' => $message,
+        ];
     }
 
     return [

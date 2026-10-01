@@ -1,3 +1,4 @@
-int string hce_aid_description 0x7f010000
-int string hce_service_description 0x7f010001
+int string app_name 0x7f010000
+int string hce_aid_description 0x7f010001
+int string hce_service_description 0x7f010002
 int xml apduservice 0x7f020000

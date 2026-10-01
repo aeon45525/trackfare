@@ -1,0 +1,26 @@
+plugins {
+	id("com.android.application")
+	id("org.jetbrains.kotlin.android")
+}
+
+android {
+	namespace = "com.trackfare.phone"
+	compileSdk = 35
+
+	compileOptions {
+		sourceCompatibility = JavaVersion.VERSION_17
+		targetCompatibility = JavaVersion.VERSION_17
+	}
+
+	defaultConfig {
+		applicationId = "com.trackfare.phone"
+		minSdk = 23
+		targetSdk = 35
+		versionCode = 10
+		versionName = "1.9"
+	}
+
+	kotlinOptions {
+		jvmTarget = "17"
+	}
+}

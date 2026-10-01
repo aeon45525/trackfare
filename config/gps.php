@@ -425,6 +425,7 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
         'ok' => true,
         'has_active_trip' => false,
         'has_tap_record' => false,
+        'has_pending_fare' => false,
         'active_trip_id' => 0,
         'active_trip_status' => 'No active trip',
         'active_trip_badge' => 'Idle',
@@ -464,10 +465,29 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
             $response['has_tap_record'] = true;
         }
 
-        if ($active && $active['status'] === 'active' && empty($active['start_time'])) {
+        if ($active && $active['status'] === 'completed') {
+            $routeId = (int) $active['route_id'];
+            $response['has_pending_fare'] = true;
+            $response['active_trip_id'] = (int) $active['trip_id'];
+            $response['active_trip_status'] = 'Fare due - top up then settle';
+            $response['active_trip_badge'] = 'Fare due';
+            $response['boarding_stop'] = $active['boarding_stop_name'] ?: '—';
+            $response['current_stop'] = 'Trip completed';
+            $response['route_id'] = $routeId;
+            $terminalStopId = get_route_last_stop_id($conn, $routeId);
+            if ($terminalStopId !== null) {
+                $fareInfo = fare_for_boarding_and_alighting(
+                    $conn,
+                    $routeId,
+                    (int) $active['boarding_stop_id'],
+                    $terminalStopId
+                );
+                $response['estimated_fare'] = '₱' . number_format($fareInfo['fare'], 2);
+            }
+        } elseif ($active && $active['status'] === 'active' && empty($active['start_time'])) {
             $response['active_trip_status'] = 'Waiting for driver';
             $response['active_trip_badge'] = 'Waiting';
-        } elseif ($active) {
+        } elseif ($active && $active['status'] === 'active') {
             $routeId = (int) $active['route_id'];
             $simulation = gps_simulation_tick($conn, $routeId, (int) $active['trip_id']);
             $currentStopIndex = !empty($simulation['available'])

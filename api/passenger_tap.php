@@ -45,10 +45,10 @@ if ($stmt = $conn->prepare(
 }
 
 if ($activePassenger) {
-    if ($activePassenger['status'] !== 'active') {
+    if (!in_array($activePassenger['status'], ['active', 'completed'], true)) {
         passenger_tap_response(false, 'This trip is no longer active.', 409);
     }
-    if (empty($activePassenger['start_time'])) {
+    if ($activePassenger['status'] === 'active' && empty($activePassenger['start_time'])) {
         passenger_tap_response(false, 'Your tap-in is saved. Wait for the driver to start before tapping out.', 409, [
             'action' => 'waiting',
             'pending_driver_start' => true,
@@ -56,7 +56,9 @@ if ($activePassenger) {
     }
     $tripId = (int) $activePassenger['trip_id'];
     $routeId = (int) $activePassenger['route_id'];
-    $alightingStopId = resolve_trip_current_stop_id($conn, $activePassenger);
+    $alightingStopId = $activePassenger['status'] === 'completed'
+        ? get_route_last_stop_id($conn, $routeId)
+        : resolve_trip_current_stop_id($conn, $activePassenger);
     if ($alightingStopId === null) {
         passenger_tap_response(false, 'Unable to determine the bus stop. Try again shortly.', 409);
     }

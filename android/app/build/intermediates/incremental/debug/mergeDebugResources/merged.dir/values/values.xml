@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="hce_aid_description">TrackFare</string>
-    <string name="hce_service_description">TrackFare bus fare card</string>
+    <string name="app_name">TrackFare Passenger</string>
+    <string name="hce_aid_description">TrackFare bus fare reader</string>
+    <string name="hce_service_description">TrackFare phone fare card</string>
 </resources>
