@@ -442,7 +442,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   /* ── PHP-injected data ── */
   var MAP_CFG_URL    = '../../api/map.php';
   var GPS_URL        = '../../config/gps.php';
-  var SIMULATION_URL = '../../api/bus_simulation.php';
+  var LIVE_URL       = '../../api/gps_live.php';
   var STOPS_FALLBACK = <?php echo json_encode($routeStopsForMap, JSON_UNESCAPED_UNICODE); ?>;
   var TOTAL_KM       = <?php echo (float)$totalRouteDistance; ?>;
   var ROUTE_ID       = <?php echo (int)($activeTrip['route_id'] ?? 1); ?>;
@@ -451,7 +451,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   var MAP_CENTER     = { lat: <?php echo $mapCenterLat; ?>, lng: <?php echo $mapCenterLng; ?> };
 
   /* ── constants ── */
-  var LEG_MS   = 2000;
+  var LEG_MS   = 2000;   // slower: 10 seconds to travel each leg (was 2000)
   var TICK_MS  = 16;
   var NAV_ZOOM = 17;
   var OV_ZOOM  = 12;
@@ -478,8 +478,8 @@ $routeStopsForMap = array_map(static fn($s) => [
   var lastLineRebuild = { activePartial: null, legRemainder: null, nextLegFrom: 0 };
   var lastPaxUpdate = 0;
   var latestPassengerData = null;
-  var tapSimulationActive = false;
-  var driverLocationTimer = null;
+  var liveTimer = null;
+  var liveActive = false;
 
   /* ── DOM ── */
   var btnStart  = document.getElementById('btn-start');
@@ -844,10 +844,6 @@ $routeStopsForMap = array_map(static fn($s) => [
     };
   }
 
-  function updatePassengerMarkers(lat, lng) {
-    return;
-  }
-
   function renderPassengerMarkers(passengers) {
     if (!mapsReady || !map) return;
 
@@ -970,7 +966,7 @@ $routeStopsForMap = array_map(static fn($s) => [
   }
 
   function setBtns(s) {
-    btnStart.disabled  = false;
+    btnStart.disabled  = s !== 'idle';
     btnArrive.disabled = s !== 'running';
     btnDepart.disabled = s !== 'paused';
     btnEnd.disabled    = s === 'idle';
@@ -1063,7 +1059,6 @@ $routeStopsForMap = array_map(static fn($s) => [
         followBus(pos.point.lat, pos.point.lng);
         rebuildLines(partial, remain, to);
         updateUI(raw, from, to);
-        updatePassengerMarkers(pos.point.lat, pos.point.lng);
         if (raw < 1) persistGps(pos.point.lat, pos.point.lng, from, to, raw);
 
         if (raw >= 1) {
@@ -1118,101 +1113,6 @@ $routeStopsForMap = array_map(static fn($s) => [
       if (!r.ok) throw new Error('GPS error');
       return r.json();
     });
-  }
-
-  function tapSimulationPosition(data) {
-    var from = Number(data.legFrom);
-    var to = Number(data.legTo);
-    if (data.source !== 'tap-simulation' || !Number.isInteger(from)
-        || !Number.isInteger(to) || to !== from + 1 || !stops[from] || !stops[to]
-    ) {
-      return Promise.resolve(data.busPosition);
-    }
-
-    return fetchOsrmRoute(from, to).then(function (path) {
-      return positionAtFraction(path, buildCumulativeDistances(path), Number(data.legProgress) || 0).point;
-    });
-  }
-
-  function pollTapSimulation() {
-    if (!mapsReady) return;
-    var params = new URLSearchParams({ route_id: ROUTE_ID, _: Date.now() });
-    fetch(SIMULATION_URL + '?' + params.toString(), {
-      cache: 'no-store',
-      credentials: 'same-origin',
-      headers: { Accept: 'application/json' },
-    })
-      .then(function (response) {
-        if (!response.ok) throw new Error('Simulation unavailable');
-        return response.json();
-      })
-      .then(function (data) {
-        if (!data.available || !data.busPosition) {
-          if (tapSimulationActive) {
-            tapSimulationActive = false;
-            state = 'idle';
-            curIdx = 0;
-            setBtns('idle');
-            setChip('idle', 'Trip not started');
-            drawOverview();
-          }
-          return;
-        }
-
-        stops = data.stops || stops;
-        return tapSimulationPosition(data).then(function (position) {
-          tapSimulationActive = true;
-          stopLeg();
-          state = 'tap-simulation';
-          curIdx = data.currentStopIndex || 0;
-          var nextIndex = Math.min(curIdx + 1, stops.length - 1);
-          var nextStop = stops[nextIndex];
-          var heading = nextStop ? bearing(position.lat, position.lng, nextStop.lat, nextStop.lng) : 0;
-          setBusPosition(position.lat, position.lng, heading);
-          followBus(position.lat, position.lng);
-          rebuildLines(null, null, curIdx);
-          updateUI(data.legProgress || 0, data.legFrom == null ? curIdx : data.legFrom, data.legTo == null ? nextIndex : data.legTo);
-          renderStopList(nextIndex);
-          btnStart.disabled = false;
-          btnArrive.disabled = true;
-          btnDepart.disabled = true;
-          btnEnd.disabled = false;
-          var liveGps = data.source === 'device' || data.source === 'driver-browser';
-          setChip(data.status === 'running' ? 'running' : 'paused', data.status === 'running'
-            ? (liveGps ? 'Live GPS: ' : 'Tap simulation: ') + (nextStop ? 'en route to ' + nextStop.name : 'moving')
-            : (liveGps ? 'Live GPS: bus stopped' : 'Bus stopped: no passengers onboard'));
-        });
-      })
-      .catch(function () {});
-  }
-
-  function updateDriverLocation() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(function (position) {
-      fetch(GPS_URL + '?action=driver_location', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        }),
-      }).catch(function () {});
-    }, function () {}, {
-      enableHighAccuracy: true,
-      maximumAge: 3000,
-      timeout: 10000,
-    });
-  }
-
-  function startDriverLocationTracking() {
-    if (!navigator.geolocation) return;
-    updateDriverLocation();
-    if (driverLocationTimer !== null) clearInterval(driverLocationTimer);
-    driverLocationTimer = setInterval(updateDriverLocation, 5000);
   }
 
   function persistGps(lat, lng, from, to, progress) {
@@ -1302,20 +1202,72 @@ $routeStopsForMap = array_map(static fn($s) => [
     });
   }
 
+  function backToDummy(d) {
+    if (liveActive) {
+      liveActive = false;
+      var p0 = stops[0];
+      setBusPosition(p0.lat, p0.lng, 0);
+      fitOverview();
+    }
+    setChip('idle', (d && d.online) ? 'GPS searching \u00b7 demo location' : 'Trip not started');
+  }
+
+  function pollLiveGps() {
+    if (state !== 'idle' || !mapsReady || !stops.length) return;
+    fetch(LIVE_URL + '?_=' + Date.now(), { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('live ' + r.status); return r.json(); })
+      .then(function (d) {
+        if (state !== 'idle') return;
+        if (d.useLive) {
+          setBusPosition(d.lat, d.lng, busHeading);
+          if (!liveActive) { liveActive = true; map.setZoom(NAV_ZOOM); }
+          map.panTo(latLng(d.lat, d.lng));
+          setChip('running', 'Live GPS \u00b7 ' + d.sats + ' sats');
+        } else {
+          backToDummy(d);
+          setChip('idle', 'Demo location \u00b7 ' + (d.reason || 'GPS unavailable'));
+        }
+      })
+      .catch(function () {
+        if (state === 'idle') { backToDummy(null); setChip('idle', 'Demo location \u00b7 GPS check failed'); }
+      });
+  }
+
+  function startLiveGps() {
+    stopLiveGps();
+    pollLiveGps();
+    liveTimer = setInterval(pollLiveGps, 2000);
+  }
+
+  function stopLiveGps() {
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    liveActive = false;
+  }
+
   function startTrip() {
-    btnStart.disabled = true;
-    gpsCall('start').then(function (data) {
-      if (data.error) throw new Error(data.error);
-      btnStart.disabled = false;
-      if (mapsReady) {
-        pollTapSimulation();
-      } else {
-        setChip('running', 'Simulation started');
-      }
-    }).catch(function () {
-      btnStart.disabled = false;
-      setChip('idle', 'Could not start simulation');
-    });
+    if (!mapsReady || stops.length < 2) return;
+    if (state === 'paused') {
+      departStop();
+      return;
+    }
+    if (state !== 'idle') return;
+
+    stopLiveGps();
+    gpsCall('start').catch(function () {});
+    curIdx = 0;
+    state  = 'running';
+    setBtns('running');
+    traveledTrail = [{ lat: stops[0].lat, lng: stops[0].lng }];
+    currentLegPath = null;
+    legRoutesCache = {};
+    legRoutesPending = {};
+
+    var p0 = stops[0];
+    setBusPosition(p0.lat, p0.lng, 0);
+    rebuildLines(null, null, 0);
+    followBus(p0.lat, p0.lng);
+    prefetchAllLegRoutes();
+    startLeg(0, 1);
   }
 
   function endTrip() {
@@ -1390,6 +1342,7 @@ $routeStopsForMap = array_map(static fn($s) => [
         drawOverview();
         setChip('idle', 'Trip not started');
         setBtns('idle');
+        startLiveGps();
         return;
       }
 
@@ -1420,15 +1373,14 @@ $routeStopsForMap = array_map(static fn($s) => [
       drawOverview();
       setChip('idle', 'Trip not started');
       setBtns('idle');
+      startLiveGps();
     });
   }
 
   function boot() {
-    startDriverLocationTracking();
     loadGoogleMaps()
       .then(function () {
         initGoogleMap();
-        setInterval(pollTapSimulation, 1000);
         return bootTripState();
       })
       .catch(function () {
@@ -1479,12 +1431,8 @@ $routeStopsForMap = array_map(static fn($s) => [
     var list = document.getElementById('pax-list');
     var modalBtn = document.getElementById('btn-pax-modal');
 
-    if (badge) {
-      badge.textContent = count + ' onboard';
-    }
-    if (countMetric) {
-      countMetric.textContent = count;
-    }
+    if (badge) badge.textContent = count + ' onboard';
+    if (countMetric) countMetric.textContent = count;
     if (modalBtn) {
       modalBtn.hidden = count === 0;
       modalBtn.textContent = 'View all passengers (' + count + ')';
@@ -1528,12 +1476,8 @@ $routeStopsForMap = array_map(static fn($s) => [
       if (!r.ok) throw new Error('Network error');
       return r.json();
     })
-    .then(function (data) {
-      renderDriverPassengerPanel(data);
-    })
-    .catch(function () {
-      // ignore polling failures
-    });
+    .then(function (data) { renderDriverPassengerPanel(data); })
+    .catch(function () {});
   }
 
   refreshDriverPassengerPanel();
@@ -1546,6 +1490,6 @@ $routeStopsForMap = array_map(static fn($s) => [
 
   document.addEventListener('DOMContentLoaded', boot);
 })();
-</script>
+</script> 
 </body>
 </html>

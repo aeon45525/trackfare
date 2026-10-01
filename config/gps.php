@@ -599,6 +599,7 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
     $sharedState = gps_read_shared_state();
     $routeId = $requestedRouteId;
     $simulationTripId = 0;
+
     if ($stmt = $conn->prepare(
         'SELECT t.trip_id, t.route_id
          FROM active_passengers ap
@@ -612,16 +613,20 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
         $stmt->execute();
         $passengerTrip = $stmt->get_result()->fetch_assoc();
         $stmt->close();
+
         if ($passengerTrip) {
             $passengerRouteId = (int) $passengerTrip['route_id'];
+
             if ($routeId <= 0) {
                 $routeId = $passengerRouteId;
             }
+
             if ($routeId === $passengerRouteId) {
                 $simulationTripId = (int) $passengerTrip['trip_id'];
             }
         }
     }
+
     if ($routeId <= 0 && is_array($sharedState) && !empty($sharedState['routeId'])) {
         $routeId = max(1, (int) $sharedState['routeId']);
     }
@@ -639,6 +644,7 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
             $stmt->execute();
             $row = $stmt->get_result()->fetch_assoc();
             $stmt->close();
+
             if ($row) {
                 $routeId = max(1, (int) $row['route_id']);
             }
@@ -649,35 +655,11 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
         $routeId = 1;
     }
 
-    $stops   = load_route_stops($conn, $routeId);
+    $stops = load_route_stops($conn, $routeId);
 
     if ($stops === []) {
         http_response_code(404);
         echo json_encode(['error' => 'Route not found'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    $simulation = gps_simulation_tick(
-        $conn,
-        $routeId,
-        $simulationTripId > 0 ? $simulationTripId : null
-    );
-    if (!empty($simulation['available'])) {
-        $routeInfo = load_route_info($conn, $routeId);
-        echo json_encode([
-            'routeId' => $routeId,
-            'routeName' => $routeInfo['route_name'],
-            'displayName' => $routeInfo['display_name'],
-            'stops' => $stops,
-            'status' => $simulation['status'],
-            'currentStopIndex' => $simulation['currentStopIndex'],
-            'busPosition' => $simulation['busPosition'],
-            'legFrom' => $simulation['legFrom'],
-            'legTo' => $simulation['legTo'],
-            'legProgress' => $simulation['legProgress'],
-            'updatedAt' => $simulation['updatedAt'],
-            'source' => $simulation['source'] ?? 'tap-simulation',
-        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -713,7 +695,15 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
 
     if (is_array($sharedState) && (int)($sharedState['routeId'] ?? 0) === $routeId) {
         $tripStatus = (string)($sharedState['status'] ?? $tripStatus);
-        $currentStopIndex = max(0, min($maxIndex, (int)($sharedState['currentStopIndex'] ?? $currentStopIndex)));
+
+        $currentStopIndex = max(
+            0,
+            min(
+                $maxIndex,
+                (int)($sharedState['currentStopIndex'] ?? $currentStopIndex)
+            )
+        );
+
         if (isset($sharedState['busPosition']['lat'], $sharedState['busPosition']['lng'])) {
             $busPosition = [
                 'lat' => (float)$sharedState['busPosition']['lat'],
@@ -736,9 +726,12 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
         'busPosition'      => $busPosition,
         'legFrom'          => $sharedState['legFrom'] ?? null,
         'legTo'            => $sharedState['legTo'] ?? null,
-        'legProgress'      => isset($sharedState['legProgress']) ? (float)$sharedState['legProgress'] : 0.0,
+        'legProgress'      => isset($sharedState['legProgress'])
+            ? (float)$sharedState['legProgress']
+            : 0.0,
         'updatedAt'        => $sharedState['updatedAt'] ?? null,
     ], JSON_UNESCAPED_UNICODE);
+
     exit;
 }
 
@@ -799,15 +792,6 @@ switch ($action) {
         unset($_SESSION['gps_leg_completed']);
         if ($driverId > 0 && ($_SESSION['role'] ?? '') === 'driver') {
             record_trip_start($conn, $driverId);
-            $trip = get_active_trip($conn, $driverId);
-            if ($trip) {
-                gps_simulation_start(
-                    $conn,
-                    (int) $trip['route_id'],
-                    (int) $trip['trip_id'],
-                    (int) $trip['bus_id']
-                );
-            }
         }
         if (($state['status'] ?? 'idle') === 'idle') {
             $state['status']           = 'running';

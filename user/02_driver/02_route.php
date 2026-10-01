@@ -630,7 +630,7 @@ $routeStopsForMap = array_map(static fn($s) => [
 
       var MAP_CFG_URL = '../../api/map.php';
       var GPS_URL     = '../../config/gps.php';
-      var SIMULATION_URL = '../../api/bus_simulation.php';
+      var LIVE_URL    = '../../api/gps_live.php';
       var STOPS_FALLBACK = <?php echo json_encode($routeStopsForMap, JSON_UNESCAPED_UNICODE); ?>;
       var TOTAL_KM    = <?php echo (float) $totalRouteDistance; ?>;
       var ROUTE_ID    = <?php echo (int) ($activeTrip['route_id'] ?? 1); ?>;
@@ -660,7 +660,8 @@ $routeStopsForMap = array_map(static fn($s) => [
       var currentLegPath = null;
       var lastGpsSave = 0;
       var lastLineRebuild = { activePartial: null, legRemainder: null, nextLegFrom: 0 };
-      var tapSimulationActive = false;
+      var liveTimer = null;
+      var liveActive = false;
 
       var chipEl    = document.getElementById('status-chip');
       var chipLbl   = document.getElementById('chip-label');
@@ -931,69 +932,6 @@ $routeStopsForMap = array_map(static fn($s) => [
           if (!r.ok) throw new Error('GPS error');
           return r.json();
         });
-      }
-
-      function tapSimulationPosition(data) {
-        var from = Number(data.legFrom);
-        var to = Number(data.legTo);
-        if (data.source !== 'tap-simulation' || !Number.isInteger(from)
-            || !Number.isInteger(to) || to !== from + 1 || !stops[from] || !stops[to]
-        ) {
-          return Promise.resolve(data.busPosition);
-        }
-
-        return fetchOsrmRoute(from, to).then(function (path) {
-          return positionAtFraction(path, buildCumulativeDistances(path), Number(data.legProgress) || 0).point;
-        });
-      }
-
-      function pollTapSimulation() {
-        if (!mapsReady) return;
-        var params = new URLSearchParams({ route_id: ROUTE_ID, _: Date.now() });
-        fetch(SIMULATION_URL + '?' + params.toString(), {
-          cache: 'no-store',
-          credentials: 'same-origin',
-          headers: { Accept: 'application/json' },
-        })
-          .then(function (response) {
-            if (!response.ok) throw new Error('Simulation unavailable');
-            return response.json();
-          })
-          .then(function (data) {
-            if (!data.available || !data.busPosition) {
-              if (tapSimulationActive) {
-                tapSimulationActive = false;
-                state = 'idle';
-                curIdx = 0;
-                setBtns('idle');
-                setChip('idle', 'Trip not started');
-                drawOverview();
-              }
-              return;
-            }
-
-            stops = data.stops || stops;
-            return tapSimulationPosition(data).then(function (position) {
-              tapSimulationActive = true;
-              stopLeg();
-              state = 'tap-simulation';
-              curIdx = Number(data.currentStopIndex) || 0;
-              var nextStop = stops[Math.min(curIdx + 1, stops.length - 1)];
-              var heading = nextStop ? bearing(position.lat, position.lng, nextStop.lat, nextStop.lng) : 0;
-              setBusPosition(position.lat, position.lng, heading);
-              followBus(position.lat, position.lng);
-              rebuildLines(null, null, curIdx);
-              updateUI(data.legProgress || 0, data.legFrom == null ? curIdx : data.legFrom, data.legTo == null ? Math.min(curIdx + 1, stops.length - 1) : data.legTo);
-              if (btnStart) btnStart.disabled = true;
-              if (btnArrive) btnArrive.disabled = true;
-              if (btnDepart) btnDepart.disabled = true;
-              if (btnEnd) btnEnd.disabled = false;
-              setChip(data.status === 'running' ? 'running' : 'paused', data.status === 'running'
-                ? (data.source === 'device' ? 'Live GPS: ' : 'Tap simulation: ') + (nextStop ? 'en route to ' + nextStop.name : 'moving')
-                : (data.source === 'device' ? 'Live GPS: bus stopped' : (data.passengerCount > 0 ? 'Bus waiting at route end' : 'Bus stopped: no passengers onboard')));
-            });
-          })
-          .catch(function () {});
       }
 
       function persistGps(lat, lng, from, to, progress) {
@@ -1331,6 +1269,48 @@ $routeStopsForMap = array_map(static fn($s) => [
         });
       }
 
+      function backToDummy(d) {
+        if (liveActive) {
+          liveActive = false;
+          var p0 = stops[0];
+          setBusPosition(p0.lat, p0.lng, 0);
+          fitOverview();
+        }
+        setChip('idle', (d && d.online) ? 'GPS searching \u00b7 demo location' : 'Trip not started');
+      }
+
+      function pollLiveGps() {
+        if (state !== 'idle' || !mapsReady || !stops.length) return;
+        fetch(LIVE_URL + '?_=' + Date.now(), { credentials: 'same-origin', cache: 'no-store' })
+          .then(function (r) { if (!r.ok) throw new Error('live ' + r.status); return r.json(); })
+          .then(function (d) {
+            if (state !== 'idle') return;
+            if (d.useLive) {
+              setBusPosition(d.lat, d.lng, busHeading);
+              if (!liveActive) { liveActive = true; map.setZoom(NAV_ZOOM); }
+              map.panTo(latLng(d.lat, d.lng));
+              setChip('running', 'Live GPS \u00b7 ' + d.sats + ' sats');
+            } else {
+              backToDummy(d);
+              setChip('idle', 'Demo location \u00b7 ' + (d.reason || 'GPS unavailable'));
+            }
+          })
+          .catch(function () {
+            if (state === 'idle') { backToDummy(null); setChip('idle', 'Demo location \u00b7 GPS check failed'); }
+          });
+      }
+
+      function startLiveGps() {
+        stopLiveGps();
+        pollLiveGps();
+        liveTimer = setInterval(pollLiveGps, 2000);
+      }
+
+      function stopLiveGps() {
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+        liveActive = false;
+      }
+
       function startTrip() {
         if (!mapsReady || stops.length < 2) return;
         if (state === 'paused') {
@@ -1339,6 +1319,7 @@ $routeStopsForMap = array_map(static fn($s) => [
         }
         if (state !== 'idle') return;
 
+        stopLiveGps();
         gpsCall('start').catch(function () {});
         curIdx = 0;
         state  = 'running';
@@ -1426,6 +1407,7 @@ $routeStopsForMap = array_map(static fn($s) => [
             drawOverview();
             setChip('idle', 'Trip not started');
             setBtns('idle');
+            startLiveGps();
             return;
           }
 
@@ -1456,6 +1438,7 @@ $routeStopsForMap = array_map(static fn($s) => [
           drawOverview();
           setChip('idle', 'Trip not started');
           setBtns('idle');
+          startLiveGps();
         });
       }
 
@@ -1463,7 +1446,6 @@ $routeStopsForMap = array_map(static fn($s) => [
         loadGoogleMaps()
           .then(function () {
             initGoogleMap();
-            setInterval(pollTapSimulation, 1000);
             return bootTripState();
           })
           .catch(function () {

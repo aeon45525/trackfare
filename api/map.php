@@ -15,7 +15,7 @@ if (empty($_SESSION['user_id']) || !in_array($role, ['driver', 'passenger'], tru
     exit;
 }
 
-$apiKey = 'AIzaSyBLFBDkebvsVjgNd5T_KjT1FBJINmbH8r8';
+$apiKey = 'AIzaSyDJ_gNjSq_T8NjeAtRfgS3Xgl5vAFton10';
 
 echo json_encode([
     'apiKey'    => $apiKey,
@@ -23,4 +23,11 @@ echo json_encode([
     'mapId'     => null,
 ], JSON_UNESCAPED_UNICODE);
 
-// backup API = AIzaSyAuvXtccaGYNVFuYXIfYPP8XiRazm5xlXA
+/*
+backup APIs
+
+AIzaSyDJ_gNjSq_T8NjeAtRfgS3Xgl5vAFton10
+AIzaSyAuvXtccaGYNVFuYXIfYPP8XiRazm5xlXA
+AIzaSyBLFBDkebvsVjgNd5T_KjT1FBJINmbH8r8
+AIzaSyANfZ6wm4a-kKshAOx0dWas7faGqqj6v_g
+*/
