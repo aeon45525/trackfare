@@ -1,1 +1,1 @@
-{"routeId":2,"tripId":82,"busId":1,"status":"running","currentStopIndex":17,"busPosition":{"lat":14.829345,"lng":120.943794},"legFrom":null,"legTo":null,"legProgress":0,"source":"device","updatedAt":1790873754}
+{"routeId":1,"tripId":85,"busId":1,"status":"running","currentStopIndex":2,"busPosition":{"lat":14.829375,"lng":120.943808},"legFrom":null,"legTo":null,"legProgress":0,"source":"device","updatedAt":1790875685}
