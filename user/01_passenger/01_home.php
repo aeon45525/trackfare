@@ -569,8 +569,8 @@ $activeNav = 'home';
           </div>
 
           <a
-            href="../../TrackFare-Passenger-v1.9.apk"
-            download="TrackFare-Passenger-v1.9.apk"
+            href="../../TrackFare-Passenger-v1.10.apk"
+            download="TrackFare-Passenger-v1.10.apk"
             class="phone-panel flex items-center justify-between gap-3 p-4 text-on-surface no-underline"
             aria-label="Download the TrackFare Android app"
           >
@@ -579,7 +579,7 @@ $activeNav = 'home';
                 <span class="material-symbols-outlined">android</span>
               </span>
               <span class="min-w-0">
-                <span class="block text-sm font-bold">TrackFare Android app v1.9</span>
+                <span class="block text-sm font-bold">TrackFare Android app v1.10</span>
                 <span class="block text-xs text-on-surface-variant">Download the passenger app</span>
               </span>
             </span>

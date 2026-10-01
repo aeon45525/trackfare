@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.trackfare.phone.app-mergeDebugResources-34:/values-v16/values-v16.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\jayem\\.gradle\\caches\\8.9\\transforms\\4d4e40293a2b711328a359b641021902\\transformed\\appcompat-1.6.1\\res\\values-v16\\values-v16.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "5",
+                        "endColumns": "12",
+                        "endOffsets": "223"
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -9,6 +9,8 @@ if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'passenger') {
 }
 
 $userId = $_SESSION['user_id'];
+$paymentCsrf = (string) ($_SESSION['payment_csrf'] ?? bin2hex(random_bytes(32)));
+$_SESSION['payment_csrf'] = $paymentCsrf;
 $walletBalance = 0.00;
 $transactions = [];
 $topupHistory = [];
@@ -355,7 +357,7 @@ $activeNav = 'wallet';
           <div class="flex items-center justify-between gap-4">
             <div>
               <p class="text-xs font-semibold uppercase tracking-[0.16em] text-white/75">Current balance</p>
-              <p class="mt-2 text-[2rem] leading-none font-extrabold tracking-tight">&#8369;<?= number_format($walletBalance, 2) ?></p>
+              <p id="wallet-balance" class="mt-2 text-[2rem] leading-none font-extrabold tracking-tight">&#8369;<?= number_format($walletBalance, 2) ?></p>
             </div>
             <div class="icon-chip bg-white/15 text-white">
               <span class="material-symbols-outlined">account_balance_wallet</span>
@@ -364,6 +366,21 @@ $activeNav = 'wallet';
           <p class="mt-4 text-xs text-white/80 leading-relaxed">
             Your wallet balance is reserved for NFC tap journeys only.
           </p>
+        </section>
+
+        <section class="phone-panel flex items-center justify-between gap-4 p-4">
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Wallet payment</p>
+            <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface">Scan to pay</h2>
+          </div>
+          <button
+            id="scan-to-pay"
+            type="button"
+            class="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-white"
+          >
+            <span class="material-symbols-outlined text-[18px]">qr_code_scanner</span>
+            Scan QR
+          </button>
         </section>
 
         <section class="phone-panel p-5">
@@ -564,6 +581,42 @@ $activeNav = 'wallet';
           </div>
         </section>
       </main>
+      <section id="payment-sheet" class="fixed inset-0 z-[70] hidden items-end justify-center bg-black/60 p-0" role="dialog" aria-modal="true" aria-labelledby="payment-title">
+        <div class="w-full max-w-[420px] rounded-t-2xl bg-white p-5 pb-8 shadow-2xl">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">TrackFare wallet</p>
+              <h2 id="payment-title" class="mt-1 text-xl font-extrabold text-on-surface">Confirm payment</h2>
+            </div>
+            <button id="payment-cancel" type="button" class="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant" aria-label="Cancel payment">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <p id="payment-status" class="mt-5 text-sm text-on-surface-variant" role="status">Loading payment details...</p>
+          <div id="payment-details" class="mt-4 hidden">
+            <div class="border-y border-slate-200 py-4">
+              <p id="payment-merchant" class="text-lg font-extrabold text-on-surface"></p>
+              <p id="payment-description" class="mt-1 text-sm text-on-surface-variant"></p>
+              <p id="payment-amount" class="mt-4 text-3xl font-extrabold text-on-surface"></p>
+            </div>
+            <label id="payment-manual-amount-wrap" class="mt-4 hidden text-sm font-semibold text-on-surface" for="payment-manual-amount">
+              Amount
+              <span class="mt-1 flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2">
+                <span class="font-bold text-primary">₱</span>
+                <input id="payment-manual-amount" class="w-full border-0 p-0 text-base focus:ring-0" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="Enter amount" />
+              </span>
+              <span id="payment-amount-limits" class="mt-1 block text-xs font-normal text-on-surface-variant"></span>
+            </label>
+            <p class="mt-3 text-xs text-on-surface-variant">The amount will be deducted from your TrackFare wallet after you confirm.</p>
+          </div>
+          <p id="payment-error" class="mt-4 hidden rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert"></p>
+          <p id="payment-success" class="mt-4 hidden rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700" role="status"></p>
+          <div class="mt-5 grid grid-cols-2 gap-3">
+            <button id="payment-dismiss" type="button" class="min-h-12 rounded-xl border border-slate-300 px-4 text-sm font-bold text-on-surface">Cancel</button>
+            <button id="payment-confirm" type="button" class="min-h-12 rounded-xl bg-primary px-4 text-sm font-bold text-white disabled:opacity-50" disabled>Confirm payment</button>
+          </div>
+        </div>
+      </section>
       <nav
         class="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[420px] flex items-center justify-around px-1 h-20 bg-white/95 backdrop-blur-md rounded-t-3xl border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
       >
@@ -589,5 +642,158 @@ $activeNav = 'wallet';
         <?php endforeach; ?>
       </nav>
     </div>
+    <script>
+      (() => {
+        const scanButton = document.getElementById('scan-to-pay');
+        const sheet = document.getElementById('payment-sheet');
+        const status = document.getElementById('payment-status');
+        const details = document.getElementById('payment-details');
+        const error = document.getElementById('payment-error');
+        const success = document.getElementById('payment-success');
+        const confirmButton = document.getElementById('payment-confirm');
+        const amountWrap = document.getElementById('payment-manual-amount-wrap');
+        const amountInput = document.getElementById('payment-manual-amount');
+        const csrfToken = <?= json_encode($paymentCsrf, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        let requestId = '';
+        let idempotencyKey = '';
+        let requestDetails = null;
+        let submitting = false;
+
+        const newIdempotencyKey = () => {
+          const bytes = new Uint8Array(16);
+          if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+            window.crypto.getRandomValues(bytes);
+          } else {
+            for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+          }
+          return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        };
+        const setVisible = (element, visible) => element.classList.toggle('hidden', !visible);
+        const showError = (message) => {
+          error.textContent = message;
+          setVisible(error, true);
+        };
+        const openSheet = () => {
+          sheet.classList.remove('hidden');
+          sheet.classList.add('flex');
+          document.body.style.overflow = 'hidden';
+        };
+        const closeSheet = () => {
+          if (submitting) return;
+          sheet.classList.add('hidden');
+          sheet.classList.remove('flex');
+          document.body.style.overflow = '';
+        };
+        const money = (amount, currency) => new Intl.NumberFormat('en-PH', {
+          style: 'currency', currency, minimumFractionDigits: 2,
+        }).format(Number(amount));
+
+        const loadPaymentRequest = async (scannedRequestId) => {
+          requestId = scannedRequestId;
+          idempotencyKey = newIdempotencyKey();
+          requestDetails = null;
+          submitting = false;
+          status.textContent = 'Loading payment details...';
+          setVisible(status, true);
+          setVisible(details, false);
+          setVisible(error, false);
+          setVisible(success, false);
+          setVisible(amountWrap, false);
+          confirmButton.disabled = true;
+          confirmButton.textContent = 'Confirm payment';
+          document.getElementById('payment-dismiss').textContent = 'Cancel';
+          openSheet();
+
+          try {
+            const response = await fetch(`../../api/payment_request.php?id=${encodeURIComponent(requestId)}`, {
+              credentials: 'same-origin',
+              headers: { Accept: 'application/json' },
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) throw new Error(result.message || 'Payment details could not be loaded.');
+            requestDetails = result;
+            document.getElementById('payment-merchant').textContent = result.merchant_name;
+            document.getElementById('payment-description').textContent = result.description || '';
+            document.getElementById('payment-amount').textContent = result.amount === null
+              ? 'Enter amount'
+              : money(result.amount, result.currency);
+            if (result.can_enter_amount) {
+              amountInput.value = '';
+              amountInput.min = result.min_amount;
+              amountInput.max = result.max_amount;
+              document.getElementById('payment-amount-limits').textContent =
+                `Allowed: ${money(result.min_amount, result.currency)} to ${money(result.max_amount, result.currency)}`;
+              setVisible(amountWrap, true);
+            }
+            setVisible(status, false);
+            setVisible(details, true);
+            confirmButton.disabled = false;
+          } catch (failure) {
+            setVisible(status, false);
+            showError(failure.message || 'Network error. Check your connection and scan again.');
+            confirmButton.disabled = true;
+          }
+        };
+
+        const submitPayment = async () => {
+          if (submitting || !requestDetails || !idempotencyKey) return;
+          submitting = true;
+          confirmButton.disabled = true;
+          confirmButton.textContent = 'Processing...';
+          setVisible(error, false);
+          setVisible(success, false);
+          const payload = {
+            request_id: requestId,
+            idempotency_key: idempotencyKey,
+            csrf_token: csrfToken,
+          };
+          if (requestDetails.can_enter_amount) payload.amount = amountInput.value;
+
+          try {
+            const response = await fetch('../../api/confirm_payment.php', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) throw new Error(result.message || 'Payment failed. Try again.');
+            const balance = document.getElementById('wallet-balance');
+            if (balance && result.wallet_balance !== undefined) balance.textContent = money(result.wallet_balance, result.currency);
+            success.textContent = `Paid ${money(result.amount, result.currency)} to ${result.merchant_name}.`;
+            setVisible(success, true);
+            setVisible(details, false);
+            setVisible(status, false);
+            submitting = false;
+            confirmButton.textContent = 'Paid';
+            document.getElementById('payment-dismiss').textContent = 'Done';
+          } catch (failure) {
+            showError(failure.message || 'Network error. Retry this payment safely.');
+            submitting = false;
+            confirmButton.disabled = false;
+            confirmButton.textContent = 'Retry payment';
+          }
+        };
+
+        scanButton.addEventListener('click', () => {
+          if (window.TrackFareAndroid && typeof window.TrackFareAndroid.scanPaymentQr === 'function') {
+            window.TrackFareAndroid.scanPaymentQr();
+          } else {
+            openSheet();
+            setVisible(status, false);
+            showError('This app version does not include the scanner. Update TrackFare Passenger to version 1.10, then reopen Wallet.');
+            confirmButton.disabled = true;
+          }
+        });
+        window.addEventListener('trackfare:payment-qr', (event) => {
+          const scannedId = event.detail && event.detail.requestId;
+          if (/^[a-f0-9]{32}$/.test(scannedId || '')) loadPaymentRequest(scannedId);
+        });
+        confirmButton.addEventListener('click', submitPayment);
+        ['payment-cancel', 'payment-dismiss'].forEach((id) => {
+          document.getElementById(id).addEventListener('click', closeSheet);
+        });
+      })();
+    </script>
   </body>
 </html>

@@ -28,3 +28,19 @@ $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
 ```
 
 The debug APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+## Scan to Pay
+
+Scan to Pay is available in the passenger Wallet inside the Android app. It uses the native CameraX preview with ML Kit QR scanning; camera access is requested when scanning starts. A passenger can allow access, retry after denial, or open Android app settings if access is blocked. The web page does not use browser camera APIs.
+
+Apply `migrations/20261001_wallet_qr_payments.sql` to the TrackFare database before using the feature. Payment QR payloads must match this exact versioned form, with a 32-character lowercase hexadecimal random request ID:
+
+```text
+trackfare://pay?v=1&r=0123456789abcdef0123456789abcdef
+```
+
+The QR contains no merchant or amount data. A trusted server-side PHP caller creates the request with `create_trackfare_payment_request()` from `config/payment_request.php`; the function returns the QR payload. For a fixed amount, pass an amount such as `25.00`. For a customer-entered amount, pass `null` for the amount and provide minimum and maximum amounts. Set an expiry timestamp, and distribute the resulting QR only to the intended merchant or fare collection point. The database stores only a SHA-256 hash of the random request ID.
+
+The Android app fetches request details from `api/payment_request.php` and confirms through `api/confirm_payment.php`. The confirm endpoint verifies the request state, expiry, currency, amount, and wallet balance on the server, then records the debit and marks the request paid in one InnoDB transaction. A payment request can be paid only once; a repeated request with the same idempotency key returns the original result. This flow never calls PayMongo.
+
+For device testing, apply the migration, sign in to the same XAMPP server in the Android app, create a short-lived payment request from trusted server-side code, and render the returned payload as a QR code. Test an allowed and denied camera permission, blocked permission via app settings, flashlight on/off, a valid request, QR Ph/EMVCo and malformed codes, expired/already-paid requests, insufficient balance, and a network interruption during confirmation. Confirm each successful scan creates exactly one `wallet_payment_transactions` row and reduces the passenger wallet by the server-stored amount.

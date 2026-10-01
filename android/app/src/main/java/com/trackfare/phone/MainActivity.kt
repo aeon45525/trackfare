@@ -19,6 +19,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -78,6 +79,21 @@ class MainActivity : Activity() {
             settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.setGeolocationEnabled(true)
+            addJavascriptInterface(object {
+                @JavascriptInterface
+                fun scanPaymentQr() {
+                    runOnUiThread {
+                        val pageHost = runCatching { Uri.parse(webView.url).host }.getOrNull()
+                        val configuredHost = runCatching { Uri.parse(serverUrl).host }.getOrNull()
+                        if (pageHost != null && pageHost == configuredHost) {
+                            startActivityForResult(
+                                Intent(this@MainActivity, PaymentQrScannerActivity::class.java),
+                                PAYMENT_QR_SCAN_REQUEST,
+                            )
+                        }
+                    }
+                }
+            }, "TrackFareAndroid")
             webChromeClient = object : WebChromeClient() {
                 override fun onGeolocationPermissionsShowPrompt(
                     origin: String?,
@@ -167,6 +183,20 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         webView.saveState(outState)
         super.onSaveInstanceState(outState)
+    }
+
+    @Deprecated("Deprecated in Android API Activity 1.2; retained for scanner result compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PAYMENT_QR_SCAN_REQUEST || resultCode != RESULT_OK) return
+
+        val payload = data?.getStringExtra(PaymentQrScannerActivity.EXTRA_PAYLOAD).orEmpty()
+        val requestId = TrackFarePaymentQr.parseRequestId(payload) ?: return
+        val quotedRequestId = JSONObject.quote(requestId)
+        webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('trackfare:payment-qr',{detail:{requestId:$quotedRequestId}}));",
+            null,
+        )
     }
 
     @Deprecated("Deprecated in Android API 33; retained for platform back navigation")
@@ -400,7 +430,7 @@ class MainActivity : Activity() {
 
     private fun downloadFile(url: String, contentDisposition: String?, mimeType: String?) {
         val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
-            .ifBlank { "TrackFare-Passenger-v1.7.apk" }
+            .ifBlank { "TrackFare-Passenger-v1.10.apk" }
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
             && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -413,7 +443,7 @@ class MainActivity : Activity() {
 
     private fun enqueueDownload(url: String, requestedName: String?, mimeType: String?) {
         val fileName = requestedName?.takeIf { it.endsWith(".apk", ignoreCase = true) }
-            ?: "TrackFare-Passenger-v1.7.apk"
+            ?: "TrackFare-Passenger-v1.10.apk"
         runCatching {
             val request = DownloadManager.Request(Uri.parse(url))
                 .setTitle(fileName)
@@ -446,5 +476,6 @@ class MainActivity : Activity() {
     companion object {
         private const val DOWNLOAD_PERMISSION_REQUEST = 44
         private const val GEOLOCATION_PERMISSION_REQUEST = 45
+        private const val PAYMENT_QR_SCAN_REQUEST = 46
     }
 }
