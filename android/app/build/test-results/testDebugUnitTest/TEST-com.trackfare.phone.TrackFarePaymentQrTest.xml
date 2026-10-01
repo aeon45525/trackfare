@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.trackfare.phone.TrackFarePaymentQrTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-01T13:38:22" hostname="TECNO" time="0.039">
+  <properties/>
+  <testcase name="rejectsMalformedOrUnsupportedTrackFarePayloads" classname="com.trackfare.phone.TrackFarePaymentQrTest" time="0.029"/>
+  <testcase name="rejectsOtherSchemesAndQrFormats" classname="com.trackfare.phone.TrackFarePaymentQrTest" time="0.001"/>
+  <testcase name="parsesVersionOneTrackFareRequest" classname="com.trackfare.phone.TrackFarePaymentQrTest" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

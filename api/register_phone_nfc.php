@@ -103,6 +103,23 @@ if (!$cardId) {
 }
 
 $stmt = $conn->prepare(
+    'UPDATE phone_nfc_credentials
+     SET is_active = 0
+     WHERE public_key = ? AND user_id <> ? AND is_active = 1'
+);
+if (!$stmt) {
+    $conn->rollback();
+    phone_nfc_json_error('Phone NFC account linking is unavailable.', 503);
+}
+$stmt->bind_param('si', $encodedKey, $userId);
+if (!$stmt->execute()) {
+    $stmt->close();
+    $conn->rollback();
+    phone_nfc_json_error('Unable to move this phone link to the signed-in passenger.', 500);
+}
+$stmt->close();
+
+$stmt = $conn->prepare(
     'INSERT INTO phone_nfc_credentials (user_id, credential_id, public_key, is_active)
      VALUES (?, ?, ?, 1)
      ON DUPLICATE KEY UPDATE credential_id = VALUES(credential_id), public_key = VALUES(public_key), is_active = 1'

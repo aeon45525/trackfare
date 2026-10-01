@@ -12,6 +12,18 @@ function phone_nfc_response(bool $success, string $message, int $status = 200, a
     exit;
 }
 
+function phone_nfc_signature_matches(string $encodedPublicKey, string $message, string $signature): bool
+{
+    $publicKeyDer = base64_decode($encodedPublicKey, true);
+    if ($publicKeyDer === false) {
+        return false;
+    }
+    $publicKey = openssl_pkey_get_public(
+        "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($publicKeyDer), 64, "\n") . "-----END PUBLIC KEY-----"
+    );
+    return $publicKey && openssl_verify($message, $signature, $publicKey, OPENSSL_ALGO_SHA256) === 1;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     phone_nfc_response(false, 'POST required.', 405);
 }
@@ -35,10 +47,9 @@ if ($signature === false || strlen($signature) < 64 || strlen($signature) > 80) 
 
 $credential = null;
 if ($stmt = $conn->prepare(
-    'SELECT c.user_id, c.card_id, p.public_key
+    'SELECT p.user_id, p.public_key
      FROM phone_nfc_credentials p
      JOIN users u ON u.user_id = p.user_id AND u.is_active = 1
-     LEFT JOIN nfc_cards c ON c.user_id = p.user_id AND c.is_active = 1
      WHERE p.credential_id = ? AND p.is_active = 1 LIMIT 1'
 )) {
     $stmt->bind_param('s', $credentialId);
@@ -47,23 +58,63 @@ if ($stmt = $conn->prepare(
     $stmt->close();
 }
 
-if (!$credential || !$credential['card_id']) {
-    phone_nfc_response(false, 'No active passenger fare card is linked to this phone.', 403);
-}
-
-$publicKeyDer = base64_decode((string) $credential['public_key'], true);
-if ($publicKeyDer === false) {
-    phone_nfc_response(false, 'Stored phone credential is invalid.', 500);
-}
-$publicKey = openssl_pkey_get_public(
-    "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($publicKeyDer), 64, "\n") . "-----END PUBLIC KEY-----"
-);
 $challenge = hex2bin($challengeHex);
 $signedMessage = $challenge === false ? false : 'TrackFareTapV1' . pack('N', $tripId) . $challenge;
-if (!$publicKey || $signedMessage === false
-    || openssl_verify($signedMessage, $signature, $publicKey, OPENSSL_ALGO_SHA256) !== 1) {
-    phone_nfc_response(false, 'Phone authentication failed.', 403);
+$credentialIdWasStale = false;
+if ($signedMessage === false) {
+    phone_nfc_response(false, 'Invalid phone challenge.', 400);
 }
+
+if ($credential) {
+    if (!phone_nfc_signature_matches((string) $credential['public_key'], $signedMessage, $signature)) {
+        phone_nfc_response(false, 'Phone authentication failed.', 403);
+    }
+} else {
+    $matchedCredential = null;
+    $matchingCredentialCount = 0;
+    $credentialResult = $conn->query(
+        'SELECT p.user_id, p.public_key
+         FROM phone_nfc_credentials p
+         JOIN users u ON u.user_id = p.user_id AND u.is_active = 1
+         WHERE p.is_active = 1'
+    );
+    if ($credentialResult) {
+        while ($candidate = $credentialResult->fetch_assoc()) {
+            if (phone_nfc_signature_matches((string) $candidate['public_key'], $signedMessage, $signature)) {
+                $matchingCredentialCount++;
+                $matchedCredential = $candidate;
+            }
+        }
+        $credentialResult->free();
+    }
+    if ($matchingCredentialCount > 1) {
+        phone_nfc_response(
+            false,
+            'This phone is linked to multiple passenger accounts. Sign in to the correct account and refresh phone NFC.',
+            409
+        );
+    }
+    if ($matchingCredentialCount === 1) {
+        $credential = $matchedCredential;
+        $credentialIdWasStale = true;
+    }
+    if (!$credential) {
+        phone_nfc_response(false, 'This phone key is not registered. Sign in to the app and refresh phone NFC.', 403);
+    }
+}
+
+$cardId = 0;
+if ($stmt = $conn->prepare('SELECT card_id FROM nfc_cards WHERE user_id = ? AND is_active = 1 LIMIT 1')) {
+    $stmt->bind_param('i', $credential['user_id']);
+    $stmt->execute();
+    $stmt->bind_result($cardId);
+    $stmt->fetch();
+    $stmt->close();
+}
+if (!$cardId) {
+    phone_nfc_response(false, 'This passenger has no active fare card. Contact an administrator to activate one.', 403);
+}
+$credential['card_id'] = (int) $cardId;
 
 $stmt = $conn->prepare('INSERT IGNORE INTO phone_nfc_challenges (challenge) VALUES (?)');
 if (!$stmt) {
@@ -75,6 +126,14 @@ $challengeAccepted = $stmt->affected_rows === 1;
 $stmt->close();
 if (!$challengeAccepted) {
     phone_nfc_response(false, 'This phone tap challenge has already been used.', 409);
+}
+
+if ($credentialIdWasStale && ($stmt = $conn->prepare(
+    'UPDATE phone_nfc_credentials SET credential_id = ? WHERE user_id = ? AND is_active = 1'
+))) {
+    $stmt->bind_param('si', $credentialId, $credential['user_id']);
+    $stmt->execute();
+    $stmt->close();
 }
 
 $userId = (int) $credential['user_id'];
@@ -112,15 +171,36 @@ if ($stmt = $conn->prepare(
 }
 
 if ($existing) {
-    if ((int) $existing['trip_id'] !== $tripId) {
-        phone_nfc_response(false, 'Already tapped in on another trip.', 409);
-    }
-    if (empty($trip['start_time'])) {
+    $settlementTripId = (int) $existing['trip_id'];
+    $settlementRouteId = $routeId;
+    $settlementStopId = $stopId;
+
+    if ($settlementTripId !== $tripId) {
+        $previousTrip = null;
+        if ($stmt = $conn->prepare(
+            'SELECT bus_id, route_id, status
+             FROM trips WHERE trip_id = ? LIMIT 1'
+        )) {
+            $stmt->bind_param('i', $settlementTripId);
+            $stmt->execute();
+            $previousTrip = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+        }
+        if (!$previousTrip || $previousTrip['status'] !== 'completed'
+            || (int) $previousTrip['bus_id'] !== $busId) {
+            phone_nfc_response(false, 'Already tapped in on another trip.', 409);
+        }
+        $settlementRouteId = (int) $previousTrip['route_id'];
+        $settlementStopId = get_route_last_stop_id($conn, $settlementRouteId);
+        if ($settlementStopId === null) {
+            phone_nfc_response(false, 'Unable to determine the completed trip terminal.', 409);
+        }
+    } elseif (empty($trip['start_time'])) {
         phone_nfc_response(false, 'Wait for the driver to start before tapping out.', 409);
     }
     $result = process_passenger_tap_out(
-        $conn, $tripId, $routeId, $userId, (int) $existing['card_id'],
-        (int) $existing['boarding_stop_id'], $stopId
+        $conn, $settlementTripId, $settlementRouteId, $userId, (int) $existing['card_id'],
+        (int) $existing['boarding_stop_id'], $settlementStopId
     );
     if (!$result['ok']) {
         phone_nfc_response(false, (string) $result['message'], 409);

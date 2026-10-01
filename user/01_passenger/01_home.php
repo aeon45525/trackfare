@@ -1,5 +1,7 @@
 <?php
 session_start();
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('Pragma: no-cache');
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/fare.php';
 
@@ -23,6 +25,7 @@ $nfcCardUid = null;
 $nfcCardStatus = 'No card linked';
 $hasActiveTrip = false;
 $hasPendingTap = false;
+$hasPendingFare = false;
 $availableTrips = [];
 if (empty($_SESSION['passenger_tap_csrf'])) {
     $_SESSION['passenger_tap_csrf'] = bin2hex(random_bytes(32));
@@ -67,7 +70,8 @@ if ($stmt = $conn->prepare('SELECT uid, is_active FROM nfc_cards WHERE user_id =
 }
 
 if ($stmt = $conn->prepare(
-    'SELECT t.status, t.start_time, bs.stop_name AS boarded_stop, r.display_name AS route_name
+  'SELECT t.status, t.start_time, ap.boarding_stop_id, t.route_id,
+      bs.stop_name AS boarded_stop, r.display_name AS route_name
      FROM active_passengers ap
      JOIN trips t ON ap.trip_id = t.trip_id
      LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
@@ -78,12 +82,33 @@ if ($stmt = $conn->prepare(
     $stmt->bind_param('i', $userId);
     $stmt->execute();
     $stmt->store_result();
-    $stmt->bind_result($tripStatus, $tripStartTime, $boardedStopResult, $routeName);
+    $stmt->bind_result($tripStatus, $tripStartTime, $boardingStopId, $activeRouteId, $boardedStopResult, $routeName);
     if ($stmt->fetch()) {
-      if ($tripStatus === 'active' && empty($tripStartTime)) {
+      if ($tripStatus === 'completed') {
+        $activeTripStatus = 'Fare due - top up then settle';
+        $activeTripBadge = 'Fare due';
+        $activeTripBadgeClasses = 'status-pill status-idle';
+        $boardedStop = $boardedStopResult ?: '—';
+        $currentStop = 'Trip completed';
+        $tapStatus = 'Fare due';
+        $tapStatusClasses = 'status-pill status-idle';
+        $hasPendingFare = true;
+        $terminalStopId = get_route_last_stop_id($conn, (int) $activeRouteId);
+        if ($terminalStopId !== null) {
+            $fareInfo = fare_for_boarding_and_alighting(
+                $conn,
+                (int) $activeRouteId,
+                (int) $boardingStopId,
+                $terminalStopId
+            );
+            $estimatedFare = '₱' . number_format($fareInfo['fare'], 2);
+        }
+      } elseif ($tripStatus === 'active' && empty($tripStartTime)) {
         $activeTripStatus = 'Waiting for driver';
         $activeTripBadge = 'Waiting';
         $hasPendingTap = true;
+        $tapStatus = 'On board';
+        $tapStatusClasses = 'status-pill status-active';
       } else {
         $activeTripStatus = $tripStatus === 'active' ? 'On active trip' : ucfirst($tripStatus);
         $activeTripBadge = $tripStatus === 'active' ? 'Active' : ucfirst($tripStatus);
@@ -391,8 +416,8 @@ $activeNav = 'home';
                 >
                   NFC Tap
                 </p>
-                <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface">
-                  Ready for boarding
+                <h2 id="nfc-heading" class="mt-1 text-base font-extrabold leading-tight text-on-surface">
+                  <?= $hasPendingFare ? 'Fare due' : ($hasPendingTap ? 'On board · waiting for driver' : ($hasActiveTrip ? 'On board' : 'Ready for boarding')) ?>
                 </h2>
               </div>
               <span
@@ -406,12 +431,12 @@ $activeNav = 'home';
               <p class="text-xs leading-relaxed text-on-surface-variant">
                 Use this button, or tap your linked NFC card at the bus reader.
               </p>
-              <?php if ($nfcCardUid): ?>
+              <?php if (!empty($nfcCardUid)): ?>
                 <p class="text-xs text-on-surface-variant">
                   NFC UID: <?= htmlspecialchars($nfcCardUid, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($nfcCardStatus, ENT_QUOTES, 'UTF-8') ?>
                 </p>
               <?php endif; ?>
-              <div id="mobile-trip-selection" class="space-y-1" <?= $hasActiveTrip || $hasPendingTap ? 'hidden' : '' ?>>
+              <div id="mobile-trip-selection" class="space-y-1" <?= $hasActiveTrip || $hasPendingTap || $hasPendingFare ? 'hidden' : '' ?>>
                 <label for="mobile-trip-select" class="block text-xs font-semibold text-on-surface">Active bus</label>
                 <select id="mobile-trip-select" class="w-full rounded-xl border-slate-300 bg-white text-sm text-slate-900">
                   <option value="">Choose your bus</option>
@@ -422,8 +447,8 @@ $activeNav = 'home';
                   <?php endforeach; ?>
                 </select>
               </div>
-              <button id="mobile-tap-button" type="button" class="home-action w-full bg-primary text-white disabled:cursor-not-allowed disabled:opacity-50" <?= !$hasActiveTrip && !$hasPendingTap && count($availableTrips) !== 1 ? 'disabled' : '' ?> <?= $hasPendingTap ? 'disabled' : '' ?>>
-                <?= $hasActiveTrip ? 'Tap out' : ($hasPendingTap ? 'Waiting for driver' : 'Tap in') ?>
+              <button id="mobile-tap-button" type="button" class="home-action w-full bg-primary text-white disabled:cursor-not-allowed disabled:opacity-50" <?= !$hasActiveTrip && !$hasPendingTap && !$hasPendingFare && count($availableTrips) !== 1 ? 'disabled' : '' ?> <?= $hasPendingTap ? 'disabled' : '' ?>>
+                <?= $hasPendingFare ? 'Settle fare' : ($hasActiveTrip ? 'Tap out' : ($hasPendingTap ? 'Waiting for driver' : 'Tap in')) ?>
               </button>
               <p id="mobile-tap-feedback" class="text-xs text-on-surface-variant" role="status" aria-live="polite"></p>
               <button id="pwa-install-button" type="button" class="home-action w-full border border-slate-200 bg-white text-slate-700" hidden>
@@ -542,6 +567,24 @@ $activeNav = 'home';
               </div>
             </a>
           </div>
+
+          <a
+            href="../../TrackFare-Passenger-v1.10.apk"
+            download="TrackFare-Passenger-v1.10.apk"
+            class="phone-panel flex items-center justify-between gap-3 p-4 text-on-surface no-underline"
+            aria-label="Download the TrackFare Android app"
+          >
+            <span class="flex min-w-0 items-center gap-3">
+              <span class="icon-chip bg-surface-container-low text-primary">
+                <span class="material-symbols-outlined">android</span>
+              </span>
+              <span class="min-w-0">
+                <span class="block text-sm font-bold">TrackFare Android app v1.10</span>
+                <span class="block text-xs text-on-surface-variant">Download the passenger app</span>
+              </span>
+            </span>
+            <span class="material-symbols-outlined shrink-0 text-primary">download</span>
+          </a>
         </section>
       </main>
       <nav
@@ -572,6 +615,7 @@ $activeNav = 'home';
     <script>
       (function () {
         var endpoint = '../../config/gps.php?action=passenger_status';
+        var tapHeadingEl = document.getElementById('nfc-heading');
         var tapStatusEl = document.getElementById('tap-status-pill');
         var tripStatusEl = document.getElementById('active-trip-status');
         var tripBadgeEl = document.getElementById('active-trip-badge');
@@ -594,6 +638,7 @@ $activeNav = 'home';
 
         function refreshPassengerStatus() {
           fetch(endpoint + '&_' + Date.now(), {
+            cache: 'no-store',
             credentials: 'same-origin',
             headers: { Accept: 'application/json' },
           })
@@ -603,9 +648,17 @@ $activeNav = 'home';
           })
           .then(function (data) {
             if (!data.ok) return;
+            if (tapHeadingEl) {
+              tapHeadingEl.textContent = data.has_pending_fare
+                ? 'Fare due - top up then settle'
+                : data.has_tap_record
+                  ? (data.has_active_trip ? 'On board' : 'On board - waiting for driver')
+                  : 'Ready for boarding';
+            }
             if (tapStatusEl) {
-              tapStatusEl.textContent = data.has_active_trip ? 'On board' : 'Waiting';
-              tapStatusEl.className = setStatusPill(data.has_active_trip);
+              var isOnBoard = data.has_active_trip || (data.has_tap_record && !data.has_pending_fare);
+              tapStatusEl.textContent = data.has_pending_fare ? 'Fare due' : (isOnBoard ? 'On board' : 'Waiting');
+              tapStatusEl.className = setStatusPill(isOnBoard);
             }
             if (tripStatusEl) {
               tripStatusEl.textContent = data.active_trip_status || 'No active trip';
@@ -627,7 +680,11 @@ $activeNav = 'home';
               walletBalanceEl.textContent = '₱' + data.wallet_balance.toFixed(2);
             }
             if (tapButton && !tapRequestInFlight) {
-              if (data.has_active_trip) {
+              if (data.has_pending_fare) {
+                tapButton.textContent = 'Settle fare';
+                tapButton.disabled = false;
+                if (tripSelection) tripSelection.hidden = true;
+              } else if (data.has_active_trip) {
                 tapButton.textContent = 'Tap out';
                 tapButton.disabled = false;
                 if (tripSelection) tripSelection.hidden = true;
@@ -713,6 +770,11 @@ $activeNav = 'home';
           navigator.serviceWorker.register('../../service-worker.js', { scope: '../../' }).catch(function () {});
         }
 
+        window.trackFareRefreshPassengerStatus = refreshPassengerStatus;
+        window.addEventListener('pageshow', refreshPassengerStatus);
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') refreshPassengerStatus();
+        });
         setInterval(refreshPassengerStatus, 2000);
         refreshPassengerStatus();
       })();

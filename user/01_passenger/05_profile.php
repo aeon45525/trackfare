@@ -18,6 +18,7 @@ $nfcUid = 'N/A';
 $nfcMasked = '•••• ----';
 $nfcStatusText = 'Inactive';
 $nfcStatusClass = 'text-error';
+$phoneNfcId = 'Not linked';
 $recentTrips = [];
 $editProfileMessage = '';
 $changePasswordMessage = '';
@@ -141,6 +142,22 @@ if ($stmt = $conn->prepare('SELECT uid, is_active FROM nfc_cards WHERE user_id =
     }
     $stmt->close();
 }
+
+  if ($tableResult = $conn->query("SHOW TABLES LIKE 'phone_nfc_credentials'")) {
+    $hasPhoneNfcTable = $tableResult->num_rows > 0;
+    $tableResult->free();
+    if ($hasPhoneNfcTable && ($stmt = $conn->prepare(
+      'SELECT credential_id FROM phone_nfc_credentials WHERE user_id = ? AND is_active = 1 LIMIT 1'
+    ))) {
+      $stmt->bind_param('i', $userId);
+      $stmt->execute();
+      $stmt->bind_result($phoneCredentialId);
+      if ($stmt->fetch()) {
+        $phoneNfcId = strtoupper((string) $phoneCredentialId);
+      }
+      $stmt->close();
+    }
+  }
 
 $frequentRouteName = '—';
 $frequentStopsLabel = '—';
@@ -499,7 +516,7 @@ $activeNav = 'profile';
         <section class="phone-panel p-5">
           <div class="flex items-center justify-between gap-4">
             <div class="min-w-0 flex-1">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">NFC ID</p>
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Fare Card ID</p>
               <h2 class="mt-1 text-base font-extrabold leading-tight text-on-surface truncate">
                 <?= escape($nfcUid) ?>
               </h2>
@@ -509,6 +526,10 @@ $activeNav = 'profile';
             $badgeClass = $nfcIsActive ? 'status-active' : 'status-idle';
             ?>
             <span class="status-pill <?= $badgeClass ?>"><?= $nfcIsActive ? 'Active' : 'Inactive' ?></span>
+          </div>
+          <div class="mt-4 border-t border-slate-200 pt-4">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Phone NFC ID · reader credential</p>
+            <p class="mt-1 break-all text-sm font-bold text-on-surface"><?= escape($phoneNfcId) ?></p>
           </div>
         </section>
 

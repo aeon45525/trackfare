@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">TrackFare Passenger</string>
+    <string name="hce_service_description">TrackFare phone fare card</string>
+    <string name="hce_aid_description">TrackFare bus fare reader</string>
+</resources>
