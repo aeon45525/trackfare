@@ -739,11 +739,12 @@ $activeNav = 'routes';
 
       var MAP_CFG_URL = '../../api/map.php';
       var GPS_URL = '../../config/gps.php';
+      var LIVE_URL = '../../api/gps_live.php';
       var ROUTES = <?= json_encode($routesCatalog, JSON_UNESCAPED_UNICODE) ?>;
       var OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
       var OV_ZOOM = 12;
-      var BUS_POLL_MS = 1000;
-      var BUS_ANIM_MS = 320;
+      var BUS_POLL_MS = 400;
+      var BUS_ANIM_MS = 400;
       var USER_LAT = <?= json_encode($userLat) ?>;
       var USER_LNG = <?= json_encode($userLng) ?>;
       var HAS_ACTIVE_TRIP = <?= $hasActiveTrip ? 'true' : 'false' ?>;
@@ -779,6 +780,8 @@ $activeNav = 'routes';
       var busAnimFrame = null;
       var lastBusPoint = null;
       var busPollInFlight = false;
+      var lineTaken = null;
+      var progressIdx = -1;
 
       function latLng(lat, lng) {
         return new google.maps.LatLng(lat, lng);
@@ -1183,7 +1186,8 @@ $activeNav = 'routes';
         currentStops.forEach(function (stop, i) {
           var isFirst = i === 0;
           var isLast = i === currentStops.length - 1;
-          var color = isFirst ? '#16a34a' : isLast ? '#ef4444' : '#0040a1';
+          var isDone = i <= progressIdx;
+          var color = isLast ? '#ef4444' : (isFirst || isDone) ? '#16a34a' : '#0040a1';
           var size = isFirst || isLast ? 8 : 6;
 
           stopMkrs.push(new google.maps.Marker({
@@ -1194,6 +1198,12 @@ $activeNav = 'routes';
             zIndex: isFirst || isLast ? 500 : 200,
           }));
         });
+      }
+
+      function setProgressIndex(i) {
+        if (i === progressIdx) return;
+        progressIdx = i;
+        refreshStopMarkers();
       }
 
       function fitOverview() {
@@ -1244,6 +1254,8 @@ $activeNav = 'routes';
         }
         stopBusAnimation();
         clearStopMarkers();
+        if (lineTaken) { lineTaken.setMap(null); lineTaken = null; }
+        progressIdx = -1;
         legRoutesCache = {};
         legRoutesPending = {};
         hasCenteredOnBus = false;
@@ -1257,19 +1269,89 @@ $activeNav = 'routes';
         }
       }
 
+            function simEase(t) {
+        return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      }
+
+      function simCum(path) {
+        var cum = [0];
+        for (var i = 1; i < path.length; i++) {
+          cum.push(cum[i - 1] + haversineKm(path[i - 1], path[i]));
+        }
+        return cum;
+      }
+
+      function simPos(path, cum, t) {
+        if (!path.length) return { point: { lat: 0, lng: 0 }, index: 0 };
+        if (path.length === 1 || t <= 0) return { point: path[0], index: 0 };
+        var total = cum[cum.length - 1];
+        if (t >= 1 || total <= 0) return { point: path[path.length - 1], index: path.length - 1 };
+        var target = t * total;
+        for (var i = 1; i < cum.length; i++) {
+          if (cum[i] >= target) {
+            var segLen = cum[i] - cum[i - 1];
+            var segT = segLen > 0 ? (target - cum[i - 1]) / segLen : 0;
+            return {
+              point: {
+                lat: path[i - 1].lat + (path[i].lat - path[i - 1].lat) * segT,
+                lng: path[i - 1].lng + (path[i].lng - path[i - 1].lng) * segT,
+              },
+              index: i - 1,
+            };
+          }
+        }
+        return { point: path[path.length - 1], index: path.length - 1 };
+      }
+
+      function drawTraveledTrail(doneUpTo, path, cum, t) {
+        if (!mapsReady) return;
+        if (lineTaken) { lineTaken.setMap(null); lineTaken = null; }
+
+        var pts = [];
+        for (var j = 0; j < doneUpTo; j++) {
+          var key = legCacheKey(j, j + 1);
+          if (legRoutesCache[key]) pts = appendPathPoints(pts, legRoutesCache[key]);
+        }
+        if (path) {
+          var pos = simPos(path, cum, t);
+          var partial = path.slice(0, pos.index + 1);
+          partial.push(pos.point);
+          pts = appendPathPoints(pts, partial);
+        }
+        if (pts.length > 1) {
+          lineTaken = new google.maps.Polyline({
+            path: pathToLatLngs(pts),
+            geodesic: false,
+            strokeColor: '#16a34a',
+            strokeOpacity: 0.92,
+            strokeWeight: 6,
+            map: map,
+            zIndex: 11,
+          });
+        }
+      }
+
       function updateBusFromGps(data) {
         if (!data || !data.busPosition || !mapsReady) return Promise.resolve(false);
         if (String(data.routeId) !== String(currentRouteId)) return Promise.resolve(false);
 
         var from = Number(data.legFrom);
         var to = Number(data.legTo);
-        if (data.source === 'tap-simulation' && Number.isInteger(from)
-            && Number.isInteger(to) && to === from + 1 && currentStops[from] && currentStops[to]
-        ) {
+        var stopIdx = Number(data.currentStopIndex) || 0;
+        var isLeg = data.legFrom != null && data.legTo != null
+          && Number.isInteger(from) && Number.isInteger(to)
+          && to === from + 1 && currentStops[from] && currentStops[to];
+
+        if (isLeg) {
           return fetchOsrmRoute(from, to).then(function (path) {
-            if (String(data.routeId) !== String(currentRouteId)) return;
-            var position = positionAtFraction(path, Number(data.legProgress) || 0);
-            animateBusPosition(position.lat, position.lng);
+            if (String(data.routeId) !== String(currentRouteId)) return false;
+            var cum = simCum(path);
+            var raw = Math.max(0, Math.min(1, Number(data.legProgress) || 0));
+            var t = data.source === 'tap-simulation' ? raw : simEase(raw);
+            var pos = simPos(path, cum, t).point;
+            animateBusPosition(pos.lat, pos.lng);
+            setProgressIndex(from);
+            drawTraveledTrail(from, path, cum, t);
             return true;
           });
         }
@@ -1278,6 +1360,13 @@ $activeNav = 'routes';
         var lng = Number(data.busPosition.lng);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return Promise.resolve(false);
         animateBusPosition(lat, lng);
+        if (data.status === 'idle') {
+          setProgressIndex(0);
+          drawTraveledTrail(0, null, null, 0);
+        } else {
+          setProgressIndex(stopIdx);
+          drawTraveledTrail(stopIdx, null, null, 0);
+        }
         return Promise.resolve(true);
       }
 
@@ -1317,6 +1406,44 @@ $activeNav = 'routes';
         return path[path.length - 1];
       }
 
+            /* ── live NEO-8M GPS (used when no trip is running) ── */
+      var live = { useLive: false, lat: null, lng: null };
+      var lastLiveCheck = 0;
+
+      function refreshLiveGps() {
+        var now = Date.now();
+        if (now - lastLiveCheck < 1500) return Promise.resolve(live);
+        lastLiveCheck = now;
+        return fetch(LIVE_URL + '?_=' + now, {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('live ' + r.status);
+            return r.json();
+          })
+          .then(function (d) {
+            var lat = Number(d.lat), lng = Number(d.lng);
+            live = {
+              useLive: !!d.useLive && isFinite(lat) && isFinite(lng),
+              lat: lat,
+              lng: lng,
+            };
+            return live;
+          })
+          .catch(function () {
+            live = { useLive: false, lat: null, lng: null };
+            return live;
+          });
+      }
+
+      function showLiveBus(lv) {
+        animateBusPosition(lv.lat, lv.lng);
+        setProgressIndex(0);
+        drawTraveledTrail(0, null, null, 0);
+      }
+
       function fetchBusPosition() {
         if (!currentRouteId) return Promise.resolve();
         if (busPollInFlight) return Promise.resolve();
@@ -1336,8 +1463,14 @@ $activeNav = 'routes';
             return r.json();
           })
           .then(function (data) {
-            updateBusFromGps(data);
-            updatePassengerPosition();
+            return refreshLiveGps().then(function (lv) {
+              if (lv.useLive) {
+                showLiveBus(lv);
+              } else {
+                updateBusFromGps(data);
+              }
+              updatePassengerPosition();
+            });
           })
           .catch(function () {})
           .finally(function () {
@@ -1489,7 +1622,9 @@ $activeNav = 'routes';
         btnBusNear.addEventListener('click', function () {
           sharePassengerLocation();
           btnBusNear.disabled = true;
-          fetch(GPS_URL + '?_' + Date.now(), {
+          lastLiveCheck = 0;
+
+          var simPromise = fetch(GPS_URL + '?_' + Date.now(), {
             cache: 'no-store',
             credentials: 'same-origin',
             headers: { Accept: 'application/json' },
@@ -1498,13 +1633,31 @@ $activeNav = 'routes';
               if (!response.ok) throw new Error('GPS unavailable');
               return response.json();
             })
-            .then(function (data) {
-              var activeRouteId = parseInt(data && data.routeId, 10);
-              if (!activeRouteId || !data.busPosition) {
+            .catch(function () { return null; });
+
+          Promise.all([refreshLiveGps(), simPromise])
+            .then(function (res) {
+              var lv = res[0];
+              var data = res[1];
+              var useLive = lv.useLive;
+
+              if (!useLive && (!data || !data.busPosition)) {
                 throw new Error('No active bus position');
               }
+
+              var activeRouteId = useLive
+                ? (currentRouteId || parseInt(data && data.routeId, 10) || parseInt(Object.keys(ROUTES)[0], 10))
+                : parseInt(data.routeId, 10);
+              if (!activeRouteId || !ROUTES[activeRouteId]) {
+                throw new Error('No route');
+              }
+
               routeSelect.value = String(activeRouteId);
               return drawSelectedRoute(activeRouteId).then(function () {
+                if (useLive) {
+                  showLiveBus(lv);
+                  return true;
+                }
                 return updateBusFromGps(data);
               }).then(function () {
                 if (!busMkr) throw new Error('Bus marker unavailable');

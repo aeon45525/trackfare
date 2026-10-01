@@ -505,7 +505,9 @@ void sendGpsPosition() {
   String payload = "token=" + String(gpsToken)
       + "&bus_id=" + String(BUS_ID)
       + "&lat=" + String(lat, 6)
-      + "&lng=" + String(lng, 6);
+      + "&lng=" + String(lng, 6)
+      + "&sats=" + String((int)gps.satellites.value())
+      + "&speed=" + String(gps.speed.kmph(), 1);
 
   HTTPClient http;
   http.setTimeout(2500);
