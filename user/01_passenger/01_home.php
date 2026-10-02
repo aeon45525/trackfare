@@ -455,10 +455,6 @@ $activeNav = 'home';
                 Scan bus QR
               </button>
               <p id="mobile-tap-feedback" class="text-xs text-on-surface-variant" role="status" aria-live="polite"></p>
-              <button id="pwa-install-button" type="button" class="home-action w-full border border-slate-200 bg-white text-slate-700" hidden>
-                <span class="material-symbols-outlined text-[18px]">download</span>
-                Install TrackFare
-              </button>
             </div>
           </div>
 
@@ -632,9 +628,7 @@ $activeNav = 'home';
         var tripSelect = document.getElementById('mobile-trip-select');
         var tripSelection = document.getElementById('mobile-trip-selection');
         var tapFeedback = document.getElementById('mobile-tap-feedback');
-        var installButton = document.getElementById('pwa-install-button');
         var csrfToken = <?= json_encode($_SESSION['passenger_tap_csrf']) ?>;
-        var installPrompt = null;
         var tapRequestInFlight = false;
 
         function setStatusPill(isActive) {
@@ -783,23 +777,6 @@ $activeNav = 'home';
               || !Number.isSafeInteger(tripId) || tripId < 1) return;
           submitTapRequest({ busId: busId, tripId: tripId });
         });
-
-        window.addEventListener('beforeinstallprompt', function (event) {
-          event.preventDefault();
-          installPrompt = event;
-          if (installButton) installButton.hidden = false;
-        });
-
-        if (installButton) {
-          installButton.addEventListener('click', function () {
-            if (!installPrompt) return;
-            installPrompt.prompt();
-            installPrompt.userChoice.finally(function () {
-              installPrompt = null;
-              installButton.hidden = true;
-            });
-          });
-        }
 
         if ('serviceWorker' in navigator && window.isSecureContext) {
           navigator.serviceWorker.register('../../service-worker.js', { scope: '../../' }).catch(function () {});
