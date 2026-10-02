@@ -414,7 +414,7 @@ $activeNav = 'home';
                 <p
                   class="text-[11px] uppercase tracking-[0.25em] text-on-surface-variant"
                 >
-                  NFC Tap
+                  Tap In / Out
                 </p>
                 <h2 id="nfc-heading" class="mt-1 text-base font-extrabold leading-tight text-on-surface">
                   <?= $hasPendingFare ? 'Fare due' : ($hasPendingTap ? 'On board · waiting for driver' : ($hasActiveTrip ? 'On board' : 'Ready for boarding')) ?>
@@ -429,7 +429,7 @@ $activeNav = 'home';
             </div>
             <div class="mt-3 rounded-2xl bg-surface-container-low p-3 space-y-2">
               <p class="text-xs leading-relaxed text-on-surface-variant">
-                Use this button, or tap your linked NFC card at the bus reader.
+                Scan the bus QR, use the tap button, or tap your linked NFC card.
               </p>
               <?php if (!empty($nfcCardUid)): ?>
                 <p class="text-xs text-on-surface-variant">
@@ -449,6 +449,10 @@ $activeNav = 'home';
               </div>
               <button id="mobile-tap-button" type="button" class="home-action w-full bg-primary text-white disabled:cursor-not-allowed disabled:opacity-50" <?= !$hasActiveTrip && !$hasPendingTap && !$hasPendingFare && count($availableTrips) !== 1 ? 'disabled' : '' ?> <?= $hasPendingTap ? 'disabled' : '' ?>>
                 <?= $hasPendingFare ? 'Settle fare' : ($hasActiveTrip ? 'Tap out' : ($hasPendingTap ? 'Waiting for driver' : 'Tap in')) ?>
+              </button>
+              <button id="scan-bus-qr-button" type="button" class="home-action w-full border border-slate-200 bg-white text-slate-700" hidden>
+                <span class="material-symbols-outlined text-[18px]">qr_code_scanner</span>
+                Scan bus QR
               </button>
               <p id="mobile-tap-feedback" class="text-xs text-on-surface-variant" role="status" aria-live="polite"></p>
               <button id="pwa-install-button" type="button" class="home-action w-full border border-slate-200 bg-white text-slate-700" hidden>
@@ -569,8 +573,8 @@ $activeNav = 'home';
           </div>
 
           <a
-            href="../../TrackFare-Passenger-v1.10.apk"
-            download="TrackFare-Passenger-v1.10.apk"
+            href="../../TrackFare-Passenger-v1.12.apk"
+            download="TrackFare-Passenger-v1.12.apk"
             class="phone-panel flex items-center justify-between gap-3 p-4 text-on-surface no-underline"
             aria-label="Download the TrackFare Android app"
           >
@@ -579,7 +583,7 @@ $activeNav = 'home';
                 <span class="material-symbols-outlined">android</span>
               </span>
               <span class="min-w-0">
-                <span class="block text-sm font-bold">TrackFare Android app v1.10</span>
+                <span class="block text-sm font-bold">TrackFare Android app v1.12</span>
                 <span class="block text-xs text-on-surface-variant">Download the passenger app</span>
               </span>
             </span>
@@ -624,6 +628,7 @@ $activeNav = 'home';
         var fareEl = document.getElementById('fare-display');
         var walletBalanceEl = document.getElementById('wallet-balance');
         var tapButton = document.getElementById('mobile-tap-button');
+        var scanBusQrButton = document.getElementById('scan-bus-qr-button');
         var tripSelect = document.getElementById('mobile-trip-select');
         var tripSelection = document.getElementById('mobile-trip-selection');
         var tapFeedback = document.getElementById('mobile-tap-feedback');
@@ -712,14 +717,20 @@ $activeNav = 'home';
           });
         }
 
-        if (tapButton) {
-          tapButton.addEventListener('click', function () {
+        function submitTapRequest(busQr) {
             if (tapRequestInFlight) return;
             tapRequestInFlight = true;
             var payload = new URLSearchParams({ csrf_token: csrfToken });
-            if (tripSelect && tripSelection && !tripSelection.hidden) payload.set('trip_id', tripSelect.value);
-            tapButton.disabled = true;
-            tapButton.textContent = 'Processing...';
+            if (busQr) {
+              payload.set('qr_trip_id', String(busQr.tripId));
+              payload.set('qr_bus_id', String(busQr.busId));
+            } else if (tripSelect && tripSelection && !tripSelection.hidden) {
+              payload.set('trip_id', tripSelect.value);
+            }
+            if (tapButton) {
+              tapButton.disabled = true;
+              tapButton.textContent = 'Processing...';
+            }
             if (tapFeedback) tapFeedback.textContent = '';
 
             fetch('../../api/passenger_tap.php', {
@@ -737,7 +748,11 @@ $activeNav = 'home';
               });
             })
             .then(function (result) {
-              if (tapFeedback) tapFeedback.textContent = result.data.message || 'Tap request complete.';
+              var message = result.data.message || 'Tap request complete.';
+              if (result.ok && result.data.action === 'tap_out' && typeof result.data.fare === 'number') {
+                message += ' · Fare charged: ₱' + result.data.fare.toFixed(2);
+              }
+              if (tapFeedback) tapFeedback.textContent = message;
               tapRequestInFlight = false;
               refreshPassengerStatus();
             })
@@ -746,8 +761,28 @@ $activeNav = 'home';
               tapRequestInFlight = false;
               refreshPassengerStatus();
             });
+        }
+
+        if (tapButton) {
+          tapButton.addEventListener('click', function () { submitTapRequest(null); });
+        }
+
+        if (scanBusQrButton && window.TrackFareAndroid
+            && typeof window.TrackFareAndroid.scanBusQr === 'function') {
+          scanBusQrButton.hidden = false;
+          scanBusQrButton.addEventListener('click', function () {
+            window.TrackFareAndroid.scanBusQr();
           });
         }
+
+        window.addEventListener('trackfare:bus-qr', function (event) {
+          var detail = event.detail || {};
+          var busId = Number(detail.busId);
+          var tripId = Number(detail.tripId);
+          if (!Number.isSafeInteger(busId) || busId < 1
+              || !Number.isSafeInteger(tripId) || tripId < 1) return;
+          submitTapRequest({ busId: busId, tripId: tripId });
+        });
 
         window.addEventListener('beforeinstallprompt', function (event) {
           event.preventDefault();

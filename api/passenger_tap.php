@@ -28,9 +28,30 @@ if ($sessionToken === '' || !hash_equals($sessionToken, $requestToken)) {
 }
 
 $userId = (int) $_SESSION['user_id'];
+$qrTripId = (int) ($_POST['qr_trip_id'] ?? 0);
+$qrBusId = (int) ($_POST['qr_bus_id'] ?? 0);
+if (($qrTripId > 0) !== ($qrBusId > 0)) {
+    passenger_tap_response(false, 'Invalid bus QR code.', 422);
+}
+if ($qrTripId > 0) {
+    $qrTrip = null;
+    if ($stmt = $conn->prepare(
+        'SELECT trip_id FROM trips WHERE trip_id = ? AND bus_id = ? AND status = ? LIMIT 1'
+    )) {
+        $activeStatus = 'active';
+        $stmt->bind_param('iis', $qrTripId, $qrBusId, $activeStatus);
+        $stmt->execute();
+        $qrTrip = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+    }
+    if (!$qrTrip) {
+        passenger_tap_response(false, 'This bus QR is no longer active. Scan the current QR on the bus.', 409);
+    }
+}
+
 $activePassenger = null;
 if ($stmt = $conn->prepare(
-        'SELECT ap.trip_id, ap.card_id, ap.boarding_stop_id, t.route_id,
+        'SELECT ap.trip_id, ap.card_id, ap.boarding_stop_id, t.route_id, t.bus_id,
             t.current_stop_index, t.status, t.start_time
      FROM active_passengers ap
      JOIN trips t ON t.trip_id = ap.trip_id
@@ -45,6 +66,13 @@ if ($stmt = $conn->prepare(
 }
 
 if ($activePassenger) {
+    if ($qrTripId > 0
+        && ((int) $activePassenger['bus_id'] !== $qrBusId
+            || ($activePassenger['status'] === 'active'
+                && (int) $activePassenger['trip_id'] !== $qrTripId))
+    ) {
+        passenger_tap_response(false, 'This QR does not match your current bus trip.', 409);
+    }
     if (!in_array($activePassenger['status'], ['active', 'completed'], true)) {
         passenger_tap_response(false, 'This trip is no longer active.', 409);
     }
@@ -82,7 +110,7 @@ if ($activePassenger) {
     ]);
 }
 
-$tripId = max(0, (int) ($_POST['trip_id'] ?? 0));
+$tripId = $qrTripId > 0 ? $qrTripId : max(0, (int) ($_POST['trip_id'] ?? 0));
 if ($tripId < 1) {
     passenger_tap_response(false, 'Choose an active bus before tapping in.', 422);
 }

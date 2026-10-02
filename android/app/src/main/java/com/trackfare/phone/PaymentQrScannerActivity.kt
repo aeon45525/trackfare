@@ -174,13 +174,16 @@ class PaymentQrScannerActivity : ComponentActivity() {
         barcodeScanner.process(image)
             .addOnSuccessListener { barcodes ->
                 val payload = barcodes.firstNotNullOfOrNull { barcode ->
-                    barcode.rawValue?.takeIf { TrackFarePaymentQr.parseRequestId(it) != null }
+                    barcode.rawValue?.takeIf {
+                        TrackFarePaymentQr.parseRequestId(it) != null
+                            || TrackFarePaymentQr.parseBusTap(it) != null
+                    }
                 }
                 if (payload != null && resultSent.compareAndSet(false, true)) {
                     setResult(RESULT_OK, Intent().putExtra(EXTRA_PAYLOAD, payload))
                     finish()
                 } else if (barcodes.isNotEmpty() && unsupportedShown.compareAndSet(false, true)) {
-                    runOnUiThread { statusText.text = "Unsupported QR. Scan a TrackFare payment code." }
+                    runOnUiThread { statusText.text = "Unsupported QR. Scan a TrackFare code." }
                 }
             }
             .addOnCompleteListener { imageProxy.close() }
@@ -200,7 +203,7 @@ class PaymentQrScannerActivity : ComponentActivity() {
 
     private fun showPermissionMessage(canRetry: Boolean) {
         showMessage(
-            "Camera access is needed to scan a payment QR. " +
+            "Camera access is needed to scan a TrackFare QR. " +
                 if (canRetry) "Allow access to continue." else "Enable camera access in Android Settings.",
             primaryText = "Open settings",
             primaryAction = { openAppSettings() },

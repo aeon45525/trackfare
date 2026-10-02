@@ -29,4 +29,17 @@ class TrackFarePaymentQrTest {
         assertNull(TrackFarePaymentQr.parseRequestId("trackfare://other?v=1&r=$requestId"))
         assertNull(TrackFarePaymentQr.parseRequestId("trackfare://pay/path?v=1&r=$requestId"))
     }
+
+    @Test
+    fun parsesActiveBusTripQr() {
+        assertEquals(1 to 12345, TrackFarePaymentQr.parseBusTap("trackfare://tap?v=1&b=1&t=12345"))
+    }
+
+    @Test
+    fun rejectsMalformedBusTripQr() {
+        assertNull(TrackFarePaymentQr.parseBusTap("trackfare://tap?v=2&b=1&t=12345"))
+        assertNull(TrackFarePaymentQr.parseBusTap("trackfare://tap?v=1&b=0&t=12345"))
+        assertNull(TrackFarePaymentQr.parseBusTap("trackfare://tap?v=1&b=1&t=12345#extra"))
+        assertNull(TrackFarePaymentQr.parseBusTap("https://example.com/tap?v=1&b=1&t=12345"))
+    }
 }

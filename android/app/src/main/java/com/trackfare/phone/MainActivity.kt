@@ -50,11 +50,30 @@ class MainActivity : Activity() {
     private var pendingGeolocationCallback: GeolocationPermissions.Callback? = null
     private var nfcLinkInProgress = false
     private var autoRelinkAttempted = false
+    private var pendingBusQr: Pair<Int, Int>? = null
 
     private val preferences by lazy { PhoneNfcStore.preferences(this) }
     private val serverUrl: String
         get() = preferences.getString(PhoneNfcStore.SERVER_URL, PhoneNfcStore.DEFAULT_SERVER_URL)
             ?: PhoneNfcStore.DEFAULT_SERVER_URL
+
+    private fun startQrScanner() {
+        val pageHost = runCatching { Uri.parse(webView.url).host }.getOrNull()
+        val configuredHost = runCatching { Uri.parse(serverUrl).host }.getOrNull()
+        if (pageHost != null && pageHost == configuredHost) {
+            startActivityForResult(
+                Intent(this, PaymentQrScannerActivity::class.java),
+                PAYMENT_QR_SCAN_REQUEST,
+            )
+        }
+    }
+
+    private fun dispatchBusQrTap(busQr: Pair<Int, Int>) {
+        webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('trackfare:bus-qr',{detail:{busId:${busQr.first},tripId:${busQr.second}}}));",
+            null,
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,16 +101,12 @@ class MainActivity : Activity() {
             addJavascriptInterface(object {
                 @JavascriptInterface
                 fun scanPaymentQr() {
-                    runOnUiThread {
-                        val pageHost = runCatching { Uri.parse(webView.url).host }.getOrNull()
-                        val configuredHost = runCatching { Uri.parse(serverUrl).host }.getOrNull()
-                        if (pageHost != null && pageHost == configuredHost) {
-                            startActivityForResult(
-                                Intent(this@MainActivity, PaymentQrScannerActivity::class.java),
-                                PAYMENT_QR_SCAN_REQUEST,
-                            )
-                        }
-                    }
+                    runOnUiThread { startQrScanner() }
+                }
+
+                @JavascriptInterface
+                fun scanBusQr() {
+                    runOnUiThread { startQrScanner() }
                 }
             }, "TrackFareAndroid")
             webChromeClient = object : WebChromeClient() {
@@ -117,6 +132,19 @@ class MainActivity : Activity() {
                 override fun onPageFinished(view: WebView, url: String) {
                     super.onPageFinished(view, url)
                     val path = Uri.parse(url).path.orEmpty()
+                    if (path.endsWith("/user/01_passenger/01_home.php")) {
+                        pendingBusQr?.let { busQr ->
+                            pendingBusQr = null
+                            dispatchBusQrTap(busQr)
+                        }
+                    } else if (path.endsWith("/auth/login.php") && pendingBusQr != null) {
+                        pendingBusQr = null
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Sign in as a passenger before scanning the bus QR.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
                     if (path.endsWith("/auth/login.php")) {
                         autoRelinkAttempted = false
                         preferences.edit()
@@ -191,6 +219,17 @@ class MainActivity : Activity() {
         if (requestCode != PAYMENT_QR_SCAN_REQUEST || resultCode != RESULT_OK) return
 
         val payload = data?.getStringExtra(PaymentQrScannerActivity.EXTRA_PAYLOAD).orEmpty()
+        val busQr = TrackFarePaymentQr.parseBusTap(payload)
+        if (busQr != null) {
+            val currentPath = Uri.parse(webView.url).path.orEmpty()
+            if (currentPath.endsWith("/user/01_passenger/01_home.php")) {
+                dispatchBusQrTap(busQr)
+            } else {
+                pendingBusQr = busQr
+                webView.loadUrl(serverUrl.trimEnd('/') + "/user/01_passenger/01_home.php")
+            }
+            return
+        }
         val requestId = TrackFarePaymentQr.parseRequestId(payload) ?: return
         val quotedRequestId = JSONObject.quote(requestId)
         webView.evaluateJavascript(
