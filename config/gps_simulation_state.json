@@ -1,1 +1,1 @@
-{"source":"tap-simulation","routeId":1,"tripId":95,"busId":1,"status":"paused","currentStopIndex":0,"legFrom":0,"legTo":1,"legProgress":0,"busPosition":{"lat":14.820056,"lng":120.902528},"lastTick":1790925348.704503,"passengerCount":1,"updatedAt":1790925372}
+{"source":"tap-simulation","routeId":2,"tripId":96,"busId":1,"status":"paused","currentStopIndex":0,"legFrom":0,"legTo":1,"legProgress":0,"busPosition":{"lat":14.658722,"lng":120.984472},"lastTick":1790925600.461524,"passengerCount":1,"updatedAt":1790925600}
