@@ -1,4 +1,16 @@
 <?php
+session_start();
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    if (isset($_GET['action']) || $_SERVER['REQUEST_METHOD'] === 'POST') {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Unauthorized']);
+        exit;
+    }
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
     require_once '../../config/db.php';
     header('Content-Type: application/json');
