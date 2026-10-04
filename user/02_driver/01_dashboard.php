@@ -16,6 +16,7 @@ $routeStops            = [];
 $activePassengers      = [];
 $activeTripCollected   = 0.0;
 $driverTotalEarnings   = 0.0;
+$driverWalletBalance    = 0.0;
 $totalRouteDistance    = 0.0;
 $averageSpeed          = 0;
 $routeProgressPercent  = 0;
@@ -115,24 +116,28 @@ if ($activeTrip) {
         unset($paxRow);
     }
 
-    /* earnings */
+    /* earnings: driver's 20% share only */
     if ($stmt = $conn->prepare(
-        'SELECT COALESCE(SUM(fare_amount),0) AS total FROM trip_transactions WHERE trip_id = ?'
+        'SELECT COALESCE(SUM(driver_share),0) AS total FROM fare_splits WHERE trip_id = ? AND driver_id = ?'
     )) {
-        $stmt->bind_param('i', $tripId);
+        $stmt->bind_param('ii', $tripId, $driverId);
         $stmt->execute();
         $activeTripCollected = (float)($stmt->get_result()->fetch_assoc()['total'] ?? 0);
         $stmt->close();
     }
 
     if ($stmt = $conn->prepare(
-        'SELECT COALESCE(SUM(tt.fare_amount),0) AS total
-         FROM trip_transactions tt JOIN trips t ON tt.trip_id = t.trip_id
-         WHERE t.driver_id = ?'
+        'SELECT COALESCE(SUM(driver_share),0) AS total FROM fare_splits WHERE driver_id = ?'
     )) {
         $stmt->bind_param('i', $driverId);
         $stmt->execute();
         $driverTotalEarnings = (float)($stmt->get_result()->fetch_assoc()['total'] ?? 0);
+        $stmt->close();
+    }
+    if ($stmt = $conn->prepare('SELECT wallet_balance FROM driver_profiles WHERE user_id = ? LIMIT 1')) {
+        $stmt->bind_param('i', $driverId);
+        $stmt->execute();
+        $driverWalletBalance = (float)($stmt->get_result()->fetch_assoc()['wallet_balance'] ?? 0);
         $stmt->close();
     }
 }
@@ -382,8 +387,9 @@ $routeStopsForMap = array_map(static fn($s) => [
           <article class="rounded-xl bg-white p-3 shadow-sm border border-slate-200">
             <p class="text-[10px] uppercase tracking-[.15em] text-slate-500 font-semibold mb-2">Earnings</p>
             <div class="space-y-1 text-xs text-slate-700">
-              <div class="flex justify-between gap-1"><span>This trip</span><strong>&#8369;<?php echo number_format($activeTripCollected, 2); ?></strong></div>
-              <div class="flex justify-between gap-1"><span>All-time</span><strong>&#8369;<?php echo number_format($driverTotalEarnings, 2); ?></strong></div>
+              <div class="flex justify-between gap-1"><span>This trip (20%)</span><strong>&#8369;<?php echo number_format($activeTripCollected, 2); ?></strong></div>
+              <div class="flex justify-between gap-1"><span>All-time (20%)</span><strong>&#8369;<?php echo number_format($driverTotalEarnings, 2); ?></strong></div>
+              <div class="flex justify-between gap-1 pt-1 border-t border-slate-100"><span>Wallet balance</span><strong class="text-primary">&#8369;<?php echo number_format($driverWalletBalance, 2); ?></strong></div>
             </div>
             <p class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100"><?php echo htmlspecialchars($farePolicyLabel); ?></p>
           </article>

@@ -28,6 +28,7 @@ $mapCenterLng          = 120.902972;
 $tripDistanceLabel     = '0.0 km';
 $tripSpeedLabel        = 'N/A';
 $tripArrivalLabel      = 'N/A';
+$driverWalletBalance   = 0.0;
 
 if ($stmt = $conn->prepare(
     'SELECT t.trip_id, t.route_id, t.current_stop_index,
@@ -86,9 +87,9 @@ if ($activeTrip) {
         $stmt->close();
     }
     if ($stmt = $conn->prepare(
-        'SELECT COALESCE(SUM(fare_amount), 0) AS total FROM trip_transactions WHERE trip_id = ?'
+        'SELECT COALESCE(SUM(driver_share), 0) AS total FROM fare_splits WHERE trip_id = ? AND driver_id = ?'
     )) {
-        $stmt->bind_param('i', $tripId);
+        $stmt->bind_param('ii', $tripId, $driverId);
         $stmt->execute();
         $activeTripCollected = (float) ($stmt->get_result()->fetch_assoc()['total'] ?? 0);
         $stmt->close();
@@ -128,6 +129,13 @@ if ($activeTrip) {
             ];
         }
     }
+}
+
+if ($stmt = $conn->prepare('SELECT wallet_balance FROM driver_profiles WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $driverId);
+    $stmt->execute();
+    $driverWalletBalance = (float) ($stmt->get_result()->fetch_assoc()['wallet_balance'] ?? 0);
+    $stmt->close();
 }
 
 $routeStopsForMap = array_map(static fn($s) => [
@@ -590,8 +598,12 @@ $routeStopsForMap = array_map(static fn($s) => [
                           <strong><?php echo $onboardPassengerCount; ?></strong>
                         </div>
                         <div class="metric-row">
-                          <span>Fares collected</span>
+                          <span>Your share (20%)</span>
                           <strong>&#8369;<?php echo number_format($activeTripCollected, 2); ?></strong>
+                        </div>
+                        <div class="metric-row">
+                          <span>Wallet balance</span>
+                          <strong>&#8369;<?php echo number_format($driverWalletBalance, 2); ?></strong>
                         </div>
                         <div class="metric-row">
                           <span>Distance Traveled</span>

@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
 if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
     if (isset($_GET['action']) || $_SERVER['REQUEST_METHOD'] === 'POST') {
         http_response_code(401);
@@ -21,6 +21,8 @@ $sql = "SELECT tt.transaction_id,
                bs.stop_name AS boarding_stop,
                as_stop.stop_name AS alighting_stop,
                tt.fare_amount,
+               fs.driver_share,
+               fs.admin_share,
                t.start_time,
                COALESCE(r.display_name, r.route_name, 'Unknown Route') AS route_name
         FROM trip_transactions tt
@@ -30,6 +32,7 @@ $sql = "SELECT tt.transaction_id,
         JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id
         LEFT JOIN trips t ON tt.trip_id = t.trip_id
         LEFT JOIN routes r ON t.route_id = r.route_id
+        LEFT JOIN fare_splits fs ON fs.transaction_id = tt.transaction_id
         ORDER BY tt.transaction_id DESC";
 
 $transactions = [];
@@ -44,7 +47,7 @@ if ($exportCsv) {
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="trackfare-transactions.csv"');
     $output = fopen('php://output', 'w');
-    fputcsv($output, ['Transaction ID', 'Passenger', 'NFC UID', 'Tap Journey', 'Boarding Stop', 'Alighting Stop', 'Fare', 'Route Direction', 'Timestamp']);
+    fputcsv($output, ['Transaction ID', 'Passenger', 'NFC UID', 'Tap Journey', 'Boarding Stop', 'Alighting Stop', 'Fare', 'Route Direction', 'Timestamp', 'Driver Share (20%)', 'Admin Share (80%)']);
     foreach ($transactions as $transaction) {
         fputcsv($output, [
             $transaction['transaction_id'], 
@@ -56,6 +59,8 @@ if ($exportCsv) {
             number_format((float)$transaction['fare_amount'], 2),
             $transaction['route_name'],
             $transaction['start_time'] ? date('Y-m-d H:i:s', strtotime($transaction['start_time'])) : '',
+            $transaction['driver_share'] !== null ? number_format((float)$transaction['driver_share'], 2) : '',
+            $transaction['admin_share'] !== null ? number_format((float)$transaction['admin_share'], 2) : '',
         ]);
     }
     fclose($output);
@@ -366,6 +371,16 @@ $totalTransactions = count($transactions);
                   <th
                     class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
                   >
+                    Driver 20%
+                  </th>
+                  <th
+                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                  >
+                    Admin 80%
+                  </th>
+                  <th
+                    class="px-6 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                  >
                     Timestamp
                   </th>
                   <th
@@ -378,7 +393,7 @@ $totalTransactions = count($transactions);
               <tbody class="divide-y divide-slate-200 bg-white">
                     <?php if (count($transactions) === 0): ?>
                       <tr>
-                        <td colspan="6" class="px-6 py-5 text-sm text-slate-600">
+                        <td colspan="8" class="px-6 py-5 text-sm text-slate-600">
                           No transactions found.
                         </td>
                       </tr>
@@ -409,6 +424,12 @@ $totalTransactions = count($transactions);
                           </td>
                           <td class="px-6 py-5 text-sm font-semibold text-slate-900">
                             ₱<?= number_format((float)$transaction['fare_amount'], 2); ?>
+                          </td>
+                          <td class="px-6 py-5 text-sm text-slate-700">
+                            <?= $transaction['driver_share'] !== null ? '₱' . number_format((float)$transaction['driver_share'], 2) : '—'; ?>
+                          </td>
+                          <td class="px-6 py-5 text-sm text-slate-700">
+                            <?= $transaction['admin_share'] !== null ? '₱' . number_format((float)$transaction['admin_share'], 2) : '—'; ?>
                           </td>
                           <td class="px-6 py-5 text-sm text-slate-600">
                             <?= htmlspecialchars($timestamp, ENT_QUOTES, 'UTF-8'); ?>

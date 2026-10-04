@@ -29,6 +29,7 @@ $tripsCompletedToday = 0;
 $tripsCompletedAll   = 0;
 $passengersHandled   = 0;
 $earnings            = 0.0;
+$walletBalance       = 0.0;
 $lastTripTime        = '—';
 $lastTripRoute       = '—';
 $lastStopVisited     = '—';
@@ -126,14 +127,18 @@ if ($stmt = $conn->prepare(
 }
 
 if ($stmt = $conn->prepare(
-    'SELECT COALESCE(SUM(tt.fare_amount), 0) AS total
-     FROM trip_transactions tt
-     JOIN trips t ON tt.trip_id = t.trip_id
-     WHERE t.driver_id = ?'
+        'SELECT COALESCE(SUM(driver_share), 0) AS total FROM fare_splits WHERE driver_id = ?'
 )) {
     $stmt->bind_param('i', $driverId);
     $stmt->execute();
     $earnings = (float) ($stmt->get_result()->fetch_assoc()['total'] ?? 0);
+    $stmt->close();
+}
+
+if ($stmt = $conn->prepare('SELECT wallet_balance FROM driver_profiles WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $driverId);
+    $stmt->execute();
+    $walletBalance = (float) ($stmt->get_result()->fetch_assoc()['wallet_balance'] ?? 0);
     $stmt->close();
 }
 
@@ -337,9 +342,10 @@ $isOnRoute = $activeTrip !== null;
         </div>
         <div class="col-span-12 sm:col-span-6 lg:col-span-3">
           <article class="rounded-[1.5rem] bg-white p-5 shadow-sm border border-slate-200">
-            <p class="text-xs uppercase tracking-[.2em] text-slate-500 font-semibold">Earnings</p>
+            <p class="text-xs uppercase tracking-[.2em] text-slate-500 font-semibold">Earnings (20%)</p>
             <p class="mt-2 text-2xl font-black text-emerald-700"><?php echo htmlspecialchars($earningsFormatted, ENT_QUOTES, 'UTF-8'); ?></p>
-            <p class="text-xs text-slate-500 mt-1">All-time fares</p>
+            <p class="text-xs text-slate-500 mt-1">Your share of fares</p>
+            <p class="text-xs font-semibold text-primary mt-1">Wallet: &#8369;<?php echo number_format($walletBalance, 2); ?></p>
           </article>
         </div>
 
