@@ -328,9 +328,14 @@ function record_fare_transaction(
     int $cardId,
     int $boardingStopId,
     int $alightingStopId,
-    float $fare
+    float $fare,
+    bool $allowOverdraft = false,
+    bool $manageTransaction = true
 ): ?string {
-    if (!$conn->begin_transaction()) {
+    if ($manageTransaction && !$conn->begin_transaction()) {
+        return 'TRANSACTION FAILED';
+    }
+    if (!$manageTransaction && !$conn->query('SAVEPOINT fare_transaction')) {
         return 'TRANSACTION FAILED';
     }
 
@@ -364,7 +369,7 @@ function record_fare_transaction(
             if (!$wallet) {
                 throw new RuntimeException('WALLET NOT FOUND');
             }
-            if ((float) $wallet['wallet_balance'] < $fare) {
+            if (!$allowOverdraft && (float) $wallet['wallet_balance'] < $fare) {
                 throw new RuntimeException('INSUFFICIENT BALANCE');
             }
         } else {
@@ -388,12 +393,17 @@ function record_fare_transaction(
             throw new Exception('transaction insert prepare failed');
         }
 
-        if ($stmt = $conn->prepare(
-            'UPDATE passenger_profiles
-             SET wallet_balance = wallet_balance - ?
-             WHERE user_id = ? AND wallet_balance >= ?'
-        )) {
-            $stmt->bind_param('did', $fare, $userId, $fare);
+        $walletUpdateSql = $allowOverdraft
+            ? 'UPDATE passenger_profiles SET wallet_balance = wallet_balance - ? WHERE user_id = ?'
+            : 'UPDATE passenger_profiles
+               SET wallet_balance = wallet_balance - ?
+               WHERE user_id = ? AND wallet_balance >= ?';
+        if ($stmt = $conn->prepare($walletUpdateSql)) {
+            if ($allowOverdraft) {
+                $stmt->bind_param('di', $fare, $userId);
+            } else {
+                $stmt->bind_param('did', $fare, $userId, $fare);
+            }
             $ok = $stmt->execute();
             $updated = $stmt->affected_rows === 1;
             $stmt->close();
@@ -421,12 +431,20 @@ function record_fare_transaction(
             throw new Exception('active passenger removal prepare failed');
         }
         record_fare_split($conn, $transactionId, $tripId, $userId, $fare);
-        if (!$conn->commit()) {
+        $transactionFinished = $manageTransaction
+            ? $conn->commit()
+            : (bool) $conn->query('RELEASE SAVEPOINT fare_transaction');
+        if (!$transactionFinished) {
             throw new Exception('transaction commit failed');
         }
         return null;
     } catch (Throwable $e) {
-        $conn->rollback();
+        if ($manageTransaction) {
+            $conn->rollback();
+        } else {
+            $conn->query('ROLLBACK TO SAVEPOINT fare_transaction');
+            $conn->query('RELEASE SAVEPOINT fare_transaction');
+        }
         return $e->getMessage() === 'INSUFFICIENT BALANCE'
             || $e->getMessage() === 'WALLET NOT FOUND'
             || $e->getMessage() === 'NOT TAPED IN'
@@ -447,7 +465,9 @@ function process_passenger_tap_out(
     int $userId,
     int $cardId,
     int $boardingStopId,
-    int $alightingStopId
+    int $alightingStopId,
+    bool $allowOverdraft = false,
+    bool $manageTransaction = true
 ): array {
     $calc = fare_for_boarding_and_alighting($conn, $routeId, $boardingStopId, $alightingStopId);
     if ($calc['distance_km'] <= 0 && $boardingStopId !== $alightingStopId) {
@@ -461,7 +481,9 @@ function process_passenger_tap_out(
         $cardId,
         $boardingStopId,
         $alightingStopId,
-        $calc['fare']
+        $calc['fare'],
+        $allowOverdraft,
+        $manageTransaction
     );
     if ($transactionError !== null) {
         $message = $transactionError;
@@ -531,7 +553,9 @@ function settle_all_active_passengers_for_trip(mysqli $conn, int $tripId, int $r
             (int) $p['user_id'],
             (int) $p['card_id'],
             (int) $p['boarding_stop_id'],
-            $lastStopId
+            $lastStopId,
+            true,
+            false
         );
         if ($result['ok']) {
             $settled++;

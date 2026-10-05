@@ -158,6 +158,19 @@ function complete_active_trip_and_rotate(mysqli $conn, int $driverId): ?array
         $completed = 'completed';
         $active    = 'active';
 
+        $passengersCleared = settle_all_active_passengers_for_trip($conn, $tripId, $routeId);
+        if ($stmt = $conn->prepare('SELECT COUNT(*) FROM active_passengers WHERE trip_id = ?')) {
+            $stmt->bind_param('i', $tripId);
+            $stmt->execute();
+            $remainingPassengers = (int) ($stmt->get_result()->fetch_row()[0] ?? 0);
+            $stmt->close();
+            if ($remainingPassengers > 0) {
+                throw new RuntimeException('Unable to settle every onboard passenger.');
+            }
+        } else {
+            throw new RuntimeException('Unable to verify passenger settlement.');
+        }
+
         if ($stmt = $conn->prepare(
             'UPDATE trips
              SET status = ?, end_time = NOW(),
@@ -169,13 +182,11 @@ function complete_active_trip_and_rotate(mysqli $conn, int $driverId): ?array
             $stmt->execute();
             if ($stmt->affected_rows < 1) {
                 $stmt->close();
-                $conn->rollback();
-                return null;
+                throw new RuntimeException('Unable to complete the active trip.');
             }
             $stmt->close();
         } else {
-            $conn->rollback();
-            return null;
+            throw new RuntimeException('Unable to complete the active trip.');
         }
 
         if ($stmt = $conn->prepare(
@@ -195,9 +206,9 @@ function complete_active_trip_and_rotate(mysqli $conn, int $driverId): ?array
             return null;
         }
 
-        $passengersCleared = settle_all_active_passengers_for_trip($conn, $tripId, $routeId);
-
-        $conn->commit();
+        if (!$conn->commit()) {
+            throw new RuntimeException('Unable to commit trip completion.');
+        }
 
         return [
             'completed_trip_id'   => $tripId,

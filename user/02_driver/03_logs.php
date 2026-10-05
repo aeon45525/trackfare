@@ -399,6 +399,7 @@ unset($trip);
                       <div class="text-right text-xs text-slate-600 shrink-0">
                         <p><strong><?php echo $trip['pax_count']; ?></strong> passenger<?php echo $trip['pax_count'] === 1 ? '' : 's'; ?></p>
                         <p class="text-emerald-700 font-semibold">₱<?php echo number_format($trip['fare_total'], 2); ?></p>
+                        <p class="text-primary font-semibold">Your share ₱<?php echo number_format($trip['driver_total'], 2); ?></p>
                       </div>
                     </div>
                     <div class="px-4 py-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
@@ -418,7 +419,12 @@ unset($trip);
                               <p class="text-sm font-medium text-slate-900"><?php echo htmlspecialchars($p['full_name'], ENT_QUOTES, 'UTF-8'); ?></p>
                               <p class="text-xs text-slate-500"><?php echo htmlspecialchars($p['boarding_stop'], ENT_QUOTES, 'UTF-8'); ?> → <?php echo htmlspecialchars($p['alighting_stop'], ENT_QUOTES, 'UTF-8'); ?></p>
                             </div>
-                            <span class="text-xs font-semibold text-slate-700 shrink-0">₱<?php echo number_format((float) $p['fare_amount'], 2); ?></span>
+                            <div class="text-right shrink-0">
+                              <span class="text-xs font-semibold text-slate-700">₱<?php echo number_format((float) $p['fare_amount'], 2); ?></span>
+                              <p class="text-[10px] font-semibold text-primary">
+                                <?php echo $p['driver_share'] !== null ? 'Your 20%: ₱' . number_format((float) $p['driver_share'], 2) : 'No split (older record)'; ?>
+                              </p>
+                            </div>
                           </div>
                         <?php endforeach; ?>
                       </div>
