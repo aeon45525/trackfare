@@ -179,9 +179,13 @@ $maxHeat = max(1, max(array_map('max', $heatmap)));
   <link rel="icon" href="../../images/logo.png" type="image/png">
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
 </head>
-<body class="min-h-screen bg-slate-50 p-4 font-['Inter'] text-slate-900 md:p-8">
-  <main class="mx-auto max-w-7xl">
+<body class="min-h-screen bg-slate-50 font-['Inter'] text-slate-900">
+  <div class="flex min-h-screen">
+    <?php require __DIR__ . '/_sidebar.php'; ?>
+    <main class="ml-72 min-h-screen flex-1 p-8">
+      <div class="mx-auto max-w-7xl">
     <a href="01_dashboard.php" class="text-sm font-semibold text-blue-800">&larr; Admin dashboard</a>
     <header class="my-6">
       <p class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Admin analytics</p>
@@ -250,7 +254,9 @@ $maxHeat = max(1, max(array_map('max', $heatmap)));
       </table>
     </section>
     <p class="mt-4 text-xs leading-relaxed text-slate-500">The current schema does not retain each passenger’s tap-in timestamp after checkout. This report therefore groups completed transactions by their trip’s existing start_time. For exact boarding-time analytics, add a boarding_time column to trip_transactions and store active_passengers.tap_in_time when creating each transaction.</p>
-  </main>
+      </div>
+    </main>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     new Chart(document.getElementById('hour-chart'), {

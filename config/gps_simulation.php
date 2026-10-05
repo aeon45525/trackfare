@@ -57,6 +57,7 @@ function gps_simulation_start(mysqli $conn, int $routeId, int $tripId, int $busI
         'legProgress' => 0.0,
         'busPosition' => $stops[0],
         'lastTick' => $now,
+        'updatedAt' => time(),
     ];
 
     $file = fopen(gps_simulation_state_file(), 'c+');

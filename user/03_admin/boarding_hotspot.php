@@ -132,11 +132,14 @@ $escape = static function ($value): string {
   <link rel="icon" href="../../images/logo.png" type="image/png">
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <style>#hotspot-map{height:340px;border-radius:1rem;z-index:0}</style>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+  <style>#hotspot-map{height:340px;border-radius:1rem}</style>
 </head>
-<body class="min-h-screen bg-slate-50 p-4 font-['Inter'] text-slate-900 md:p-8">
-  <main class="mx-auto max-w-7xl">
+<body class="min-h-screen bg-slate-50 font-['Inter'] text-slate-900">
+  <div class="flex min-h-screen">
+    <?php require __DIR__ . '/_sidebar.php'; ?>
+    <main class="ml-72 min-h-screen flex-1 p-8">
+      <div class="mx-auto max-w-7xl">
     <a href="01_dashboard.php" class="text-sm font-semibold text-blue-800">&larr; Admin dashboard</a>
     <header class="my-6">
       <p class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Admin analytics</p>
@@ -190,6 +193,7 @@ $escape = static function ($value): string {
       <section class="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 class="mb-3 text-lg font-bold">Hotspot map</h2>
         <div id="hotspot-map" aria-label="Map of boarding and alighting hotspots"></div>
+        <p id="hotspot-map-error" class="mt-3 hidden text-sm text-red-700" role="alert"></p>
       </section>
     <?php endif; ?>
 
@@ -217,7 +221,9 @@ $escape = static function ($value): string {
         </table>
       </div>
     </section>
-  </main>
+      </div>
+    </main>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <?php if ($chartHotspots): ?>
   <script>
@@ -236,25 +242,86 @@ $escape = static function ($value): string {
   </script>
   <?php endif; ?>
   <?php if ($mapHotspots): ?>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     (function () {
       var points = <?= json_encode(array_map(static function (array $row) use ($hotspotVolume): array {
           return ['name' => $row['stop_name'], 'lat' => (float) $row['lat'], 'lng' => (float) $row['lng'], 'count' => $row[$hotspotVolume]];
       }, $mapHotspots), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-      var map = L.map('hotspot-map');
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
-      var bounds = [];
-      points.forEach(function (point) {
-        var radius = 7 + (point.count / <?= max(1, (int) $maxVolume) ?>) * 13;
-        var popup = document.createElement('div');
-        popup.textContent = point.name + ': ' + point.count + ' ' + <?= json_encode($view === 'in' ? 'boardings' : ($view === 'off' ? 'drop-offs' : 'boardings / drop-offs')) ?>;
-        L.circleMarker([point.lat, point.lng], { radius: radius, color: '#0040a1', fillColor: '#2563eb', fillOpacity: 0.7 })
-          .bindPopup(popup)
-          .addTo(map);
-        bounds.push([point.lat, point.lng]);
+      var mapElement = document.getElementById('hotspot-map');
+      var errorElement = document.getElementById('hotspot-map-error');
+      fetch('../../api/map.php', {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' }
+      }).then(function (response) {
+        if (!response.ok) throw new Error('Map configuration unavailable');
+        return response.json();
+      }).then(function (config) {
+        if (!config.apiKey) throw new Error('Missing Google Maps API key');
+        return new Promise(function (resolve, reject) {
+          if (window.google && window.google.maps) {
+            resolve();
+            return;
+          }
+          var callbackName = '__trackfareHotspotMapsInit';
+          window[callbackName] = function () {
+            delete window[callbackName];
+            resolve();
+          };
+          var script = document.createElement('script');
+          script.src = 'https://maps.googleapis.com/maps/api/js?key='
+            + encodeURIComponent(config.apiKey) + '&callback=' + callbackName;
+          script.async = true;
+          script.defer = true;
+          script.onerror = function () {
+            delete window[callbackName];
+            reject(new Error('Failed to load Google Maps'));
+          };
+          document.head.appendChild(script);
+        });
+      }).then(function () {
+        var map = new google.maps.Map(mapElement, {
+          center: { lat: points[0].lat, lng: points[0].lng },
+          zoom: 12,
+          mapTypeId: 'roadmap',
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: true
+        });
+        var bounds = new google.maps.LatLngBounds();
+        var infoWindow = new google.maps.InfoWindow();
+        points.forEach(function (point) {
+          var marker = new google.maps.Marker({
+            position: { lat: point.lat, lng: point.lng },
+            map: map,
+            title: point.name,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 7 + (point.count / <?= max(1, (int) $maxVolume) ?>) * 13,
+              fillColor: '#2563eb',
+              fillOpacity: 0.7,
+              strokeColor: '#0040a1',
+              strokeWeight: 2
+            }
+          });
+          marker.addListener('click', function () {
+            var content = document.createElement('div');
+            content.textContent = point.name + ': ' + point.count + ' ' + <?= json_encode($view === 'in' ? 'boardings' : ($view === 'off' ? 'drop-offs' : 'boardings / drop-offs')) ?>;
+            infoWindow.setContent(content);
+            infoWindow.open({ anchor: marker, map: map });
+          });
+          bounds.extend(marker.getPosition());
+        });
+        if (points.length > 1) {
+          map.fitBounds(bounds, 24);
+          google.maps.event.addListenerOnce(map, 'bounds_changed', function () {
+            if (map.getZoom() > 14) map.setZoom(14);
+          });
+        }
+      }).catch(function (error) {
+        console.error('Unable to load hotspot map:', error);
+        errorElement.textContent = 'Google Maps could not be loaded. Please try again later.';
+        errorElement.classList.remove('hidden');
       });
-      if (bounds.length) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
     }());
   </script>
   <?php endif; ?>

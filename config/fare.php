@@ -239,20 +239,34 @@ function resolve_trip_current_stop_id(mysqli $conn, array $trip): ?int
     $tripId = (int) ($trip['trip_id'] ?? 0);
     $routeId = (int) ($trip['route_id'] ?? 0);
     if ($tripId > 0 && $routeId > 0) {
-        foreach ([__DIR__ . '/gps_simulation_state.json', __DIR__ . '/gps_state.json'] as $statePath) {
+        $routeStops = fare_route_data($conn, $routeId)['stops'];
+        foreach ([__DIR__ . '/gps_state.json', __DIR__ . '/gps_simulation_state.json'] as $statePath) {
             if (!is_file($statePath)) {
                 continue;
             }
 
             $state = json_decode((string) file_get_contents($statePath), true);
-            $position = is_array($state) ? ($state['busPosition'] ?? null) : null;
             $updatedAt = (int) (is_array($state) ? ($state['updatedAt'] ?? 0) : 0);
             if (!is_array($state)
                 || (int) ($state['tripId'] ?? 0) !== $tripId
                 || (int) ($state['routeId'] ?? 0) !== $routeId
                 || $updatedAt < time() - 30
                 || $updatedAt > time() + 5
-                || !is_array($position)
+            ) {
+                continue;
+            }
+
+            $stateStopIndex = filter_var($state['currentStopIndex'] ?? null, FILTER_VALIDATE_INT);
+            if ($stateStopIndex !== false
+                && $stateStopIndex !== null
+                && $stateStopIndex >= 0
+                && $stateStopIndex < count($routeStops)
+            ) {
+                return (int) $routeStops[$stateStopIndex]['stop_id'];
+            }
+
+            $position = is_array($state) ? ($state['busPosition'] ?? null) : null;
+            if (!is_array($position)
                 || !isset($position['lat'], $position['lng'])
                 || !is_numeric($position['lat'])
                 || !is_numeric($position['lng'])
@@ -268,7 +282,7 @@ function resolve_trip_current_stop_id(mysqli $conn, array $trip): ?int
 
             $nearestStopId = null;
             $nearestDistance = INF;
-            foreach (fare_route_data($conn, $routeId)['stops'] as $stop) {
+            foreach ($routeStops as $stop) {
                 $distance = haversine_km(
                     (float) $position['lat'],
                     (float) $position['lng'],

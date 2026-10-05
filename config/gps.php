@@ -489,10 +489,35 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
             $response['active_trip_badge'] = 'Waiting';
         } elseif ($active && $active['status'] === 'active') {
             $routeId = (int) $active['route_id'];
-            $simulation = gps_simulation_tick($conn, $routeId, (int) $active['trip_id']);
-            $currentStopIndex = !empty($simulation['available'])
-                ? (int) $simulation['currentStopIndex']
-                : (int) $active['current_stop_index'];
+            $activeTripId = (int) $active['trip_id'];
+            $currentStopIndex = (int) $active['current_stop_index'];
+            $sharedState = gps_read_shared_state();
+            $sharedStopIndex = filter_var(
+                is_array($sharedState) ? ($sharedState['currentStopIndex'] ?? null) : null,
+                FILTER_VALIDATE_INT
+            );
+            $sharedStateMatchesTrip = is_array($sharedState)
+                && (int) ($sharedState['tripId'] ?? 0) === $activeTripId
+                && (int) ($sharedState['routeId'] ?? 0) === $routeId
+                && (int) ($sharedState['updatedAt'] ?? 0) >= time() - 15
+                && (int) ($sharedState['updatedAt'] ?? 0) <= time() + 5
+                && $sharedStopIndex !== false
+                && $sharedStopIndex !== null
+                && $sharedStopIndex >= 0;
+            if ($sharedStateMatchesTrip) {
+                $routeStops = fare_route_data($conn, $routeId)['stops'];
+                if ($sharedStopIndex < count($routeStops)) {
+                    $currentStopIndex = $sharedStopIndex;
+                } else {
+                    $sharedStateMatchesTrip = false;
+                }
+            }
+            if (!$sharedStateMatchesTrip) {
+                $simulation = gps_simulation_tick($conn, $routeId, $activeTripId);
+                if (!empty($simulation['available'])) {
+                    $currentStopIndex = (int) $simulation['currentStopIndex'];
+                }
+            }
             $currentStopId = get_route_stop_id_at_index($conn, $routeId, (int) $active['current_stop_index']);
             if ($currentStopIndex !== (int) $active['current_stop_index']) {
                 $currentStopId = get_route_stop_id_at_index($conn, $routeId, $currentStopIndex);
@@ -516,7 +541,7 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
             $fareInfo = get_passenger_fare_info($conn, $userId);
 
             $response['has_active_trip'] = true;
-            $response['active_trip_id'] = (int) $active['trip_id'];
+            $response['active_trip_id'] = $activeTripId;
             $response['active_trip_status'] = $active['status'] === 'active' ? 'On active trip' : ucfirst($active['status']);
             $response['active_trip_badge'] = $active['status'] === 'active' ? 'Active' : ucfirst($active['status']);
             $response['boarding_stop'] = $active['boarding_stop_name'] ?: '—';
@@ -981,6 +1006,12 @@ $response = [
 ];
 
 if ($driverId > 0 && ($_SESSION['role'] ?? '') === 'driver') {
+    $driverTrip = get_active_trip($conn, $driverId);
+    if ($driverTrip && (int) $driverTrip['route_id'] === $routeId) {
+        $response['tripId'] = (int) $driverTrip['trip_id'];
+        $response['busId'] = (int) $driverTrip['bus_id'];
+        $response['source'] = 'driver-browser';
+    }
     gps_write_shared_state($response);
 }
 

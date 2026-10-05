@@ -70,19 +70,18 @@ if ($stmt = $conn->prepare('SELECT uid, is_active FROM nfc_cards WHERE user_id =
 }
 
 if ($stmt = $conn->prepare(
-  'SELECT t.status, t.start_time, ap.boarding_stop_id, t.route_id,
-      bs.stop_name AS boarded_stop, r.display_name AS route_name
+  'SELECT t.trip_id, t.status, t.start_time, t.current_stop_index, ap.boarding_stop_id, t.route_id,
+      bs.stop_name AS boarded_stop
      FROM active_passengers ap
      JOIN trips t ON ap.trip_id = t.trip_id
      LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
-     LEFT JOIN routes r ON t.route_id = r.route_id
      WHERE ap.user_id = ?
      LIMIT 1'
 )) {
     $stmt->bind_param('i', $userId);
     $stmt->execute();
     $stmt->store_result();
-    $stmt->bind_result($tripStatus, $tripStartTime, $boardingStopId, $activeRouteId, $boardedStopResult, $routeName);
+    $stmt->bind_result($activeTripId, $tripStatus, $tripStartTime, $tripCurrentStopIndex, $boardingStopId, $activeRouteId, $boardedStopResult);
     if ($stmt->fetch()) {
       if ($tripStatus === 'completed') {
         $activeTripStatus = 'Fare due - top up then settle';
@@ -114,7 +113,24 @@ if ($stmt = $conn->prepare(
         $activeTripBadge = $tripStatus === 'active' ? 'Active' : ucfirst($tripStatus);
         $activeTripBadgeClasses = $tripStatus === 'active' ? 'status-pill status-active' : 'status-pill status-idle';
         $boardedStop = $boardedStopResult ?: '—';
-        $currentStop = $routeName ?: 'In transit';
+        $currentStopIndex = (int) $tripCurrentStopIndex;
+        $currentStopId = resolve_trip_current_stop_id($conn, [
+            'trip_id' => (int) $activeTripId,
+            'route_id' => (int) $activeRouteId,
+            'current_stop_index' => $currentStopIndex,
+        ]);
+        if ($currentStopId !== null && ($stopStmt = $conn->prepare('SELECT stop_name FROM stops WHERE stop_id = ? LIMIT 1'))) {
+            $stopStmt->bind_param('i', $currentStopId);
+            $stopStmt->execute();
+            $stopStmt->bind_result($currentStopName);
+            if ($stopStmt->fetch()) {
+                $currentStop = $currentStopName;
+            }
+            $stopStmt->close();
+        }
+        if ($currentStop === '—') {
+            $currentStop = 'In transit';
+        }
         $hasActiveTrip = true;
         $tapStatus = 'On board';
         $tapStatusClasses = 'status-pill status-active';
@@ -492,9 +508,9 @@ $activeNav = 'home';
                   <span class="material-symbols-outlined text-[18px]">route</span>
                 </span>
                 <div class="min-w-0">
-                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
-                  Current route
-                </p>
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
+                    Current stop
+                  </p>
                 <p id="current-stop" class="mt-1 text-sm font-semibold text-on-surface truncate"><?= htmlspecialchars($currentStop, ENT_QUOTES, 'UTF-8') ?></p>
                 </div>
               </div>
@@ -646,7 +662,7 @@ $activeNav = 'home';
             return r.json();
           })
           .then(function (data) {
-            if (!data.ok) return;
+            if (!data.ok) throw new Error(data.message || 'Passenger status unavailable');
             if (tapHeadingEl) {
               tapHeadingEl.textContent = data.has_pending_fare
                 ? 'Fare due - top up then settle'
@@ -699,7 +715,9 @@ $activeNav = 'home';
             }
           })
           .catch(function () {
-            // ignore polling errors
+            if (tripStatusEl) {
+              tripStatusEl.textContent = 'Unable to refresh trip status';
+            }
           });
         }
 
