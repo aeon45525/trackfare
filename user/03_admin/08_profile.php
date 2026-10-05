@@ -1,4 +1,17 @@
 <?php
+
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    if (isset($_GET['action']) || $_SERVER['REQUEST_METHOD'] === 'POST') {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Unauthorized']);
+        exit;
+    }
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
 require_once '../../config/db.php';
 
 $profileName = 'Fleet Manager';
@@ -10,6 +23,9 @@ $totalDrivers = 0;
 $totalTransactions = 0;
 $totalRoutes = 0;
 $activeTrips = 0;
+$adminRevenueTotal = 0.0;
+$adminRevenueToday = 0.0;
+$driverWalletsTotal = 0.0;
 
 $adminResult = $conn->query("SELECT full_name, email, is_active FROM users WHERE role = 'admin' LIMIT 1");
 if ($adminResult && ($adminRow = $adminResult->fetch_assoc())) {
@@ -48,7 +64,21 @@ if ($countResult) {
     $activeTrips = (int)$countResult->fetch_assoc()['count'];
     $countResult->free();
 }
+
+$revResult = $conn->query("SELECT COALESCE(SUM(admin_share),0) AS total, COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN admin_share ELSE 0 END),0) AS today FROM fare_splits");
+if ($revResult) {
+    $revRow = $revResult->fetch_assoc();
+    $adminRevenueTotal = (float)$revRow['total'];
+    $adminRevenueToday = (float)$revRow['today'];
+    $revResult->free();
+}
+$walletResult = $conn->query("SELECT COALESCE(SUM(wallet_balance),0) AS total FROM driver_profiles");
+if ($walletResult) {
+    $driverWalletsTotal = (float)$walletResult->fetch_assoc()['total'];
+    $walletResult->free();
+}
 ?>
+
 <!doctype html>
 <html lang="en">
   <head>
@@ -395,6 +425,22 @@ if ($countResult) {
                 </p>
               </div>
             </div>
+
+            <div class="mt-4 grid gap-4 sm:grid-cols-3">
+              <div class="rounded-[1.25rem] border border-slate-200 bg-surface-container p-5 text-center">
+                <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Admin Revenue (80%)</p>
+                <p class="mt-3 text-lg font-semibold text-on-surface">₱<?= number_format($adminRevenueTotal, 2); ?></p>
+              </div>
+              <div class="rounded-[1.25rem] border border-slate-200 bg-surface-container p-5 text-center">
+                <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Admin Revenue Today</p>
+                <p class="mt-3 text-lg font-semibold text-on-surface">₱<?= number_format($adminRevenueToday, 2); ?></p>
+              </div>
+              <div class="rounded-[1.25rem] border border-slate-200 bg-surface-container p-5 text-center">
+                <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Driver Wallets (20%)</p>
+                <p class="mt-3 text-lg font-semibold text-on-surface">₱<?= number_format($driverWalletsTotal, 2); ?></p>
+              </div>
+            </div>
+
             <!-- Administrative Controls (clear defined actions) -->
             <div class="mt-8">
               <p

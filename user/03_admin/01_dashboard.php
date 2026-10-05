@@ -1,4 +1,16 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    if (isset($_GET['action']) || $_SERVER['REQUEST_METHOD'] === 'POST') {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Unauthorized']);
+        exit;
+    }
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
 if (isset($_GET['action'])) {
     require_once '../../config/db.php';
     header('Content-Type: application/json');
@@ -9,7 +21,10 @@ if (isset($_GET['action'])) {
             'total_passengers' => 0,
             'active_trips' => 0,
             'today_revenue' => 0,
-            'active_drivers' => 0
+            'active_drivers' => 0,
+            'admin_revenue_total' => 0,
+            'admin_revenue_today' => 0,
+            'driver_wallets_total' => 0
         ];
 
         try {
@@ -32,6 +47,16 @@ if (isset($_GET['action'])) {
             $result = $conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'driver' AND is_active = 1");
             if ($result && $row = $result->fetch_assoc()) {
                 $stats['active_drivers'] = $row['count'];
+            }
+                        $result = $conn->query("SELECT COALESCE(SUM(admin_share),0) AS total, COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN admin_share ELSE 0 END),0) AS today FROM fare_splits");
+            if ($result && $row = $result->fetch_assoc()) {
+                $stats['admin_revenue_total'] = (float)$row['total'];
+                $stats['admin_revenue_today'] = (float)$row['today'];
+            }
+
+            $result = $conn->query("SELECT COALESCE(SUM(wallet_balance),0) AS total FROM driver_profiles");
+            if ($result && $row = $result->fetch_assoc()) {
+                $stats['driver_wallets_total'] = (float)$row['total'];
             }
         } catch (Exception $e) {
             error_log("Dashboard stats error: " . $e->getMessage());
@@ -394,6 +419,18 @@ if (isset($_GET['action'])) {
             <p class="mt-3 text-sm text-slate-600">Drivers currently on duty across the service routes.</p>
           </div>
         </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200">
+            <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Admin Revenue (80%)</p>
+            <h2 class="mt-4 text-3xl font-black text-on-surface" id="stat-admin-revenue">--</h2>
+            <p class="mt-3 text-sm text-slate-600">Today: <strong id="stat-admin-revenue-today">--</strong> · accumulated from settled fares.</p>
+          </div>
+          <div class="bg-white p-6 rounded-[1rem] shadow-sm border border-slate-200">
+            <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Driver Wallets (20%)</p>
+            <h2 class="mt-4 text-3xl font-black text-on-surface" id="stat-driver-wallets">--</h2>
+            <p class="mt-3 text-sm text-slate-600">Total credited to all driver wallets.</p>
+          </div>
+        </div>
         <div class="grid gap-4 xl:grid-cols-2 mb-6">
           <section
             class="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200"
@@ -615,6 +652,10 @@ if (isset($_GET['action'])) {
           document.getElementById('stat-trips').textContent = stats.active_trips.toLocaleString();
           document.getElementById('stat-revenue').textContent = '₱' + stats.today_revenue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           document.getElementById('stat-drivers').textContent = stats.active_drivers.toLocaleString();
+          const peso = n => '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          document.getElementById('stat-admin-revenue').textContent = peso(stats.admin_revenue_total);
+          document.getElementById('stat-admin-revenue-today').textContent = peso(stats.admin_revenue_today);
+          document.getElementById('stat-driver-wallets').textContent = peso(stats.driver_wallets_total);
 
           const boardings = await fetchDashboardData('boardings');
           const boardingsList = document.getElementById('boardings-list');

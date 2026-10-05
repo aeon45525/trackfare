@@ -28,6 +28,14 @@ $completedTripCount    = 0;
 $activeRouteDisplay    = 'No active route';
 $currentStop           = '—';
 $activeTripStartedLabel = '—';
+$driverWalletBalance = 0.0;
+
+if ($stmt = $conn->prepare('SELECT wallet_balance FROM driver_profiles WHERE user_id = ? LIMIT 1')) {
+    $stmt->bind_param('i', $driverId);
+    $stmt->execute();
+    $driverWalletBalance = (float) ($stmt->get_result()->fetch_assoc()['wallet_balance'] ?? 0);
+    $stmt->close();
+}
 
 if ($stmt = $conn->prepare(
     'SELECT t.trip_id, t.route_id, t.current_stop_index, t.start_time,
@@ -135,7 +143,8 @@ if ($stmt = $conn->prepare(
 if ($stmt = $conn->prepare(
     'SELECT t.trip_id, r.display_name, t.start_time, t.end_time,
             (SELECT COUNT(*) FROM trip_transactions tt WHERE tt.trip_id = t.trip_id) AS pax_count,
-            (SELECT COALESCE(SUM(tt.fare_amount), 0) FROM trip_transactions tt WHERE tt.trip_id = t.trip_id) AS fare_total
+            (SELECT COALESCE(SUM(tt.fare_amount), 0) FROM trip_transactions tt WHERE tt.trip_id = t.trip_id) AS fare_total,
+            (SELECT COALESCE(SUM(fs.driver_share), 0) FROM fare_splits fs WHERE fs.trip_id = t.trip_id AND fs.driver_id = t.driver_id) AS driver_total
      FROM trips t
      JOIN routes r ON t.route_id = r.route_id
      WHERE t.driver_id = ? AND t.status = ?
@@ -153,6 +162,7 @@ if ($stmt = $conn->prepare(
             'end_time'     => $row['end_time'],
             'pax_count'    => (int) $row['pax_count'],
             'fare_total'   => (float) $row['fare_total'],
+            'driver_total' => (float) $row['driver_total'],
             'passengers'   => [],
         ];
     }
@@ -162,11 +172,12 @@ if ($stmt = $conn->prepare(
 foreach ($completedTrips as &$trip) {
     if ($stmt = $conn->prepare(
         'SELECT u.full_name, stb.stop_name AS boarding_stop, ste.stop_name AS alighting_stop,
-                tt.fare_amount
+                tt.fare_amount, fs.driver_share
          FROM trip_transactions tt
          JOIN users u ON tt.user_id = u.user_id
          JOIN stops stb ON tt.boarding_stop_id = stb.stop_id
          JOIN stops ste ON tt.alighting_stop_id = ste.stop_id
+         LEFT JOIN fare_splits fs ON fs.transaction_id = tt.transaction_id
          WHERE tt.trip_id = ?
          ORDER BY tt.transaction_id ASC'
     )) {
@@ -297,18 +308,25 @@ unset($trip);
       </header>
 
       <div class="grid grid-cols-12 gap-6">
-        <div class="col-span-12 sm:col-span-6">
+        <div class="col-span-12 sm:col-span-4">
           <article class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200">
             <p class="text-xs uppercase tracking-[.25em] text-slate-500 font-semibold">Onboard now</p>
             <p class="mt-2 text-3xl font-black text-slate-900"><?php echo $activePassengerCount; ?></p>
             <p class="mt-1 text-sm text-slate-500">Active passengers on current trip</p>
           </article>
         </div>
-        <div class="col-span-12 sm:col-span-6">
+        <div class="col-span-12 sm:col-span-4">
           <article class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200">
             <p class="text-xs uppercase tracking-[.25em] text-slate-500 font-semibold">Completed trips</p>
             <p class="mt-2 text-3xl font-black text-slate-900"><?php echo $completedTripCount; ?></p>
             <p class="mt-1 text-sm text-slate-500">Finished legs saved in trips table</p>
+          </article>
+        </div>
+        <div class="col-span-12 sm:col-span-4">
+          <article class="rounded-[1.5rem] bg-white p-6 shadow-sm border border-slate-200">
+            <p class="text-xs uppercase tracking-[.25em] text-slate-500 font-semibold">Wallet balance</p>
+            <p class="mt-2 text-3xl font-black text-slate-900">&#8369;<?php echo number_format($driverWalletBalance, 2); ?></p>
+            <p class="mt-1 text-sm text-slate-500">Your 20% share of settled fares</p>
           </article>
         </div>
 

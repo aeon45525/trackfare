@@ -1,4 +1,17 @@
 <?php
+
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    if (isset($_GET['action']) || $_SERVER['REQUEST_METHOD'] === 'POST') {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Unauthorized']);
+        exit;
+    }
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
 require_once '../../config/db.php';
 require_once '../../config/fare.php';
 

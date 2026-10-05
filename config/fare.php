@@ -8,6 +8,7 @@
 const FARE_FIRST_KM_PHP       = 15.00;
 const FARE_PER_KM_AFTER_PHP    = 2.50;
 const FARE_INCLUDED_KM         = 5.0;
+const FARE_DRIVER_SHARE_PERCENT = 20;
 
 /** Normalize a PN532 UID so spaces, colons, and hyphens do not affect lookup. */
 function normalize_nfc_uid(string $raw): string
@@ -43,6 +44,82 @@ function calculateFare(float $distanceKm): float
     }
 
     return round(FARE_FIRST_KM_PHP + (($distanceKm - FARE_INCLUDED_KM) * FARE_PER_KM_AFTER_PHP), 2);
+}
+
+function fare_money_to_cents($amount): int
+{
+    return (int) round(((float) $amount) * 100);
+}
+
+function fare_cents_to_money(int $cents): string
+{
+    return number_format($cents / 100, 2, '.', '');
+}
+
+/** Driver gets 20% (half-up to the centavo); admin gets the remainder, so the sum is exact. */
+function split_fare_cents(int $fareCents): array
+{
+    $driverCents = intdiv(($fareCents * FARE_DRIVER_SHARE_PERCENT) + 50, 100);
+    return ['driver_cents' => $driverCents, 'admin_cents' => $fareCents - $driverCents];
+}
+
+/**
+ * Writes the audit row and credits the driver wallet.
+ * MUST be called inside the caller's open DB transaction. Throws on any failure.
+ */
+function record_fare_split(mysqli $conn, int $transactionId, int $tripId, int $passengerId, float $fare): void
+{
+    $fareCents = fare_money_to_cents($fare);
+    if ($transactionId < 1 || $fareCents < 1) {
+        throw new RuntimeException('fare split invalid input');
+    }
+    $split     = split_fare_cents($fareCents);
+    $fareAmt   = fare_cents_to_money($fareCents);
+    $driverAmt = fare_cents_to_money($split['driver_cents']);
+    $adminAmt  = fare_cents_to_money($split['admin_cents']);
+    $rate      = number_format(FARE_DRIVER_SHARE_PERCENT / 100, 4, '.', '');
+
+    $driverId = 0;
+    if (!($stmt = $conn->prepare('SELECT driver_id FROM trips WHERE trip_id = ? LIMIT 1'))) {
+        throw new RuntimeException('fare split driver lookup prepare failed');
+    }
+    $stmt->bind_param('i', $tripId);
+    $stmt->execute();
+    $stmt->bind_result($driverId);
+    $stmt->fetch();
+    $stmt->close();
+    if ((int) $driverId < 1) {
+        throw new RuntimeException('fare split driver not found');
+    }
+    $driverId = (int) $driverId;
+
+    if (!($stmt = $conn->prepare(
+        'INSERT INTO fare_splits
+         (transaction_id, trip_id, passenger_id, driver_id, fare_amount, driver_share, admin_share, driver_rate)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ))) {
+        throw new RuntimeException('fare split insert prepare failed');
+    }
+    $stmt->bind_param('iiiissss', $transactionId, $tripId, $passengerId, $driverId,
+        $fareAmt, $driverAmt, $adminAmt, $rate);
+    $ok = $stmt->execute();
+    $stmt->close();
+    if (!$ok) {
+        throw new RuntimeException('fare split insert failed');
+    }
+
+    if (!($stmt = $conn->prepare(
+        'INSERT INTO driver_profiles (user_id, wallet_balance) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE wallet_balance = wallet_balance + ?'
+    ))) {
+        throw new RuntimeException('driver wallet prepare failed');
+    }
+    $stmt->bind_param('iss', $driverId, $driverAmt, $driverAmt);
+    $ok = $stmt->execute();
+    $stmt->close();
+    if (!$ok) {
+        throw new RuntimeException('driver wallet credit failed');
+    }
 }
 
 function getDistanceBetweenIndices(int $fromIndex, int $toIndex, array $cumulativeDistances): float
@@ -258,6 +335,7 @@ function record_fare_transaction(
     }
 
     try {
+        $transactionId = 0;
         if ($stmt = $conn->prepare(
             'SELECT active_id
              FROM active_passengers
@@ -298,11 +376,12 @@ function record_fare_transaction(
              (trip_id, user_id, card_id, boarding_stop_id, alighting_stop_id, fare_amount)
              VALUES (?, ?, ?, ?, ?, ?)'
         )) {
-            $stmt->bind_param('iiiidd', $tripId, $userId, $cardId, $boardingStopId, $alightingStopId, $fare);
+            $stmt->bind_param('iiiiid', $tripId, $userId, $cardId, $boardingStopId, $alightingStopId, $fare);
             $ok = $stmt->execute();
+            $transactionId = (int) $conn->insert_id;
             $stmt->close();
 
-            if (!$ok) {
+            if (!$ok || $transactionId < 1) {
                 throw new Exception('transaction insert failed');
             }
         } else {
@@ -341,7 +420,7 @@ function record_fare_transaction(
         } else {
             throw new Exception('active passenger removal prepare failed');
         }
-
+        record_fare_split($conn, $transactionId, $tripId, $userId, $fare);
         if (!$conn->commit()) {
             throw new Exception('transaction commit failed');
         }

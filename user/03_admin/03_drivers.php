@@ -1,4 +1,16 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    if (isset($_GET['action']) || $_SERVER['REQUEST_METHOD'] === 'POST') {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Unauthorized']);
+        exit;
+    }
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
     require_once '../../config/db.php';
     header('Content-Type: application/json');
@@ -13,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
                 $where .= " AND (u.full_name LIKE '%$search%' OR u.email LIKE '%$search%' OR b.bus_number LIKE '%$search%' OR r.display_name LIKE '%$search%')";
             }
 
-            $sql = "SELECT u.user_id, u.full_name, u.email, COALESCE(dp.assigned_bus_id, 0) AS assigned_bus_id, COALESCE(b.bus_number, 'Unassigned') AS bus_number, COALESCE(IF(active_trip.trip_id IS NOT NULL, r.display_name, NULL), 'Unassigned') AS assigned_route, IF(active_trip.trip_id IS NOT NULL, 'On Route', 'Idle') AS status FROM users u LEFT JOIN driver_profiles dp ON u.user_id = dp.user_id LEFT JOIN buses b ON dp.assigned_bus_id = b.bus_id LEFT JOIN (SELECT t.driver_id, t.trip_id, t.route_id, t.bus_id FROM trips t WHERE t.status = 'active') AS active_trip ON active_trip.driver_id = u.user_id LEFT JOIN routes r ON active_trip.route_id = r.route_id $where ORDER BY u.full_name ASC LIMIT $limit OFFSET $offset";
+            $sql = "SELECT u.user_id, u.full_name, u.email, COALESCE(dp.assigned_bus_id, 0) AS assigned_bus_id, COALESCE(dp.wallet_balance, 0.00) AS wallet_balance, COALESCE(b.bus_number, 'Unassigned') AS bus_number, COALESCE(IF(active_trip.trip_id IS NOT NULL, r.display_name, NULL), 'Unassigned') AS assigned_route, IF(active_trip.trip_id IS NOT NULL, 'On Route', 'Idle') AS status FROM users u LEFT JOIN driver_profiles dp ON u.user_id = dp.user_id LEFT JOIN buses b ON dp.assigned_bus_id = b.bus_id LEFT JOIN (SELECT t.driver_id, t.trip_id, t.route_id, t.bus_id FROM trips t WHERE t.status = 'active') AS active_trip ON active_trip.driver_id = u.user_id LEFT JOIN routes r ON active_trip.route_id = r.route_id $where ORDER BY u.full_name ASC LIMIT $limit OFFSET $offset";
             $result = $conn->query($sql);
             if ($result) {
                 while ($row = $result->fetch_assoc()) {
@@ -50,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
         global $conn;
         try {
             $user_id = intval($user_id);
-            $sql = "SELECT u.user_id, u.full_name, u.email, COALESCE(dp.assigned_bus_id, 0) AS assigned_bus_id, COALESCE(b.bus_number, 'Unassigned') AS bus_number, COALESCE(IF(active_trip.trip_id IS NOT NULL, r.display_name, NULL), 'Unassigned') AS assigned_route, COALESCE(active_trip.route_id, 0) AS route_id, IF(active_trip.trip_id IS NOT NULL, 'On Route', 'Idle') AS status, (SELECT COUNT(*) FROM trips WHERE driver_id = u.user_id) AS total_trips FROM users u LEFT JOIN driver_profiles dp ON u.user_id = dp.user_id LEFT JOIN buses b ON dp.assigned_bus_id = b.bus_id LEFT JOIN (SELECT t.driver_id, t.trip_id, t.route_id, t.bus_id FROM trips t WHERE t.status = 'active') AS active_trip ON active_trip.driver_id = u.user_id LEFT JOIN routes r ON active_trip.route_id = r.route_id WHERE u.user_id = $user_id AND u.role = 'driver' LIMIT 1";
+            $sql = "SELECT u.user_id, u.full_name, u.email, COALESCE(dp.assigned_bus_id, 0) AS assigned_bus_id, COALESCE(dp.wallet_balance, 0.00) AS wallet_balance, COALESCE(b.bus_number, 'Unassigned') AS bus_number, COALESCE(IF(active_trip.trip_id IS NOT NULL, r.display_name, NULL), 'Unassigned') AS assigned_route, COALESCE(active_trip.route_id, 0) AS route_id, IF(active_trip.trip_id IS NOT NULL, 'On Route', 'Idle') AS status, (SELECT COUNT(*) FROM trips WHERE driver_id = u.user_id) AS total_trips FROM users u LEFT JOIN driver_profiles dp ON u.user_id = dp.user_id LEFT JOIN buses b ON dp.assigned_bus_id = b.bus_id LEFT JOIN (SELECT t.driver_id, t.trip_id, t.route_id, t.bus_id FROM trips t WHERE t.status = 'active') AS active_trip ON active_trip.driver_id = u.user_id LEFT JOIN routes r ON active_trip.route_id = r.route_id WHERE u.user_id = $user_id AND u.role = 'driver' LIMIT 1";
             $result = $conn->query($sql);
             if ($result && $row = $result->fetch_assoc()) {
                 return $row;
@@ -566,6 +578,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
                       Bus Assignment
                     </th>
                     <th
+                      class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Wallet Balance
+                    </th>
+                    <th
                       class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 text-right"
                     >
                       Actions
@@ -782,7 +799,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
           }
 
           if (drivers.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-3 text-sm text-slate-500">No drivers found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-slate-500">No drivers found.</td></tr>`;
             return;
           }
 
@@ -797,6 +814,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
               </td>
               <td class="px-4 py-3 text-sm font-semibold ${driver.status === 'On Route' ? 'text-emerald-700' : 'text-slate-700'}">${escapeHtml(driver.status)}</td>
               <td class="px-4 py-3 text-sm text-slate-900">${escapeHtml(driver.bus_number)}</td>
+              <td class="px-4 py-3 text-sm font-semibold text-slate-900">₱${Number(driver.wallet_balance || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               <td class="px-4 py-3 text-sm text-right flex flex-wrap gap-1 justify-end">
                 <button type="button" onclick="editDriver(${driver.user_id})" class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Edit</button>
                 <button type="button" onclick="viewDriver(${driver.user_id})" class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">View</button>
@@ -845,6 +863,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
               <div><strong>Status:</strong> ${escapeHtml(detail.status)}</div>
               <div><strong>Assigned Route:</strong> ${escapeHtml(detail.assigned_route)}</div>
               <div><strong>Bus:</strong> ${escapeHtml(detail.bus_number)}</div>
+              <div><strong>Wallet Balance:</strong> ₱${Number(detail.wallet_balance || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <div><strong>Total Trips:</strong> ${escapeHtml(detail.total_trips)}</div>
               <div class="pt-3">
                 <button type="button" onclick="closeModal()" class="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Close</button>
