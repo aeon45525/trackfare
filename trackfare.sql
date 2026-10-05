@@ -37,6 +37,37 @@ CREATE TABLE wallet_topups (
     KEY idx_user_created (user_id, created_at)
 );
 
+CREATE TABLE wallet_payment_transactions (
+    transaction_id   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    request_id_hash  CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    user_id          INT UNSIGNED NOT NULL,
+    idempotency_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    amount           DECIMAL(10,2) NOT NULL,
+    currency         CHAR(3) NOT NULL,
+    created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (transaction_id),
+    UNIQUE KEY uq_wallet_payment_request (request_id_hash),
+    UNIQUE KEY uq_wallet_payment_idempotency (idempotency_hash),
+    KEY idx_wallet_payment_user_created (user_id, created_at)
+);
+
+CREATE TABLE payment_requests (
+    request_id_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    merchant_name   VARCHAR(120) NOT NULL,
+    description     VARCHAR(180) NULL,
+    amount          DECIMAL(10,2) NULL,
+    min_amount      DECIMAL(10,2) NULL,
+    max_amount      DECIMAL(10,2) NULL,
+    currency        CHAR(3) NOT NULL DEFAULT 'PHP',
+    status          ENUM('pending','paid','expired','cancelled') NOT NULL DEFAULT 'pending',
+    expires_at      DATETIME NOT NULL,
+    paid_by         INT UNSIGNED NULL,
+    paid_at         DATETIME NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id_hash),
+    KEY idx_payment_request_status_expiry (status, expires_at)
+);
+
 CREATE TABLE driver_profiles (
     profile_id      INT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id         INT UNSIGNED NOT NULL UNIQUE,
@@ -55,6 +86,24 @@ CREATE TABLE nfc_cards (
     uid       VARCHAR(60) NOT NULL UNIQUE,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     PRIMARY KEY (card_id)
+);
+
+CREATE TABLE phone_nfc_credentials (
+    credential_id CHAR(32) NOT NULL,
+    user_id       INT UNSIGNED NOT NULL,
+    public_key    VARCHAR(2048) NOT NULL,
+    is_active     TINYINT(1) NOT NULL DEFAULT 1,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (credential_id),
+    UNIQUE KEY uq_phone_nfc_user (user_id),
+    KEY idx_phone_nfc_user (user_id)
+);
+
+CREATE TABLE phone_nfc_challenges (
+    challenge CHAR(32) NOT NULL,
+    used_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (challenge),
+    KEY idx_phone_nfc_challenge_used_at (used_at)
 );
 
 -- ============================================================
@@ -97,6 +146,19 @@ CREATE TABLE buses (
     PRIMARY KEY (bus_id)
 );
 
+CREATE TABLE bus_qr_tokens (
+    bus_id     INT UNSIGNED NOT NULL,
+    trip_id    INT UNSIGNED NOT NULL,
+    route_id   INT UNSIGNED NOT NULL,
+    stop_id    INT UNSIGNED NOT NULL,
+    token      CHAR(32) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (bus_id),
+    UNIQUE KEY uq_bus_qr_token (token),
+    KEY idx_bus_qr_expiry (expires_at)
+);
+
 -- ============================================================
 -- TRIPS & PASSENGERS
 -- ============================================================
@@ -135,7 +197,29 @@ CREATE TABLE trip_transactions (
     boarding_stop_id INT UNSIGNED NOT NULL,
     alighting_stop_id INT UNSIGNED NOT NULL,
     fare_amount      DECIMAL(10,2) NOT NULL,
+    boarding_time    DATETIME NULL,
     PRIMARY KEY (transaction_id)
+);
+
+CREATE TABLE passenger_qr_intents (
+    intent_id        CHAR(32) NOT NULL,
+    user_id          INT UNSIGNED NOT NULL,
+    token            CHAR(32) NOT NULL,
+    bus_id           INT UNSIGNED NOT NULL,
+    trip_id          INT UNSIGNED NOT NULL,
+    route_id         INT UNSIGNED NOT NULL,
+    action           ENUM('board','tap_out','settle_previous') NOT NULL,
+    card_id          INT UNSIGNED NOT NULL,
+    boarding_stop_id INT UNSIGNED NOT NULL,
+    alighting_stop_id INT UNSIGNED NULL,
+    fare_amount      DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    status           ENUM('pending','completed') NOT NULL DEFAULT 'pending',
+    expires_at       DATETIME NOT NULL,
+    created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at     DATETIME NULL,
+    PRIMARY KEY (intent_id),
+    KEY idx_qr_intent_user (user_id, status),
+    KEY idx_qr_intent_expiry (expires_at)
 );
 
 CREATE TABLE fare_splits (
