@@ -4,6 +4,7 @@
 - Open the passenger home page in Chrome on Android and use **Install TrackFare** when the browser offers it.
 - Installation and service-worker support require HTTPS (or `localhost`). The current LAN address over HTTP can still use the tap buttons, but it cannot install the PWA.
 - The passenger home page supports authenticated Tap In and Tap Out actions. Presenting the phone itself as a contactless card to the bus reader still requires a native Android HCE app.
+- If passenger Tap Out reports **TRANSACTION FAILED**, apply `migrations/20261005_passenger_fare_splits.sql` to the `trackfare` database in phpMyAdmin. Tap-out records the driver's fare share in `fare_splits`; the fare transaction is rolled back if this table or the driver's wallet column is missing.
 
 - The ESP32 currently posts taps to `192.168.1.20/TrackFare`; set the passenger app's Server address to this same host and database. Different hosts can show different wallet balances and phone-NFC links.
 - Chrome/Edge updated or reset location permissions.

@@ -427,6 +427,14 @@ function record_fare_transaction(
         return null;
     } catch (Throwable $e) {
         $conn->rollback();
+        if (!in_array($e->getMessage(), ['INSUFFICIENT BALANCE', 'WALLET NOT FOUND', 'NOT TAPED IN'], true)) {
+            error_log(sprintf(
+                'Passenger fare transaction failed (trip=%d, user=%d): %s',
+                $tripId,
+                $userId,
+                $e->getMessage()
+            ));
+        }
         return $e->getMessage() === 'INSUFFICIENT BALANCE'
             || $e->getMessage() === 'WALLET NOT FOUND'
             || $e->getMessage() === 'NOT TAPED IN'
