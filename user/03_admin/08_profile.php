@@ -203,14 +203,11 @@ if ($countResult) {
             <span class="material-symbols-outlined">payments</span>
             <span>Transactions</span>
           </a>
-          <a
-            class="hidden"
-            href="07_analytics.php"
-            aria-hidden="true"
-            tabindex="-1"
-          >
-            <span class="material-symbols-outlined">insights</span>
-            <span>Analytics</span>
+          <a class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition" href="boarding_hotspot.php">
+            <span class="material-symbols-outlined">pin_drop</span><span>Boarding Hotspots</span>
+          </a>
+          <a class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition" href="peak_boarding_time.php">
+            <span class="material-symbols-outlined">schedule</span><span>Peak Boarding Time</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full bg-blue-50 text-blue-700 font-semibold border-r-4 border-blue-700 transition"
@@ -422,6 +419,13 @@ if ($countResult) {
                   <span>Manage Drivers</span>
                   <span class="material-symbols-outlined">chevron_right</span>
                 </button>
+                <a
+                  href="../../auth/logout.php"
+                  class="w-full inline-flex items-center justify-between rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 transition"
+                >
+                  <span>Log out</span>
+                  <span class="material-symbols-outlined">logout</span>
+                </a>
                 <button
                   type="button"
                   onclick="window.location.href='05_routes_fares.php'"

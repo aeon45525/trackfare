@@ -686,15 +686,18 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
     $maxIndex         = count($stops) - 1;
     $tripStatus       = 'idle';
     $currentStopIndex = 0;
+    $displayedTripId  = 0;
+    $displayedBusId   = 0;
     $busPosition      = [
         'lat' => (float) $stops[0]['lat'],
         'lng' => (float) $stops[0]['lng'],
     ];
 
     if ($stmt = $conn->prepare(
-        'SELECT trip_id, status, current_stop_index
+        'SELECT trip_id, bus_id, status, current_stop_index
          FROM trips
          WHERE route_id = ? AND status = ?
+         ORDER BY start_time DESC, trip_id DESC
          LIMIT 1'
     )) {
         $active = 'active';
@@ -704,6 +707,8 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
         $stmt->close();
 
         if ($row) {
+            $displayedTripId  = (int) $row['trip_id'];
+            $displayedBusId   = (int) $row['bus_id'];
             $tripStatus       = $row['status'];
             $currentStopIndex = max(0, min($maxIndex, (int) $row['current_stop_index']));
             $busPosition      = [
@@ -714,6 +719,8 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
     }
 
     if (is_array($sharedState) && (int)($sharedState['routeId'] ?? 0) === $routeId) {
+        $displayedTripId = (int) ($sharedState['tripId'] ?? $displayedTripId);
+        $displayedBusId = (int) ($sharedState['busId'] ?? $displayedBusId);
         $tripStatus = (string)($sharedState['status'] ?? $tripStatus);
 
         $currentStopIndex = max(
@@ -738,6 +745,8 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
 
     echo json_encode([
         'routeId'          => $routeId,
+        'tripId'           => $displayedTripId,
+        'busId'            => $displayedBusId,
         'routeName'        => $routeInfo['route_name'],
         'displayName'      => $routeInfo['display_name'],
         'stops'            => $stops,

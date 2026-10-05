@@ -29,7 +29,7 @@ if ($stmt = $conn->prepare('SELECT full_name, lat, lng FROM users WHERE user_id 
 
 // Check if passenger has an active trip
 if ($stmt = $conn->prepare(
-    'SELECT ap.lat, ap.lng, ap.boarding_stop_id, t.trip_id, t.route_id, t.current_stop_index, bs.stop_name AS boarding_stop
+    'SELECT ap.lat, ap.lng, ap.boarding_stop_id, t.trip_id, t.route_id, t.bus_id, t.current_stop_index, bs.stop_name AS boarding_stop
      FROM active_passengers ap
      JOIN trips t ON ap.trip_id = t.trip_id
      LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
@@ -497,6 +497,16 @@ $activeNav = 'routes';
               </option>
             <?php endforeach; ?>
           </select>
+          <button
+            type="button"
+            id="btn-all-buses"
+            class="mt-3 w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800"
+          >
+            Show all available buses
+          </button>
+          <p class="mt-2 text-xs text-on-surface-variant">
+            Bus markers show live GPS when available; otherwise they show the bus's last route stop.
+          </p>
         </section>
 
         <section class="map-card">
@@ -527,6 +537,10 @@ $activeNav = 'routes';
                 Stops
               </button>
             </div>
+            <a href="bus_capacity.php" class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant bg-white px-4 py-2.5 text-sm font-semibold text-primary">
+              <span class="material-symbols-outlined text-[18px]">speed</span>
+              View live bus capacity
+            </a>
           </div>
         </section>
 
@@ -750,6 +764,7 @@ $activeNav = 'routes';
       var HAS_ACTIVE_TRIP = <?= $hasActiveTrip ? 'true' : 'false' ?>;
       var ACTIVE_TRIP_ID = <?= (int)($activeTripData['trip_id'] ?? 0) ?>;
       var ACTIVE_TRIP_ROUTE_ID = <?= (int)($activeTripData['route_id'] ?? 0) ?>;
+      var PRIMARY_BUS_ID = <?= (int)($activeTripData['bus_id'] ?? 0) ?>;
       var LAST_PAX_UPDATE = 0;
       var passengerLocationWatchId = null;
 
@@ -762,6 +777,7 @@ $activeNav = 'routes';
       var stopsListSelect = document.getElementById('stops-list-select');
       var btnShowStops = document.getElementById('btn-show-stops');
       var btnBusNear = document.getElementById('btn-bus-near');
+      var btnAllBuses = document.getElementById('btn-all-buses');
 
       var map = null;
       var mapsReady = false;
@@ -769,6 +785,13 @@ $activeNav = 'routes';
       var routeLine = null;
       var stopMkrs = [];
       var busMkr = null;
+      var capacityInfoWindow = null;
+      var capacityData = null;
+      var capacityInfoOpen = false;
+      var capacityPollTimer = null;
+      var otherBusMarkers = {};
+      var busLocationsInFlight = false;
+      var hasFitAllBusLocations = false;
       var humanMkr = null;
       var busPollTimer = null;
       var currentRouteId = null;
@@ -1104,13 +1127,165 @@ $activeNav = 'routes';
       }
 
       function mkBusMarker(position) {
-        return new google.maps.Marker({
+        var marker = new google.maps.Marker({
           position: position,
           map: map,
           title: 'Active bus',
           zIndex: 2000,
           icon: busMarkerIcon(),
         });
+        marker.addListener('click', function () {
+          capacityInfoOpen = true;
+          if (!capacityInfoWindow) {
+            capacityInfoWindow = new google.maps.InfoWindow();
+            capacityInfoWindow.addListener('closeclick', function () {
+              capacityInfoOpen = false;
+            });
+          }
+          capacityInfoWindow.setContent(capacityInfoContent());
+          capacityInfoWindow.open(map, marker);
+          refreshBusCapacity();
+        });
+        return marker;
+      }
+
+      function capacityInfoContent() {
+        if (!capacityData) {
+          return '<div class="p-2 text-sm">Loading bus capacity…</div>';
+        }
+        var statusText = {
+          available: 'Available',
+          filling_up: 'Filling up',
+          full: 'Full',
+          no_data: 'No data',
+        }[capacityData.status] || 'No data';
+        var countText = capacityData.capacity === null
+          ? 'No data'
+          : capacityData.current_passengers + '/' + capacityData.capacity;
+        return '<div class="min-w-[170px] p-2"><strong>' +
+          escapeHtml(capacityData.bus_number || 'Active bus') + '</strong><br>' +
+          '<span>' + escapeHtml(countText) + '</span><br>' +
+          '<span>' + escapeHtml(capacityData.percent === null ? statusText : statusText + ' · ' + capacityData.percent + '%') +
+          '</span></div>';
+      }
+
+      function busLocationPopup(bus) {
+        var capacity = bus.capacity === null
+          ? 'Capacity unavailable'
+          : bus.current_passengers + '/' + bus.capacity + ' passengers';
+        return '<div class="min-w-[180px] p-2"><strong>' +
+          escapeHtml(bus.bus_number) + '</strong><br><span>' +
+          escapeHtml(bus.route_name) + '</span><br><span>Driver: ' +
+          escapeHtml(bus.driver_name) + '</span><br><span>Location: ' +
+          escapeHtml(bus.current_stop || bus.location_source) + '</span><br><span>' +
+          escapeHtml(capacity) + '</span><br><small>' +
+          escapeHtml(bus.location_source) + '</small></div>';
+      }
+
+      function hidePrimaryBusFleetMarker() {
+        if (!PRIMARY_BUS_ID) return;
+        Object.keys(otherBusMarkers).forEach(function (tripId) {
+          var marker = otherBusMarkers[tripId];
+          if (Number(marker.trackfareBus.bus_id) === Number(PRIMARY_BUS_ID)) {
+            marker.setMap(null);
+          }
+        });
+      }
+
+      function refreshAllBusLocations() {
+        if (busLocationsInFlight || !mapsReady || !map) return Promise.resolve();
+        busLocationsInFlight = true;
+        return fetch('bus_capacity.php?action=locations&_=' + Date.now(), {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+          .then(function (response) {
+            if (!response.ok) throw new Error('Unable to load available bus locations');
+            return response.json();
+          })
+          .then(function (data) {
+            if (!Array.isArray(data.buses)) throw new Error(data.error || 'Invalid bus location response');
+            var current = {};
+            data.buses.forEach(function (bus) {
+              var tripId = String(bus.trip_id);
+              current[tripId] = true;
+              if (!Number.isFinite(Number(bus.lat)) || !Number.isFinite(Number(bus.lng))) return;
+
+              if (Number(bus.bus_id) === Number(PRIMARY_BUS_ID) && busMkr) {
+                return;
+              }
+
+              var marker = otherBusMarkers[tripId];
+              if (!marker) {
+                marker = new google.maps.Marker({
+                  map: map,
+                  position: latLng(Number(bus.lat), Number(bus.lng)),
+                  title: bus.bus_number + ' · ' + bus.route_name,
+                  zIndex: 1900,
+                  icon: busMarkerIcon(),
+                });
+                marker.addListener('click', function () {
+                  var info = new google.maps.InfoWindow({ content: busLocationPopup(marker.trackfareBus) });
+                  info.open(map, marker);
+                });
+                otherBusMarkers[tripId] = marker;
+              }
+              marker.trackfareBus = bus;
+              marker.setPosition(latLng(Number(bus.lat), Number(bus.lng)));
+              marker.setTitle(bus.bus_number + ' · ' + bus.route_name + ' · ' + bus.location_source);
+              marker.setMap(map);
+            });
+
+            Object.keys(otherBusMarkers).forEach(function (tripId) {
+              if (!current[tripId]) {
+                otherBusMarkers[tripId].setMap(null);
+                delete otherBusMarkers[tripId];
+              } else if (Number(otherBusMarkers[tripId].trackfareBus.bus_id) === Number(PRIMARY_BUS_ID) && busMkr) {
+                otherBusMarkers[tripId].setMap(null);
+              }
+            });
+            if (data.buses.length && !hasFitAllBusLocations) {
+              hasFitAllBusLocations = true;
+              fitOverview();
+            }
+          })
+          .catch(function (error) {
+            console.error(error);
+          })
+          .finally(function () {
+            busLocationsInFlight = false;
+          });
+      }
+
+      function refreshBusCapacity() {
+        if (!currentRouteId) return Promise.resolve();
+        var params = new URLSearchParams({ action: 'get', route_id: currentRouteId, _: Date.now() });
+        return fetch('bus_capacity.php?' + params.toString(), {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+          .then(function (response) {
+            if (!response.ok) throw new Error('Capacity request failed');
+            return response.json();
+          })
+          .then(function (data) {
+            if (!Array.isArray(data.buses)) throw new Error(data.error || 'Invalid capacity response');
+            capacityData = data.buses.find(function (bus) {
+              return Number(bus.bus_id) === Number(PRIMARY_BUS_ID);
+            }) || data.buses[0] || { status: 'no_data', capacity: null };
+            if (capacityInfoOpen && capacityInfoWindow && busMkr) {
+              capacityInfoWindow.setContent(capacityInfoContent());
+              capacityInfoWindow.open(map, busMkr);
+            }
+          })
+          .catch(function () {
+            capacityData = { status: 'no_data', capacity: null };
+            if (capacityInfoOpen && capacityInfoWindow && busMkr) {
+              capacityInfoWindow.setContent('<div class="p-2 text-sm">Capacity is temporarily unavailable.</div>');
+            }
+          });
       }
 
       function setBusPosition(lat, lng, panToBus) {
@@ -1122,7 +1297,7 @@ $activeNav = 'routes';
           busMkr.setIcon(busMarkerIcon());
         }
         lastBusPoint = { lat: lat, lng: lng };
-        if (map && panToBus !== false) {
+        if (map && panToBus !== false && Object.keys(otherBusMarkers).length === 0) {
           map.panTo(pos);
           if (!hasCenteredOnBus && map.getZoom() < 14) {
             map.setZoom(14);
@@ -1222,6 +1397,13 @@ $activeNav = 'routes';
           bounds.extend(humanMkr.getPosition());
           hasPoints = true;
         }
+        Object.keys(otherBusMarkers).forEach(function (tripId) {
+          var marker = otherBusMarkers[tripId];
+          if (marker.getMap()) {
+            bounds.extend(marker.getPosition());
+            hasPoints = true;
+          }
+        });
         if (hasPoints) {
           map.fitBounds(bounds, 48);
           map.setHeading(0);
@@ -1244,6 +1426,10 @@ $activeNav = 'routes';
       }
 
       function clearMapLayers() {
+        if (capacityInfoWindow) {
+          capacityInfoWindow.close();
+          capacityInfoOpen = false;
+        }
         if (routeLine) {
           routeLine.setMap(null);
           routeLine = null;
@@ -1252,6 +1438,10 @@ $activeNav = 'routes';
           busMkr.setMap(null);
           busMkr = null;
         }
+        Object.keys(otherBusMarkers).forEach(function (tripId) {
+          otherBusMarkers[tripId].setMap(null);
+        });
+        otherBusMarkers = {};
         stopBusAnimation();
         clearStopMarkers();
         if (lineTaken) { lineTaken.setMap(null); lineTaken = null; }
@@ -1266,6 +1456,10 @@ $activeNav = 'routes';
         if (busPollTimer) {
           clearInterval(busPollTimer);
           busPollTimer = null;
+        }
+        if (capacityPollTimer) {
+          clearInterval(capacityPollTimer);
+          capacityPollTimer = null;
         }
       }
 
@@ -1334,6 +1528,10 @@ $activeNav = 'routes';
       function updateBusFromGps(data) {
         if (!data || !data.busPosition || !mapsReady) return Promise.resolve(false);
         if (String(data.routeId) !== String(currentRouteId)) return Promise.resolve(false);
+        if (data.busId) {
+          PRIMARY_BUS_ID = Number(data.busId);
+          hidePrimaryBusFleetMarker();
+        }
 
         var from = Number(data.legFrom);
         var to = Number(data.legTo);
@@ -1429,6 +1627,7 @@ $activeNav = 'routes';
               useLive: !!d.useLive && isFinite(lat) && isFinite(lng),
               lat: lat,
               lng: lng,
+              busId: Number(d.bus_id) || 0,
             };
             return live;
           })
@@ -1439,6 +1638,10 @@ $activeNav = 'routes';
       }
 
       function showLiveBus(lv) {
+        if (lv.busId) {
+          PRIMARY_BUS_ID = Number(lv.busId);
+          hidePrimaryBusFleetMarker();
+        }
         animateBusPosition(lv.lat, lv.lng);
         setProgressIndex(0);
         drawTraveledTrail(0, null, null, 0);
@@ -1482,6 +1685,13 @@ $activeNav = 'routes';
         stopBusPolling();
         fetchBusPosition();
         busPollTimer = setInterval(fetchBusPosition, BUS_POLL_MS);
+        refreshBusCapacity();
+        refreshAllBusLocations();
+        if (capacityPollTimer) clearInterval(capacityPollTimer);
+        capacityPollTimer = setInterval(function () {
+          refreshBusCapacity();
+          refreshAllBusLocations();
+        }, 12000);
       }
 
       function showMapPanel(show) {
@@ -1561,6 +1771,8 @@ $activeNav = 'routes';
           return Promise.resolve();
         }
 
+        capacityData = null;
+        hasFitAllBusLocations = false;
         currentRouteId = routeId;
         currentStops = route.stops.slice();
         renderStopsModal();
@@ -1614,6 +1826,18 @@ $activeNav = 'routes';
       }
 
       routeSelect.addEventListener('change', onRouteChange);
+      if (btnAllBuses) {
+        btnAllBuses.addEventListener('click', function () {
+          var routeIds = Object.keys(ROUTES);
+          if (!routeIds.length) return;
+          var routeId = ACTIVE_TRIP_ROUTE_ID || Number(routeIds[0]);
+          routeSelect.value = String(routeId);
+          drawSelectedRoute(routeId).catch(function () {
+            mapEmpty.innerHTML = '<p class="text-sm text-on-surface-variant px-4">Could not load the map. Check your connection and try again.</p>';
+            showMapPanel(false);
+          });
+        });
+      }
       if (btnShowStops) {
         btnShowStops.addEventListener('click', openStopsModal);
       }

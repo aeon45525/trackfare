@@ -397,14 +397,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['action'])) {
             <span class="material-symbols-outlined">payments</span>
             <span>Transactions</span>
           </a>
-          <a
-            class="hidden"
-            href="07_analytics.php"
-            aria-hidden="true"
-            tabindex="-1"
-          >
-            <span class="material-symbols-outlined">insights</span>
-            <span>Analytics</span>
+          <a class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition" href="boarding_hotspot.php">
+            <span class="material-symbols-outlined">pin_drop</span><span>Boarding Hotspots</span>
+          </a>
+          <a class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition" href="peak_boarding_time.php">
+            <span class="material-symbols-outlined">schedule</span><span>Peak Boarding Time</span>
           </a>
           <a
             class="flex items-center gap-3 px-5 py-3 rounded-r-full text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition"
