@@ -198,6 +198,7 @@ class MainActivity : Activity() {
             webView.restoreState(savedInstanceState)
         }
         refreshNfcButton()
+        requestInitialLocationPermission()
     }
 
     override fun onResume() {
@@ -267,7 +268,29 @@ class MainActivity : Activity() {
             pendingGeolocationCallback?.invoke(pendingGeolocationOrigin, granted, false)
             pendingGeolocationCallback = null
             pendingGeolocationOrigin = null
+        } else if (requestCode == INITIAL_LOCATION_PERMISSION_REQUEST
+            && grantResults.none { it == PackageManager.PERMISSION_GRANTED }
+        ) {
+            Toast.makeText(
+                this,
+                "Location permission is off. Nearby stop features may be limited.",
+                Toast.LENGTH_LONG,
+            ).show()
         }
+    }
+
+    private fun requestInitialLocationPermission() {
+        val hasLocationPermission =
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val preferences = getPreferences(MODE_PRIVATE)
+        if (hasLocationPermission || preferences.getBoolean(LOCATION_PERMISSION_ASKED, false)) return
+
+        preferences.edit().putBoolean(LOCATION_PERMISSION_ASKED, true).apply()
+        requestPermissions(
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+            INITIAL_LOCATION_PERMISSION_REQUEST,
+        )
     }
 
     private fun createToolbar(): LinearLayout {
@@ -306,7 +329,7 @@ class MainActivity : Activity() {
     private fun migrateServerUrl() {
         val savedUrl = preferences.getString(PhoneNfcStore.SERVER_URL, null) ?: return
         val savedHost = runCatching { Uri.parse(savedUrl).host }.getOrNull()
-        if (savedHost == "192.168.1.56") {
+        if (savedHost == "192.168.1.20" || savedHost == "192.168.1.56") {
             preferences.edit()
                 .putString(PhoneNfcStore.SERVER_URL, PhoneNfcStore.DEFAULT_SERVER_URL)
                 .remove(PhoneNfcStore.CREDENTIAL_ID)
@@ -318,7 +341,7 @@ class MainActivity : Activity() {
     private fun showServerDialog() {
         val field = EditText(this).apply {
             setSingleLine(true)
-            hint = "http://192.168.1.20/trackfare/"
+            hint = "http://192.168.1.67/trackfare/"
             setText(serverUrl)
             setSelection(text.length)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
@@ -516,5 +539,7 @@ class MainActivity : Activity() {
         private const val DOWNLOAD_PERMISSION_REQUEST = 44
         private const val GEOLOCATION_PERMISSION_REQUEST = 45
         private const val PAYMENT_QR_SCAN_REQUEST = 46
+        private const val INITIAL_LOCATION_PERMISSION_REQUEST = 47
+        private const val LOCATION_PERMISSION_ASKED = "location_permission_asked"
     }
 }

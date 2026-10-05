@@ -75,10 +75,11 @@ if ($stmt = $conn->prepare(
      FROM active_passengers ap
      JOIN trips t ON ap.trip_id = t.trip_id
      LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
-     WHERE ap.user_id = ?
+     WHERE ap.user_id = ? AND ap.tap_state = ?
      LIMIT 1'
 )) {
-    $stmt->bind_param('i', $userId);
+    $tapState = 'in';
+    $stmt->bind_param('is', $userId, $tapState);
     $stmt->execute();
     $stmt->store_result();
     $stmt->bind_result($activeTripId, $tripStatus, $tripStartTime, $tripCurrentStopIndex, $boardingStopId, $activeRouteId, $boardedStopResult);
@@ -585,8 +586,8 @@ $activeNav = 'home';
           </div>
 
           <a
-            href="../../TrackFare-Passenger-v1.12.apk"
-            download="TrackFare-Passenger-v1.12.apk"
+            href="../../TrackFare-Passenger-v1.15.apk"
+            download="TrackFare-Passenger-v1.15.apk"
             class="phone-panel flex items-center justify-between gap-3 p-4 text-on-surface no-underline"
             aria-label="Download the TrackFare Android app"
           >
@@ -595,7 +596,7 @@ $activeNav = 'home';
                 <span class="material-symbols-outlined">android</span>
               </span>
               <span class="min-w-0">
-                <span class="block text-sm font-bold">TrackFare Android app v1.12</span>
+                <span class="block text-sm font-bold">TrackFare Android app v1.15</span>
                 <span class="block text-xs text-on-surface-variant">Download the passenger app</span>
               </span>
             </span>

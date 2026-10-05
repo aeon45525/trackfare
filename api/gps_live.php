@@ -2,6 +2,7 @@
 session_start();
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
+require_once __DIR__ . '/../config/db.php';
 
 $role = $_SESSION['role'] ?? '';
 if (empty($_SESSION['user_id']) || !in_array($role, ['driver', 'passenger'], true)) {
@@ -31,6 +32,38 @@ if (!is_array($d)) {
 $age    = time() - (int)($d['ts'] ?? 0);
 $online = $age <= 15;
 $fix    = !empty($d['fix']);
+if ($role === 'driver' && $online && $fix && isset($d['lat'], $d['lng'])) {
+    $userId = (int) $_SESSION['user_id'];
+    if ($stmt = $conn->prepare(
+        'SELECT bus_id FROM trips WHERE driver_id = ? AND status = ? LIMIT 1'
+    )) {
+        $active = 'active';
+        $stmt->bind_param('is', $userId, $active);
+        $stmt->execute();
+        $trip = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        $lat = (float) $d['lat'];
+        $lng = (float) $d['lng'];
+        if ($trip && (int) $trip['bus_id'] === (int) ($d['bus_id'] ?? 0)
+            && is_finite($lat) && is_finite($lng)
+            && $lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180
+        ) {
+            if ($stmt = $conn->prepare(
+                'UPDATE users SET lat = ?, lng = ? WHERE user_id = ? AND role = ?'
+            )) {
+                $driverRole = 'driver';
+                $stmt->bind_param('ddis', $lat, $lng, $userId, $driverRole);
+                if (!$stmt->execute()) {
+                    error_log('Could not save live driver location: ' . $stmt->error);
+                }
+                $stmt->close();
+            } else {
+                error_log('Could not prepare live driver location update: ' . $conn->error);
+            }
+        }
+    }
+}
 $useLive = $online && $fix && $tripIdle;
 
 $reason = '';

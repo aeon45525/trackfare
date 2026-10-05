@@ -65,7 +65,7 @@ function resolve_active_trip(mysqli $conn, int $requestedTripId): ?array
 
     if ($fallback && isset($fallback['bus_id'], $fallback['driver_id'])) {
         if ($stmt = $conn->prepare(
-            'SELECT trip_id, route_id, current_stop_index, status, start_time
+            'SELECT trip_id, bus_id, route_id, current_stop_index, status, driver_id, start_time
              FROM trips WHERE bus_id = ? AND driver_id = ? AND status = ? LIMIT 1'
         )) {
             $active = 'active';
@@ -87,41 +87,61 @@ if (!$trip) {
 
 $activeTripId = (int) $trip['trip_id'];
 $route_id      = (int) $trip['route_id'];
-$boardingStopId = resolve_boarding_stop_id($conn, $trip);
 
 $check = null;
 if ($stmt = $conn->prepare(
     'SELECT ap.trip_id, ap.boarding_stop_id, ap.card_id, ap.user_id
      FROM active_passengers ap
-     WHERE ap.user_id = ?
+     WHERE ap.user_id = ? AND ap.tap_state = ?
      LIMIT 1'
 )) {
-    $stmt->bind_param('i', $user_id);
+    $tapState = 'in';
+    $stmt->bind_param('is', $user_id, $tapState);
     $stmt->execute();
     $check = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 }
 
-if ($boardingStopId === null) {
-    exit('INVALID STOP');
-}
-
 if ($check) {
-    if ((int) $check['trip_id'] !== $activeTripId) {
-        exit('ALREADY TAPED IN ON ANOTHER TRIP');
-    }
-    if (empty($trip['start_time'])) {
-        exit('WAIT FOR DRIVER TO START');
+    $settlementTripId = (int) $check['trip_id'];
+    $settlementRouteId = $route_id;
+
+    if ($settlementTripId !== $activeTripId) {
+        $previousTrip = null;
+        if ($stmt = $conn->prepare(
+            'SELECT bus_id, route_id, status FROM trips WHERE trip_id = ? LIMIT 1'
+        )) {
+            $stmt->bind_param('i', $settlementTripId);
+            $stmt->execute();
+            $previousTrip = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+        }
+        if (!$previousTrip
+            || $previousTrip['status'] !== 'completed'
+            || (int) $previousTrip['bus_id'] !== (int) $trip['bus_id']
+        ) {
+            exit('ALREADY TAPED IN ON ANOTHER TRIP');
+        }
+        $settlementRouteId = (int) $previousTrip['route_id'];
+        $alightingStopId = get_route_last_stop_id($conn, $settlementRouteId);
+    } else {
+        if (empty($trip['start_time'])) {
+            exit('WAIT FOR DRIVER TO START');
+        }
+        $alightingStopId = resolve_trip_current_stop_id($conn, $trip);
     }
 
+    if ($alightingStopId === null) {
+        exit('INVALID STOP');
+    }
     $result = process_passenger_tap_out(
         $conn,
-        $activeTripId,
-        $route_id,
+        $settlementTripId,
+        $settlementRouteId,
         $user_id,
         (int) $check['card_id'],
         (int) $check['boarding_stop_id'],
-        $boardingStopId
+        $alightingStopId
     );
 
     if (!$result['ok']) {
@@ -130,6 +150,11 @@ if ($check) {
 
     echo 'TAP OUT SUCCESS | FARE: ' . number_format($result['fare'], 2);
     exit;
+}
+
+$boardingStopId = resolve_boarding_stop_id($conn, $trip);
+if ($boardingStopId === null) {
+    exit('INVALID STOP');
 }
 
 // Get the stop location for passenger position tracking

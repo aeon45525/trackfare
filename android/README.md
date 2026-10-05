@@ -6,7 +6,7 @@ The APK embeds the existing TrackFare PHP passenger pages inside the app, so log
 
 The website does not need to be deployed. Start Apache and MySQL in XAMPP on the computer running TrackFare, then open the app's **Server** setting:
 
-- Physical Android phone: use `http://192.168.1.20/TrackFare/` on the same Wi-Fi as the ESP32; the app migrates a previously saved `192.168.1.56` setting to this host. The Android Emulator can use `http://10.0.2.2/trackfare/` from the Server setting.
+- Physical Android phone: use the XAMPP computer's current Wi-Fi IPv4 address on the same Wi-Fi as the ESP32 (currently `http://192.168.1.67/TrackFare/`). This host must match the one configured in `esp.ino`. The Android Emulator can use `http://10.0.2.2/trackfare/` from the Server setting.
 - Both the phone app and ESP32 must reach the same XAMPP host and TrackFare database. Allow Apache through Windows Firewall if prompted.
 
 Sign in with a passenger account. Keep Apache and MySQL running while using the app; the existing passenger pages and phone-NFC registration are served by that local XAMPP instance. The APK download link on the passenger home page saves the package to Android Downloads.

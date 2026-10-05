@@ -155,16 +155,13 @@ if (!$trip) {
 }
 
 $routeId = (int) $trip['route_id'];
-$stopId = resolve_trip_current_stop_id($conn, $trip);
-if ($stopId === null) {
-    phone_nfc_response(false, 'Unable to determine bus stop.', 409);
-}
 
 $existing = null;
 if ($stmt = $conn->prepare(
-    'SELECT trip_id, card_id, boarding_stop_id FROM active_passengers WHERE user_id = ? LIMIT 1'
+    'SELECT trip_id, card_id, boarding_stop_id FROM active_passengers WHERE user_id = ? AND tap_state = ? LIMIT 1'
 )) {
-    $stmt->bind_param('i', $userId);
+    $tapState = 'in';
+    $stmt->bind_param('is', $userId, $tapState);
     $stmt->execute();
     $existing = $stmt->get_result()->fetch_assoc();
     $stmt->close();
@@ -173,7 +170,7 @@ if ($stmt = $conn->prepare(
 if ($existing) {
     $settlementTripId = (int) $existing['trip_id'];
     $settlementRouteId = $routeId;
-    $settlementStopId = $stopId;
+    $settlementStopId = null;
 
     if ($settlementTripId !== $tripId) {
         $previousTrip = null;
@@ -192,11 +189,13 @@ if ($existing) {
         }
         $settlementRouteId = (int) $previousTrip['route_id'];
         $settlementStopId = get_route_last_stop_id($conn, $settlementRouteId);
-        if ($settlementStopId === null) {
-            phone_nfc_response(false, 'Unable to determine the completed trip terminal.', 409);
-        }
     } elseif (empty($trip['start_time'])) {
         phone_nfc_response(false, 'Wait for the driver to start before tapping out.', 409);
+    } else {
+        $settlementStopId = resolve_trip_current_stop_id($conn, $trip);
+    }
+    if ($settlementStopId === null) {
+        phone_nfc_response(false, 'Unable to determine bus stop.', 409);
     }
     $result = process_passenger_tap_out(
         $conn, $settlementTripId, $settlementRouteId, $userId, (int) $existing['card_id'],
@@ -206,6 +205,11 @@ if ($existing) {
         phone_nfc_response(false, (string) $result['message'], 409);
     }
     phone_nfc_response(true, 'TAP OUT SUCCESS', 200, ['fare' => (float) $result['fare']]);
+}
+
+$stopId = resolve_trip_current_stop_id($conn, $trip);
+if ($stopId === null) {
+    phone_nfc_response(false, 'Unable to determine bus stop.', 409);
 }
 
 $stopLat = null;

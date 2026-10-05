@@ -1526,7 +1526,13 @@ $activeNav = 'routes';
       }
 
       function updateBusFromGps(data) {
-        if (!data || !data.busPosition || !mapsReady) return Promise.resolve(false);
+        if (!data || !mapsReady) return Promise.resolve(false);
+        if (data.locationAvailable === false || !data.busPosition) {
+          stopBusAnimation();
+          if (busMkr) busMkr.setMap(null);
+          lastBusPoint = null;
+          return Promise.resolve(false);
+        }
         if (String(data.routeId) !== String(currentRouteId)) return Promise.resolve(false);
         if (data.busId) {
           PRIMARY_BUS_ID = Number(data.busId);
@@ -1667,7 +1673,7 @@ $activeNav = 'routes';
           })
           .then(function (data) {
             return refreshLiveGps().then(function (lv) {
-              if (lv.useLive) {
+              if (lv.useLive && data.locationAvailable !== false) {
                 showLiveBus(lv);
               } else {
                 updateBusFromGps(data);

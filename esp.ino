@@ -13,9 +13,9 @@
   // =====================================================
   const char* ssid     = "PLDTHOMEFIBRB6AgP-EXT";
   const char* password = "P@ssword01";
-  const char* tapUrl   = "http://192.168.1.56/TrackFare/api/tap.php?action=card";
-  const char* phoneTapUrl = "http://192.168.1.56/TrackFare/api/tap.php?action=phone_nfc";
-  const char* gpsUrl   = "http://192.168.1.56/TrackFare/api/gps_update.php";
+  const char* tapUrl   = "http://192.168.1.67/TrackFare/api/tap.php?action=card";
+  const char* phoneTapUrl = "http://192.168.1.67/TrackFare/api/tap.php?action=phone_nfc";
+  const char* gpsUrl   = "http://192.168.1.67/TrackFare/api/gps_update.php";
   const char* gpsToken = "8f71a65d9c3e42b7a104de5f6c98a231d72b4e0f9a53c681e2f07b4a9d6c1358";
 
   #define BUS_ID             1
@@ -442,7 +442,7 @@
                   tag, ESP.getFreeHeap(), ESP.getMinFreeHeap(), (int)WiFi.status(), WiFi.RSSI());
     WiFiClient probe;
     unsigned long t = millis();
-    bool ok = probe.connect(IPAddress(192, 168, 1, 20), 80, 2000);
+    bool ok = probe.connect(IPAddress(192, 168, 1, 67), 80, 2000);
     Serial.printf("NETDIAG[%s] raw TCP to server:80 = %s (%lu ms)\n", tag, ok ? "OK" : "FAILED", millis() - t);
     probe.stop();
   }

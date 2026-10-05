@@ -302,6 +302,31 @@ function gps_write_shared_state(array $payload): void
     fclose($fp);
 }
 
+function gps_store_driver_position(mysqli $conn, int $driverId, float $lat, float $lng): bool
+{
+    if ($driverId < 1 || !is_finite($lat) || !is_finite($lng)
+        || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180
+    ) {
+        return false;
+    }
+
+    if (!$stmt = $conn->prepare(
+        'UPDATE users SET lat = ?, lng = ? WHERE user_id = ? AND role = ?'
+    )) {
+        error_log('Could not prepare driver location update: ' . $conn->error);
+        return false;
+    }
+
+    $role = 'driver';
+    $stmt->bind_param('ddis', $lat, $lng, $driverId, $role);
+    $updated = $stmt->execute();
+    if (!$updated) {
+        error_log('Could not save driver location: ' . $stmt->error);
+    }
+    $stmt->close();
+    return $updated;
+}
+
 /* ── passenger / driver status APIs ───────────────────────────── */
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
     && ($_SESSION['role'] ?? '') === 'passenger'
@@ -396,6 +421,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         exit;
     }
 
+    if (!gps_store_driver_position($conn, $driverId, $lat, $lng)) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'message' => 'Could not save driver location'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     gps_write_shared_state([
         'routeId' => (int) $trip['route_id'],
         'tripId' => (int) $trip['trip_id'],
@@ -453,10 +484,11 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
          FROM active_passengers ap
          JOIN trips t ON ap.trip_id = t.trip_id
          LEFT JOIN stops bs ON ap.boarding_stop_id = bs.stop_id
-         WHERE ap.user_id = ?
+         WHERE ap.user_id = ? AND ap.tap_state = ?
          LIMIT 1'
     )) {
-        $stmt->bind_param('i', $userId);
+        $tapState = 'in';
+        $stmt->bind_param('is', $userId, $tapState);
         $stmt->execute();
         $active = $stmt->get_result()->fetch_assoc();
         $stmt->close();
@@ -490,38 +522,7 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'passenger' && $_GET
         } elseif ($active && $active['status'] === 'active') {
             $routeId = (int) $active['route_id'];
             $activeTripId = (int) $active['trip_id'];
-            $currentStopIndex = (int) $active['current_stop_index'];
-            $sharedState = gps_read_shared_state();
-            $sharedStopIndex = filter_var(
-                is_array($sharedState) ? ($sharedState['currentStopIndex'] ?? null) : null,
-                FILTER_VALIDATE_INT
-            );
-            $sharedStateMatchesTrip = is_array($sharedState)
-                && (int) ($sharedState['tripId'] ?? 0) === $activeTripId
-                && (int) ($sharedState['routeId'] ?? 0) === $routeId
-                && (int) ($sharedState['updatedAt'] ?? 0) >= time() - 15
-                && (int) ($sharedState['updatedAt'] ?? 0) <= time() + 5
-                && $sharedStopIndex !== false
-                && $sharedStopIndex !== null
-                && $sharedStopIndex >= 0;
-            if ($sharedStateMatchesTrip) {
-                $routeStops = fare_route_data($conn, $routeId)['stops'];
-                if ($sharedStopIndex < count($routeStops)) {
-                    $currentStopIndex = $sharedStopIndex;
-                } else {
-                    $sharedStateMatchesTrip = false;
-                }
-            }
-            if (!$sharedStateMatchesTrip) {
-                $simulation = gps_simulation_tick($conn, $routeId, $activeTripId);
-                if (!empty($simulation['available'])) {
-                    $currentStopIndex = (int) $simulation['currentStopIndex'];
-                }
-            }
-            $currentStopId = get_route_stop_id_at_index($conn, $routeId, (int) $active['current_stop_index']);
-            if ($currentStopIndex !== (int) $active['current_stop_index']) {
-                $currentStopId = get_route_stop_id_at_index($conn, $routeId, $currentStopIndex);
-            }
+            $currentStopId = resolve_trip_current_stop_id($conn, $active);
             $currentStop = 'In transit';
 
             if ($currentStopId !== null) {
@@ -591,8 +592,8 @@ if (isset($_GET['action']) && ($_SESSION['role'] ?? '') === 'driver' && $_GET['a
 
         if ($stmt = $conn->prepare(
                                 'SELECT u.user_id, u.full_name, ap.boarding_stop_id,
-                                        COALESCE(ap.lat, u.lat, bs.lat) AS passenger_lat,
-                                        COALESCE(ap.lng, u.lng, bs.lng) AS passenger_lng,
+                                        COALESCE(ap.lat, u.lat) AS passenger_lat,
+                                        COALESCE(ap.lng, u.lng) AS passenger_lng,
                     bs.stop_name AS boarding_stop
                          FROM users u
                          LEFT JOIN active_passengers ap
@@ -640,10 +641,8 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
     }
 
     $requestedRouteId = isset($_GET['route_id']) ? max(1, (int) $_GET['route_id']) : 0;
-
     $sharedState = gps_read_shared_state();
     $routeId = $requestedRouteId;
-    $simulationTripId = 0;
 
     if ($stmt = $conn->prepare(
         'SELECT t.trip_id, t.route_id
@@ -667,7 +666,6 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
             }
 
             if ($routeId === $passengerRouteId) {
-                $simulationTripId = (int) $passengerTrip['trip_id'];
             }
         }
     }
@@ -713,16 +711,19 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
     $currentStopIndex = 0;
     $displayedTripId  = 0;
     $displayedBusId   = 0;
+    $locationAvailable = false;
     $busPosition      = [
         'lat' => (float) $stops[0]['lat'],
         'lng' => (float) $stops[0]['lng'],
     ];
 
     if ($stmt = $conn->prepare(
-        'SELECT trip_id, bus_id, status, current_stop_index
-         FROM trips
-         WHERE route_id = ? AND status = ?
-         ORDER BY start_time DESC, trip_id DESC
+        'SELECT t.trip_id, t.bus_id, t.driver_id, t.status, t.current_stop_index,
+                u.lat AS driver_lat, u.lng AS driver_lng
+         FROM trips t
+         JOIN users u ON u.user_id = t.driver_id
+         WHERE t.route_id = ? AND t.status = ?
+         ORDER BY t.start_time DESC, t.trip_id DESC
          LIMIT 1'
     )) {
         $active = 'active';
@@ -732,6 +733,7 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
         $stmt->close();
 
         if ($row) {
+            $locationAvailable = $row['driver_lat'] !== null && $row['driver_lng'] !== null;
             $displayedTripId  = (int) $row['trip_id'];
             $displayedBusId   = (int) $row['bus_id'];
             $tripStatus       = $row['status'];
@@ -777,7 +779,8 @@ if (($_SESSION['role'] ?? '') === 'passenger' && !isset($_GET['action'])) {
         'stops'            => $stops,
         'status'           => $tripStatus,
         'currentStopIndex' => $currentStopIndex,
-        'busPosition'      => $busPosition,
+        'busPosition'      => $locationAvailable ? $busPosition : null,
+        'locationAvailable' => $locationAvailable,
         'legFrom'          => $sharedState['legFrom'] ?? null,
         'legTo'            => $sharedState['legTo'] ?? null,
         'legProgress'      => isset($sharedState['legProgress'])
@@ -887,10 +890,27 @@ switch ($action) {
 
     case 'update':
         if (isset($_GET['lat'], $_GET['lng'])) {
+            $lat = filter_var($_GET['lat'], FILTER_VALIDATE_FLOAT);
+            $lng = filter_var($_GET['lng'], FILTER_VALIDATE_FLOAT);
+            if ($lat === false || $lng === false
+                || !is_finite((float) $lat) || !is_finite((float) $lng)
+                || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180
+            ) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Invalid coordinates'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
             $state['busPosition'] = [
-                'lat' => (float)$_GET['lat'],
-                'lng' => (float)$_GET['lng'],
+                'lat' => (float) $lat,
+                'lng' => (float) $lng,
             ];
+            if ($driverId > 0 && ($_SESSION['role'] ?? '') === 'driver'
+                && !gps_store_driver_position($conn, $driverId, (float) $lat, (float) $lng)
+            ) {
+                http_response_code(500);
+                echo json_encode(['error' => 'Could not save driver location'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
         }
         if (isset($_GET['index'])) {
             $state['currentStopIndex'] = max(0, min($maxIndex, (int)$_GET['index']));

@@ -15,7 +15,7 @@ if (empty($_SESSION['user_id']) || !in_array($role, ['driver', 'passenger', 'adm
     exit;
 }
 
-$apiKey = 'AIzaSyDJ_gNjSq_T8NjeAtRfgS3Xgl5vAFton10';
+$apiKey = 'AIzaSyAuvXtccaGYNVFuYXIfYPP8XiRazm5xlXA';
 
 echo json_encode([
     'apiKey'    => $apiKey,

@@ -16,8 +16,8 @@ android {
 		applicationId = "com.trackfare.phone"
 		minSdk = 23
 		targetSdk = 35
-		versionCode = 13
-		versionName = "1.12"
+		versionCode = 16
+		versionName = "1.15"
 	}
 
 	kotlinOptions {

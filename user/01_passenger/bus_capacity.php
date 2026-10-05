@@ -44,7 +44,7 @@ if ($isJsonRequest) {
                  WHERE tap_state = ?
                  GROUP BY trip_id
              ) pax ON pax.trip_id = t.trip_id
-             WHERE t.status = ?
+             WHERE t.status = ? AND u.lat IS NOT NULL AND u.lng IS NOT NULL
              ORDER BY t.start_time DESC, t.trip_id DESC'
         );
         if (!$stmt) {

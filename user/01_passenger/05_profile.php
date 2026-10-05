@@ -29,9 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['form_action'] ?? '';
 
     if ($action === 'logout') {
-        session_unset();
-        session_destroy();
-        header('Location: ../../auth/login.php');
+        header('Location: ../../auth/logout.php');
         exit;
     }
 

@@ -533,9 +533,10 @@ function settle_all_active_passengers_for_trip(mysqli $conn, int $tripId, int $r
 
     $passengers = [];
     if ($stmt = $conn->prepare(
-        'SELECT user_id, card_id, boarding_stop_id FROM active_passengers WHERE trip_id = ?'
+        'SELECT user_id, card_id, boarding_stop_id FROM active_passengers WHERE trip_id = ? AND tap_state = ?'
     )) {
-        $stmt->bind_param('i', $tripId);
+        $tapState = 'in';
+        $stmt->bind_param('is', $tripId, $tapState);
         $stmt->execute();
         $res = $stmt->get_result();
         while ($row = $res->fetch_assoc()) {
@@ -585,10 +586,11 @@ function get_passenger_fare_info(mysqli $conn, int $userId): array
          FROM active_passengers ap
          JOIN trips t ON ap.trip_id = t.trip_id
          JOIN stops s ON ap.boarding_stop_id = s.stop_id
-         WHERE ap.user_id = ? AND t.status = ?'
+         WHERE ap.user_id = ? AND ap.tap_state = ? AND t.status = ?'
     )) {
+        $tapState = 'in';
         $status = 'active';
-        $stmt->bind_param('is', $userId, $status);
+        $stmt->bind_param('iss', $userId, $tapState, $status);
         $stmt->execute();
         $active = $stmt->get_result()->fetch_assoc();
         $stmt->close();
@@ -601,10 +603,16 @@ function get_passenger_fare_info(mysqli $conn, int $userId): array
     $tripId = (int) $active['trip_id'];
     $routeId = (int) $active['route_id'];
     $boardingStopId = (int) $active['boarding_stop_id'];
-    $currentStopIndex = (int) $active['current_stop_index'];
-
-    $currentStopId = get_route_stop_id_at_index($conn, $routeId, $currentStopIndex);
+    $currentStopId = resolve_trip_current_stop_id($conn, [
+        'trip_id' => $tripId,
+        'route_id' => $routeId,
+        'current_stop_index' => (int) $active['current_stop_index'],
+    ]);
     if ($currentStopId === null) {
+        return ['ok' => false, 'message' => 'INVALID STOP', 'fare_now' => 0.0, 'distance_now' => 0.0, 'fare_max' => 0.0, 'distance_max' => 0.0, 'boarding_stop' => '', 'current_stop_index' => 0];
+    }
+    $currentStopIndex = route_stop_index_by_id(fare_route_data($conn, $routeId)['stops'], $currentStopId);
+    if ($currentStopIndex < 0) {
         return ['ok' => false, 'message' => 'INVALID STOP', 'fare_now' => 0.0, 'distance_now' => 0.0, 'fare_max' => 0.0, 'distance_max' => 0.0, 'boarding_stop' => '', 'current_stop_index' => 0];
     }
 
