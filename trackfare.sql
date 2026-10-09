@@ -172,7 +172,8 @@ CREATE TABLE trips (
     current_stop_index INT NOT NULL DEFAULT 0,
     start_time        DATETIME NULL,
     end_time          DATETIME NULL,
-    PRIMARY KEY (trip_id)
+    PRIMARY KEY (trip_id),
+    KEY idx_trips_start_time (start_time)
 );
 
 CREATE TABLE active_passengers (
@@ -198,7 +199,12 @@ CREATE TABLE trip_transactions (
     alighting_stop_id INT UNSIGNED NOT NULL,
     fare_amount      DECIMAL(10,2) NOT NULL,
     boarding_time    DATETIME NULL,
-    PRIMARY KEY (transaction_id)
+    alighting_time   DATETIME NULL,
+    PRIMARY KEY (transaction_id),
+    KEY idx_trip_transactions_boarding_time (boarding_time),
+    KEY idx_trip_transactions_alighting_time (alighting_time),
+    KEY idx_trip_transactions_boarding_stop_id (boarding_stop_id),
+    KEY idx_trip_transactions_alighting_stop_id (alighting_stop_id)
 );
 
 CREATE TABLE passenger_qr_intents (
@@ -403,6 +409,14 @@ VALUES
 (5, 14, 1,  4,  9, 15.25),
 (5, 15, 1, 10, 20, 28.75),
 (5, 16, 1,  3, 18, 37.75);
+
+-- Populate legacy transaction timestamps when their trip timestamps exist.
+UPDATE trip_transactions AS tt
+JOIN trips AS t ON t.trip_id = tt.trip_id
+SET tt.boarding_time = COALESCE(tt.boarding_time, t.start_time),
+    tt.alighting_time = COALESCE(tt.alighting_time, t.end_time)
+WHERE tt.boarding_time IS NULL
+   OR (tt.alighting_time IS NULL AND t.end_time IS NOT NULL);
 
 -- ============================================================
 -- SEED DATA — WALLET BALANCE UPDATES

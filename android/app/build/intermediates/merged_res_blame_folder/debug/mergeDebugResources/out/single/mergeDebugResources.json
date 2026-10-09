@@ -2,5 +2,17 @@
     {
         "merged": "com.trackfare.phone.app-debug-36:/xml_apduservice.xml.flat",
         "source": "com.trackfare.phone.app-main-38:/xml/apduservice.xml"
+    },
+    {
+        "merged": "com.trackfare.phone.app-debug-36:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.trackfare.phone.app-main-38:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.trackfare.phone.app-debug-36:/drawable-nodpi_ic_launcher_foreground.png.flat",
+        "source": "com.trackfare.phone.app-main-38:/drawable-nodpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.trackfare.phone.app-debug-36:/mipmap-nodpi_ic_launcher.png.flat",
+        "source": "com.trackfare.phone.app-main-38:/mipmap-nodpi/ic_launcher.png"
     }
 ]

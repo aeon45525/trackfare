@@ -152,8 +152,8 @@ if ($boardingStopId === null) {
 }
 
 if ($stmt = $conn->prepare(
-    'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id)
-     VALUES (?, ?, ?, ?)'
+    'INSERT INTO active_passengers (trip_id, user_id, card_id, boarding_stop_id, tap_in_time)
+     VALUES (?, ?, ?, ?, NOW())'
 )) {
     $stmt->bind_param('iiii', $tripId, $userId, $cardId, $boardingStopId);
     $inserted = $stmt->execute();

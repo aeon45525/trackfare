@@ -351,7 +351,7 @@ function record_fare_transaction(
     try {
         $transactionId = 0;
         if ($stmt = $conn->prepare(
-            'SELECT active_id
+            'SELECT active_id, tap_in_time
              FROM active_passengers
              WHERE trip_id = ? AND user_id = ? AND card_id = ? AND boarding_stop_id = ? AND tap_state = ?
              FOR UPDATE'
@@ -364,6 +364,7 @@ function record_fare_transaction(
             if (!$active) {
                 throw new RuntimeException('NOT TAPED IN');
             }
+            $boardingTime = $active['tap_in_time'] ?: null;
         } else {
             throw new RuntimeException('TRANSACTION FAILED');
         }
@@ -387,10 +388,19 @@ function record_fare_transaction(
 
         if ($stmt = $conn->prepare(
             'INSERT INTO trip_transactions
-             (trip_id, user_id, card_id, boarding_stop_id, alighting_stop_id, fare_amount)
-             VALUES (?, ?, ?, ?, ?, ?)'
+             (trip_id, user_id, card_id, boarding_stop_id, alighting_stop_id, fare_amount, boarding_time, alighting_time)
+             VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, NOW()), NOW())'
         )) {
-            $stmt->bind_param('iiiiid', $tripId, $userId, $cardId, $boardingStopId, $alightingStopId, $fare);
+            $stmt->bind_param(
+                'iiiiids',
+                $tripId,
+                $userId,
+                $cardId,
+                $boardingStopId,
+                $alightingStopId,
+                $fare,
+                $boardingTime
+            );
             $ok = $stmt->execute();
             $transactionId = (int) $conn->insert_id;
             $stmt->close();

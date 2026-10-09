@@ -6,7 +6,14 @@
 - The passenger home page supports authenticated Tap In and Tap Out actions. Presenting the phone itself as a contactless card to the bus reader still requires a native Android HCE app.
 - If passenger Tap Out reports **TRANSACTION FAILED**, apply `migrations/20261005_passenger_fare_splits.sql` to the `trackfare` database in phpMyAdmin. Tap-out records the driver's fare share in `fare_splits`; the fare transaction is rolled back if this table or the driver's wallet column is missing.
 
-- The ESP32 currently posts taps to `192.168.1.20/TrackFare`; set the passenger app's Server address to this same host and database. Different hosts can show different wallet balances and phone-NFC links.
+- The ESP32 and passenger app must use the same XAMPP host and database. The ESP32 host is configured once as `TRACKFARE_SERVER_HOST` in `esp.ino`; it currently uses `192.168.1.67`, this computer's Wi-Fi address. Reserve that address in the router so it does not change.
+- For ESP32/phone access, run PowerShell as Administrator and allow Apache on the trusted Private LAN only:
+
+  ```powershell
+  New-NetFirewallRule -DisplayName "TrackFare XAMPP Apache (Private LAN)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 80 -Profile Private -RemoteAddress LocalSubnet
+  ```
+
+- Keep Apache and MySQL running, connect the ESP32 and phone to the same non-isolated Wi-Fi network, and use the same XAMPP host in the passenger app. A weak Wi-Fi signal (for example, around `-81 dBm`) can still cause intermittent taps; move the ESP32 closer to the router or use a stronger access point.
 - Chrome/Edge updated or reset location permissions.
 - The passenger is using a different browser/device/network.
 - The browser cached an earlier permission, but now correctly reports the IP site as insecure.
@@ -19,7 +26,7 @@ For immediate testing:
    `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
 2. Enable the setting.
 3. Add:
-   `http://192.168.1.20`
+   `http://192.168.1.67`
 4. Restart Chrome.
 5. Open the passenger page and choose **Allow** for Location.
 6. Tap in again, then refresh the driver page.
@@ -293,8 +300,4 @@ SetEnv PAYMONGO_WEBHOOK_SECRET "whsec_YOUR_SECRET"
 
 Check `http://127.0.0.1:4040` to see whether PayMongo reaches your webhook. A successful request should return HTTP `200`.
 
-const char* ssid     = "BOOTCAMP 2.4G";
-const char* password = "Paloadkanalang!01#";
-const char* tapUrl   = "http://192.168.1.20/TrackFare/api/tapin.php";
-const char* gpsUrl   = "http://192.168.1.20/TrackFare/api/gps_update.php";
-const char* gpsToken = "8f71a65d9c3e42b7a104de5f6c98a231d72b4e0f9a53c681e2f07b4a9d6c1358";
+The ESP32 network host, tap endpoints, and device token are configured in the current root `esp.ino` firmware. Do not copy old credentials or device tokens from archived examples.

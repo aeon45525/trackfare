@@ -9,11 +9,19 @@ require_once __DIR__ . '/../../config/db.php';
 // Validate the selected reporting window and optional route, bus, and stop filters.
 function peakDate(string $value): ?string
 {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/D', $value)) {
+        return null;
+    }
     $date = DateTime::createFromFormat('!Y-m-d', $value);
-    return $date && $date->format('Y-m-d') === $value ? $value : null;
+    return $date
+        && checkdate((int) substr($value, 5, 2), (int) substr($value, 8, 2), (int) substr($value, 0, 4))
+        && $date->format('Y-m-d') === $value
+        ? $value
+        : null;
 }
 
-$range = (string) ($_GET['range'] ?? '7');
+$rangeInput = $_GET['range'] ?? '7';
+$range = is_string($rangeInput) ? $rangeInput : '';
 if (!in_array($range, ['today', '7', '30', 'custom'], true)) {
     $range = '7';
 }
@@ -23,8 +31,10 @@ $startDate = $range === 'today'
     : ($range === '30' ? date('Y-m-d', strtotime('-29 days')) : date('Y-m-d', strtotime('-6 days')));
 $endDate = $today;
 if ($range === 'custom') {
-    $startDate = peakDate((string) ($_GET['start_date'] ?? '')) ?? $startDate;
-    $endDate = peakDate((string) ($_GET['end_date'] ?? '')) ?? $today;
+    $startInput = $_GET['start_date'] ?? '';
+    $endInput = $_GET['end_date'] ?? '';
+    $startDate = peakDate(is_string($startInput) ? $startInput : '') ?? $startDate;
+    $endDate = peakDate(is_string($endInput) ? $endInput : '') ?? $today;
     if ($startDate > $endDate) {
         [$startDate, $endDate] = [$endDate, $startDate];
     }
@@ -62,9 +72,28 @@ foreach ([
     }
     $optionStmt->close();
 }
+$routeIds = array_map(static function (array $option): int {
+    return (int) $option['id'];
+}, $routes);
+$busIds = array_map(static function (array $option): int {
+    return (int) $option['id'];
+}, $buses);
+$stopIds = array_map(static function (array $option): int {
+    return (int) $option['id'];
+}, $stops);
+if ($routeId > 0 && !in_array($routeId, $routeIds, true)) {
+    $routeId = 0;
+}
+if ($busId > 0 && !in_array($busId, $busIds, true)) {
+    $busId = 0;
+}
+if ($stopId > 0 && !in_array($stopId, $stopIds, true)) {
+    $stopId = 0;
+}
 
 // Shared filter predicates keep hourly and weekday counts aligned.
-$where = ['t.start_time >= ?', 't.start_time < ?'];
+$boardingTimeSql = 'COALESCE(tt.boarding_time, t.start_time)';
+$where = [$boardingTimeSql . ' >= ?', $boardingTimeSql . ' < ?'];
 $types = 'ss';
 $params = [$startDateTime, $endDateTime];
 if ($routeId > 0) {
@@ -78,9 +107,8 @@ if ($busId > 0) {
     $params[] = $busId;
 }
 if ($stopId > 0) {
-    $where[] = '(tt.boarding_stop_id = ? OR tt.alighting_stop_id = ?)';
-    $types .= 'ii';
-    $params[] = $stopId;
+    $where[] = 'tt.boarding_stop_id = ?';
+    $types .= 'i';
     $params[] = $stopId;
 }
 $whereSql = implode(' AND ', $where);
@@ -95,12 +123,12 @@ function bindPeakParams(mysqli_stmt $stmt, string $types, array &$values): bool
     return call_user_func_array([$stmt, 'bind_param'], $arguments);
 }
 
-// Aggregate recorded passenger trips by hour and by weekday using trip start_time.
-$hourlySql = 'SELECT HOUR(t.start_time) AS hour_of_day, COUNT(*) AS total
+// Use the passenger's recorded tap-in time, falling back to legacy trip start times.
+$hourlySql = 'SELECT HOUR(' . $boardingTimeSql . ') AS hour_of_day, COUNT(*) AS total
               FROM trip_transactions tt
               JOIN trips t ON t.trip_id = tt.trip_id
               WHERE ' . $whereSql . '
-              GROUP BY HOUR(t.start_time)';
+              GROUP BY HOUR(' . $boardingTimeSql . ')';
 $hourlyStmt = $conn->prepare($hourlySql);
 if (!$hourlyStmt) {
     error_log('Peak boarding hourly query prepare failed: ' . $conn->error);
@@ -124,12 +152,12 @@ while ($row = $hourlyResult->fetch_assoc()) {
 }
 $hourlyStmt->close();
 
-$weekdaySql = 'SELECT DAYOFWEEK(t.start_time) AS weekday_number,
-                      HOUR(t.start_time) AS hour_of_day, COUNT(*) AS total
+$weekdaySql = 'SELECT DAYOFWEEK(' . $boardingTimeSql . ') AS weekday_number,
+                      HOUR(' . $boardingTimeSql . ') AS hour_of_day, COUNT(*) AS total
                FROM trip_transactions tt
                JOIN trips t ON t.trip_id = tt.trip_id
                WHERE ' . $whereSql . '
-               GROUP BY DAYOFWEEK(t.start_time), HOUR(t.start_time)';
+               GROUP BY DAYOFWEEK(' . $boardingTimeSql . '), HOUR(' . $boardingTimeSql . ')';
 $weekdayStmt = $conn->prepare($weekdaySql);
 if (!$weekdayStmt) {
     error_log('Peak boarding weekday query prepare failed: ' . $conn->error);
@@ -160,6 +188,12 @@ while ($row = $weekdayResult->fetch_assoc()) {
 $weekdayStmt->close();
 
 $totalBoardings = array_sum($hourly);
+$heatmapTotal = array_sum($dayTotals);
+if ($heatmapTotal !== $totalBoardings) {
+    error_log('Peak boarding hourly total does not match weekday heatmap total.');
+    http_response_code(500);
+    exit('Unable to reconcile boarding-time report totals.');
+}
 $hasBoardings = $totalBoardings > 0;
 $peakHour = array_search(max($hourly), $hourly, true);
 $quietHour = array_search(min($hourly), $hourly, true);
@@ -169,6 +203,21 @@ $hourLabel = static function (int $hour): string {
         date('g:00 A', mktime(($hour + 1) % 24, 0, 0));
 };
 $maxHeat = max(1, max(array_map('max', $heatmap)));
+$exportInput = $_GET['export'] ?? '';
+$export = is_string($exportInput) ? $exportInput : '';
+if ($export === 'csv') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="peak-boarding-time-' . $startDate . '-to-' . $endDate . '.csv"');
+    $output = fopen('php://output', 'w');
+    fputcsv($output, ['Day of week', 'Hour', 'Boardings']);
+    foreach ($dayNames as $dayIndex => $dayName) {
+        for ($hour = 0; $hour < 24; $hour++) {
+            fputcsv($output, [$dayName, $hourLabel($hour), $heatmap[$dayIndex][$hour]]);
+        }
+    }
+    fclose($output);
+    exit;
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -183,14 +232,55 @@ $maxHeat = max(1, max(array_map('max', $heatmap)));
 </head>
 <body class="min-h-screen bg-slate-50 font-['Inter'] text-slate-900">
   <div class="flex min-h-screen">
-    <?php require __DIR__ . '/_sidebar.php'; ?>
+    <?php
+    $adminNavPage = basename($_SERVER['PHP_SELF'] ?? '');
+    $adminNavItems = [
+        ['file' => '01_dashboard.php', 'icon' => 'dashboard', 'label' => 'Dashboard'],
+        ['file' => '02_passengers.php', 'icon' => 'group', 'label' => 'Passengers'],
+        ['file' => '03_drivers.php', 'icon' => 'badge', 'label' => 'Drivers'],
+        ['file' => '04_fleet.php', 'icon' => 'local_shipping', 'label' => 'Fleet'],
+        ['file' => '05_routes_fares.php', 'icon' => 'alt_route', 'label' => 'Routes & Fares'],
+        ['file' => '06_transactions.php', 'icon' => 'payments', 'label' => 'Transactions'],
+        ['file' => '07_analytics.php', 'icon' => 'monitoring', 'label' => 'Analytics'],
+        ['file' => '08_profile.php', 'icon' => 'person', 'label' => 'Profile'],
+    ];
+    ?>
+    <aside class="fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-slate-200 bg-slate-50">
+      <div class="border-b border-slate-200 px-6 py-8">
+        <a href="01_dashboard.php" class="text-2xl font-black tracking-tight text-blue-900">TrackFare</a>
+        <p class="mt-2 text-sm text-slate-500">Fleet Manager Portal</p>
+      </div>
+      <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-6" aria-label="Admin navigation">
+        <?php foreach ($adminNavItems as $item): ?>
+          <?php
+          $isAnalyticsNavItem = $item['file'] === '07_analytics.php';
+          $isActiveNavItem = $isAnalyticsNavItem
+              ? in_array($adminNavPage, ['07_analytics.php', 'boarding_hotspot.php', 'peak_boarding_time.php'], true)
+              : $adminNavPage === $item['file'];
+          ?>
+          <a class="flex items-center gap-3 rounded-r-full px-5 py-3 transition <?= $isActiveNavItem ? 'border-r-4 border-blue-700 bg-blue-50 font-semibold text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-blue-700' ?>" href="<?= htmlspecialchars($item['file'], ENT_QUOTES, 'UTF-8') ?>" <?= $adminNavPage === $item['file'] ? 'aria-current="page"' : '' ?>>
+            <span class="material-symbols-outlined"><?= htmlspecialchars($item['icon'], ENT_QUOTES, 'UTF-8') ?></span>
+            <span><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+          </a>
+        <?php endforeach; ?>
+      </nav>
+      <div class="border-t border-slate-200 px-6 py-6">
+        <div class="flex items-center gap-3">
+          <div class="h-12 w-12 overflow-hidden rounded-2xl border border-slate-200"><img src="../../images/pfp.png" alt="Fleet Manager" class="h-full w-full object-cover"></div>
+          <div><p class="text-sm font-semibold text-slate-900">Fleet Manager</p><p class="text-xs text-slate-500">Admin</p></div>
+        </div>
+        <a href="../../auth/logout.php" class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+          <span class="material-symbols-outlined">logout</span>Logout
+        </a>
+      </div>
+    </aside>
     <main class="ml-72 min-h-screen flex-1 p-8">
       <div class="mx-auto max-w-7xl">
-    <a href="01_dashboard.php" class="text-sm font-semibold text-blue-800">&larr; Admin dashboard</a>
+    <a href="07_analytics.php" class="text-sm font-semibold text-blue-800">&larr; Analytics</a>
     <header class="my-6">
       <p class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Admin analytics</p>
       <h1 class="mt-2 text-3xl font-extrabold">Peak boarding time</h1>
-      <p class="mt-2 text-sm text-slate-600">Completed passenger trips grouped by the recorded trip start time.</p>
+      <p class="mt-2 text-sm text-slate-600">Completed passenger trips grouped by COALESCE(boarding_time, trip start_time).</p>
     </header>
 
     <!-- Date, route, bus, and stop filters. -->
@@ -214,7 +304,10 @@ $maxHeat = max(1, max(array_map('max', $heatmap)));
       <label class="text-xs font-semibold text-slate-600">Stop
         <select name="stop_id" class="mt-1 w-full rounded-xl border-slate-300 text-sm"><option value="0">All stops</option><?php foreach ($stops as $option): ?><option value="<?= (int) $option['id'] ?>" <?= $stopId === (int) $option['id'] ? 'selected' : '' ?>><?= $escape($option['label']) ?></option><?php endforeach; ?></select>
       </label>
-      <button class="rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-bold text-white lg:col-span-6">Apply filters</button>
+      <div class="flex gap-2 lg:col-span-6">
+        <button class="rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-bold text-white">Apply filters</button>
+        <button name="export" value="csv" class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700">Export CSV</button>
+      </div>
     </form>
 
     <!-- Summary metrics are derived from the filtered hourly and daily totals. -->
@@ -253,7 +346,7 @@ $maxHeat = max(1, max(array_map('max', $heatmap)));
         </tbody>
       </table>
     </section>
-    <p class="mt-4 text-xs leading-relaxed text-slate-500">The current schema does not retain each passenger’s tap-in timestamp after checkout. This report therefore groups completed transactions by their trip’s existing start_time. For exact boarding-time analytics, add a boarding_time column to trip_transactions and store active_passengers.tap_in_time when creating each transaction.</p>
+    <p class="mt-4 text-xs leading-relaxed text-slate-500">Boarding time uses the passenger's saved tap-in timestamp. Older transactions without that timestamp fall back to the trip start time.</p>
       </div>
     </main>
   </div>

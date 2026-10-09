@@ -1,5 +1,7 @@
 R_DEF: Internal format may change without notice
 local
+drawable ic_launcher_foreground
+mipmap ic_launcher
 string app_name
 string hce_aid_description
 string hce_service_description

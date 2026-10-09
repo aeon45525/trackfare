@@ -39,9 +39,24 @@ if (isset($_GET['action'])) {
             }
 
             $today = date('Y-m-d');
-            $result = $conn->query("SELECT COALESCE(SUM(fare_amount), 0) as total FROM trip_transactions WHERE DATE(transaction_id) >= '$today' OR trip_id IN (SELECT trip_id FROM trips WHERE DATE(start_time) = '$today')");
-            if ($result && $row = $result->fetch_assoc()) {
-                $stats['today_revenue'] = (float)$row['total'];
+            $tomorrow = date('Y-m-d', strtotime($today . ' +1 day'));
+            $stmt = $conn->prepare(
+                'SELECT COALESCE(SUM(tt.fare_amount), 0) AS total
+                 FROM trip_transactions tt
+                 JOIN trips t ON t.trip_id = tt.trip_id
+                 WHERE COALESCE(tt.alighting_time, t.start_time) >= ?
+                   AND COALESCE(tt.alighting_time, t.start_time) < ?'
+            );
+            if (!$stmt) {
+                error_log('Dashboard today revenue prepare failed: ' . $conn->error);
+            } else {
+                $stmt->bind_param('ss', $today, $tomorrow);
+                if (!$stmt->execute()) {
+                    error_log('Dashboard today revenue query failed: ' . $stmt->error);
+                } elseif ($row = $stmt->get_result()->fetch_assoc()) {
+                    $stats['today_revenue'] = (float)$row['total'];
+                }
+                $stmt->close();
             }
 
             $result = $conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'driver' AND is_active = 1");
@@ -68,6 +83,7 @@ if (isset($_GET['action'])) {
     function getRecentBoardings($limit = 3) {
         global $conn;
         $boardings = [];
+        $limit = max(1, min(50, (int)$limit));
 
         try {
             $result = $conn->query("SELECT ap.active_id, u.full_name, s.stop_name, ap.tap_in_time FROM active_passengers ap JOIN users u ON ap.user_id = u.user_id JOIN stops s ON ap.boarding_stop_id = s.stop_id WHERE ap.tap_state = 'in' ORDER BY ap.tap_in_time DESC LIMIT $limit");
@@ -86,6 +102,7 @@ if (isset($_GET['action'])) {
     function getCompletedTrips($limit = 3) {
         global $conn;
         $trips = [];
+        $limit = max(1, min(50, (int)$limit));
 
         try {
             $result = $conn->query("SELECT tt.transaction_id, u.full_name, bs.stop_name as boarding_stop, as_stop.stop_name as alighting_stop, tt.fare_amount, tt.trip_id FROM trip_transactions tt JOIN users u ON tt.user_id = u.user_id JOIN stops bs ON tt.boarding_stop_id = bs.stop_id JOIN stops as_stop ON tt.alighting_stop_id = as_stop.stop_id ORDER BY tt.transaction_id DESC LIMIT $limit");
@@ -106,15 +123,17 @@ if (isset($_GET['action'])) {
         $counts = [];
 
         try {
-            $result = $conn->query("SELECT DAYNAME(DATE_SUB(NOW(), INTERVAL (6 - d.day) DAY)) as day_name, COALESCE(COUNT(DISTINCT t.trip_id), 0) as trip_count FROM (SELECT 0 as day UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) d LEFT JOIN trips t ON DATE(t.start_time) = DATE_SUB(NOW(), INTERVAL (6 - d.day) DAY) GROUP BY d.day ORDER BY d.day");
+            $result = $conn->query("SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL (6 - d.day) DAY), '%a') AS day_name, COALESCE(COUNT(t.trip_id), 0) AS trip_count FROM (SELECT 0 AS day UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) d LEFT JOIN trips t ON t.start_time >= DATE_SUB(CURDATE(), INTERVAL (6 - d.day) DAY) AND t.start_time < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL (6 - d.day) DAY), INTERVAL 1 DAY) GROUP BY d.day ORDER BY d.day");
             if ($result) {
                 while ($row = $result->fetch_assoc()) {
-                    $counts[] = (int)$row['trip_count'];
+                    $counts[] = [
+                        'day_name' => $row['day_name'],
+                        'trip_count' => (int)$row['trip_count'],
+                    ];
                 }
             }
         } catch (Exception $e) {
             error_log("Daily trip counts error: " . $e->getMessage());
-            $counts = [8, 5, 9, 6, 8, 3, 5];
         }
 
         return $counts;
@@ -125,7 +144,7 @@ if (isset($_GET['action'])) {
         $revenue = [];
 
         try {
-            $result = $conn->query("SELECT d.day_name, COALESCE(r.revenue, 0) as revenue FROM (SELECT 0 as day, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 6 DAY)) as day_name UNION SELECT 1, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 5 DAY)) UNION SELECT 2, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 4 DAY)) UNION SELECT 3, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 3 DAY)) UNION SELECT 4, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 2 DAY)) UNION SELECT 5, DAYNAME(DATE_SUB(CURDATE(), INTERVAL 1 DAY)) UNION SELECT 6, DAYNAME(CURDATE())) d LEFT JOIN (SELECT DATE(t.start_time) as day, SUM(tt.fare_amount) as revenue FROM trip_transactions tt JOIN trips t ON tt.trip_id = t.trip_id GROUP BY DATE(t.start_time)) r ON r.day = DATE_SUB(CURDATE(), INTERVAL (6 - d.day) DAY) ORDER BY d.day");
+            $result = $conn->query("SELECT d.day_name, COALESCE(r.revenue, 0) AS revenue FROM (SELECT 0 AS day, DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 6 DAY), '%a') AS day_name UNION SELECT 1, DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 DAY), '%a') UNION SELECT 2, DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 4 DAY), '%a') UNION SELECT 3, DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 3 DAY), '%a') UNION SELECT 4, DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 2 DAY), '%a') UNION SELECT 5, DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 DAY), '%a') UNION SELECT 6, DATE_FORMAT(CURDATE(), '%a')) d LEFT JOIN (SELECT DATE(COALESCE(tt.alighting_time, t.end_time, t.start_time)) AS day, SUM(tt.fare_amount) AS revenue FROM trip_transactions tt JOIN trips t ON tt.trip_id = t.trip_id WHERE COALESCE(tt.alighting_time, t.end_time, t.start_time) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND COALESCE(tt.alighting_time, t.end_time, t.start_time) < DATE_ADD(CURDATE(), INTERVAL 1 DAY) GROUP BY DATE(COALESCE(tt.alighting_time, t.end_time, t.start_time))) r ON r.day = DATE_SUB(CURDATE(), INTERVAL (6 - d.day) DAY) ORDER BY d.day");
             if ($result) {
                 while ($row = $result->fetch_assoc()) {
                     $revenue[] = [
@@ -269,7 +288,48 @@ if (isset($_GET['action'])) {
     <!-- Layout Wrapper -->
     <div class="flex min-h-screen">
       <!-- SideNavBar -->
-      <?php require __DIR__ . '/_sidebar.php'; ?>
+      <?php
+      $adminNavPage = basename($_SERVER['PHP_SELF'] ?? '');
+      $adminNavItems = [
+          ['file' => '01_dashboard.php', 'icon' => 'dashboard', 'label' => 'Dashboard'],
+          ['file' => '02_passengers.php', 'icon' => 'group', 'label' => 'Passengers'],
+          ['file' => '03_drivers.php', 'icon' => 'badge', 'label' => 'Drivers'],
+          ['file' => '04_fleet.php', 'icon' => 'local_shipping', 'label' => 'Fleet'],
+          ['file' => '05_routes_fares.php', 'icon' => 'alt_route', 'label' => 'Routes & Fares'],
+          ['file' => '06_transactions.php', 'icon' => 'payments', 'label' => 'Transactions'],
+          ['file' => '07_analytics.php', 'icon' => 'monitoring', 'label' => 'Analytics'],
+          ['file' => '08_profile.php', 'icon' => 'person', 'label' => 'Profile'],
+      ];
+      ?>
+      <aside class="fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-slate-200 bg-slate-50">
+        <div class="border-b border-slate-200 px-6 py-8">
+          <a href="01_dashboard.php" class="text-2xl font-black tracking-tight text-blue-900">TrackFare</a>
+          <p class="mt-2 text-sm text-slate-500">Fleet Manager Portal</p>
+        </div>
+        <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-6" aria-label="Admin navigation">
+          <?php foreach ($adminNavItems as $item): ?>
+            <?php
+            $isAnalyticsNavItem = $item['file'] === '07_analytics.php';
+            $isActiveNavItem = $isAnalyticsNavItem
+                ? in_array($adminNavPage, ['07_analytics.php', 'boarding_hotspot.php', 'peak_boarding_time.php'], true)
+                : $adminNavPage === $item['file'];
+            ?>
+            <a class="flex items-center gap-3 rounded-r-full px-5 py-3 transition <?= $isActiveNavItem ? 'border-r-4 border-blue-700 bg-blue-50 font-semibold text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-blue-700' ?>" href="<?= htmlspecialchars($item['file'], ENT_QUOTES, 'UTF-8') ?>" <?= $adminNavPage === $item['file'] ? 'aria-current="page"' : '' ?>>
+              <span class="material-symbols-outlined"><?= htmlspecialchars($item['icon'], ENT_QUOTES, 'UTF-8') ?></span>
+              <span><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+            </a>
+          <?php endforeach; ?>
+        </nav>
+        <div class="border-t border-slate-200 px-6 py-6">
+          <div class="flex items-center gap-3">
+            <div class="h-12 w-12 overflow-hidden rounded-2xl border border-slate-200"><img src="../../images/pfp.png" alt="Fleet Manager" class="h-full w-full object-cover"></div>
+            <div><p class="text-sm font-semibold text-slate-900">Fleet Manager</p><p class="text-xs text-slate-500">Admin</p></div>
+          </div>
+          <a href="../../auth/logout.php" class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+            <span class="material-symbols-outlined">logout</span>Logout
+          </a>
+        </div>
+      </aside>
       <!-- Main Content -->
       <main class="flex-1 ml-72 p-8 min-h-screen">
         <header class="flex flex-col gap-6 mb-8">
@@ -348,36 +408,22 @@ if (isset($_GET['action'])) {
               <div>
                 <h3 class="text-lg font-bold text-on-surface">Daily Trips</h3>
                 <p class="text-sm text-slate-600">
-                  Trips completed today by route.
+                  Vehicle trips started each day · rolling 7 days.
                 </p>
               </div>
               <span
+                id="daily-trips-change"
                 class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700"
-                >+12% vs yesterday</span
+                >Loading comparison…</span
               >
             </div>
             <div class="h-56 rounded-[1.25rem] bg-surface-container p-4">
-              <div class="flex h-full items-end gap-2" id="daily-trips-chart">
-                <!-- Bars will be populated by JavaScript -->
-                <div class="w-full rounded-t-3xl bg-primary/20 h-[42%]"></div>
-                <div class="w-full rounded-t-3xl bg-primary/40 h-[72%]"></div>
-                <div class="w-full rounded-t-3xl bg-primary/30 h-[58%]"></div>
-                <div class="w-full rounded-t-3xl bg-primary/20 h-[46%]"></div>
-                <div class="w-full rounded-t-3xl bg-primary/40 h-[84%]"></div>
-                <div class="w-full rounded-t-3xl bg-primary/30 h-[64%]"></div>
-                <div class="w-full rounded-t-3xl bg-primary/20 h-[38%]"></div>
-              </div>
+              <div class="flex h-full items-end gap-2" id="daily-trips-chart"></div>
             </div>
             <div
-              class="mt-4 grid grid-cols-7 gap-2 text-[10px] uppercase tracking-[0.25em] text-slate-500 font-bold"
+              id="daily-trips-labels"
+              class="mt-4 grid gap-2 text-center text-[10px] uppercase tracking-[0.15em] text-slate-500 font-bold"
             >
-              <span>Mon</span>
-              <span>Tue</span>
-              <span>Wed</span>
-              <span>Thu</span>
-              <span>Fri</span>
-              <span>Sat</span>
-              <span>Sun</span>
             </div>
           </section>
           <section
@@ -554,6 +600,16 @@ if (isset($_GET['action'])) {
         return response.json();
       }
 
+      function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, character => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        })[character]);
+      }
+
       async function loadDashboardData() {
         try {
           const stats = await fetchDashboardData('stats');
@@ -576,8 +632,8 @@ if (isset($_GET['action'])) {
                 <li class="rounded-3xl bg-white p-4 shadow-sm">
                   <div class="flex items-center justify-between gap-3">
                     <div>
-                      <p class="font-semibold text-slate-900">${boarding.full_name}</p>
-                      <p class="text-sm text-slate-500">Boarded at: ${boarding.stop_name}</p>
+                      <p class="font-semibold text-slate-900">${escapeHtml(boarding.full_name)}</p>
+                      <p class="text-sm text-slate-500">Boarded at: ${escapeHtml(boarding.stop_name)}</p>
                     </div>
                     <span class="text-xs font-semibold text-primary">${time}</span>
                   </div>
@@ -595,8 +651,8 @@ if (isset($_GET['action'])) {
                 <li class="rounded-3xl bg-white p-4 shadow-sm">
                   <div class="flex items-center justify-between gap-3">
                     <div>
-                      <p class="font-semibold text-slate-900">${trip.full_name}</p>
-                      <p class="text-sm text-slate-500">${trip.boarding_stop} → ${trip.alighting_stop}</p>
+                      <p class="font-semibold text-slate-900">${escapeHtml(trip.full_name)}</p>
+                      <p class="text-sm text-slate-500">${escapeHtml(trip.boarding_stop)} → ${escapeHtml(trip.alighting_stop)}</p>
                     </div>
                     <span class="text-xs font-semibold text-emerald-700">₱${parseFloat(trip.fare_amount).toFixed(2)}</span>
                   </div>
@@ -676,19 +732,38 @@ if (isset($_GET['action'])) {
 
           const dailyCounts = await fetchDashboardData('daily_counts');
           if (dailyCounts.length > 0) {
-            const maxCount = Math.max(...dailyCounts);
+            const tripValues = dailyCounts.map(day => Number(day.trip_count));
+            const maxCount = Math.max(0, ...tripValues);
             const chart = document.getElementById('daily-trips-chart');
-            if (chart) {
+            const labels = document.getElementById('daily-trips-labels');
+            const comparison = document.getElementById('daily-trips-change');
+            if (chart && labels) {
               chart.innerHTML = '';
-              const opacities = [0.2, 0.4, 0.3, 0.2, 0.4, 0.3, 0.2];
-              dailyCounts.forEach((count, idx) => {
-                const heightPercent = maxCount > 0 ? (count / maxCount) * 100 : 50;
+              labels.innerHTML = '';
+              labels.style.gridTemplateColumns = `repeat(${dailyCounts.length}, minmax(0, 1fr))`;
+              dailyCounts.forEach(day => {
+                const count = Number(day.trip_count);
+                const heightPercent = maxCount > 0 ? Math.max(2, (count / maxCount) * 100) : 2;
                 const bar = document.createElement('div');
                 bar.className = 'w-full rounded-t-3xl bg-primary';
-                bar.style.opacity = opacities[idx];
                 bar.style.height = heightPercent + '%';
+                bar.title = `${day.day_name}: ${count} vehicle trips started`;
                 chart.appendChild(bar);
+
+                const label = document.createElement('span');
+                label.textContent = day.day_name;
+                labels.appendChild(label);
               });
+            }
+            if (comparison) {
+              const todayCount = tripValues[tripValues.length - 1] || 0;
+              const yesterdayCount = tripValues[tripValues.length - 2] || 0;
+              if (yesterdayCount === 0) {
+                comparison.textContent = todayCount === 0 ? '0% vs yesterday' : 'New vs yesterday';
+              } else {
+                const change = Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 100);
+                comparison.textContent = `${change > 0 ? '+' : ''}${change}% vs yesterday`;
+              }
             }
           }
         } catch (error) {

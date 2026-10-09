@@ -9,11 +9,19 @@ require_once __DIR__ . '/../../config/db.php';
 // Validate dates and filter selections before binding them into report queries.
 function hotspotDate(string $value): ?string
 {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/D', $value)) {
+        return null;
+    }
     $date = DateTime::createFromFormat('!Y-m-d', $value);
-    return $date && $date->format('Y-m-d') === $value ? $value : null;
+    return $date
+        && checkdate((int) substr($value, 5, 2), (int) substr($value, 8, 2), (int) substr($value, 0, 4))
+        && $date->format('Y-m-d') === $value
+        ? $value
+        : null;
 }
 
-$range = (string) ($_GET['range'] ?? '7');
+$rangeInput = $_GET['range'] ?? '7';
+$range = is_string($rangeInput) ? $rangeInput : '';
 if (!in_array($range, ['today', '7', '30', 'custom'], true)) {
     $range = '7';
 }
@@ -23,15 +31,18 @@ $startDate = $range === 'today'
     : ($range === '30' ? date('Y-m-d', strtotime('-29 days')) : date('Y-m-d', strtotime('-6 days')));
 $endDate = $today;
 if ($range === 'custom') {
-    $startDate = hotspotDate((string) ($_GET['start_date'] ?? '')) ?? $startDate;
-    $endDate = hotspotDate((string) ($_GET['end_date'] ?? '')) ?? $today;
+    $startInput = $_GET['start_date'] ?? '';
+    $endInput = $_GET['end_date'] ?? '';
+    $startDate = hotspotDate(is_string($startInput) ? $startInput : '') ?? $startDate;
+    $endDate = hotspotDate(is_string($endInput) ? $endInput : '') ?? $today;
     if ($startDate > $endDate) {
         [$startDate, $endDate] = [$endDate, $startDate];
     }
 }
 $routeId = filter_input(INPUT_GET, 'route_id', FILTER_VALIDATE_INT);
 $routeId = $routeId && $routeId > 0 ? $routeId : 0;
-$view = (string) ($_GET['view'] ?? 'both');
+$viewInput = $_GET['view'] ?? 'both';
+$view = is_string($viewInput) ? $viewInput : '';
 if (!in_array($view, ['in', 'off', 'both'], true)) {
     $view = 'both';
 }
@@ -51,23 +62,47 @@ while ($route = $routesResult->fetch_assoc()) {
     $routes[] = $route;
 }
 $routesStmt->close();
+$validRouteIds = array_map(static function (array $route): int {
+    return (int) $route['route_id'];
+}, $routes);
+if ($routeId > 0 && !in_array($routeId, $validRouteIds, true)) {
+    $routeId = 0;
+}
 
-// Count boardings and alightings from completed trip records for the selected window.
+// Filter each UNION branch before combining so timestamp indexes can be used.
 $sql = 'SELECT s.stop_id, s.stop_name, s.municipality, s.lat, s.lng,
-               SUM(CASE WHEN tt.boarding_stop_id = s.stop_id THEN 1 ELSE 0 END) AS in_count,
-               SUM(CASE WHEN tt.alighting_stop_id = s.stop_id THEN 1 ELSE 0 END) AS off_count
-        FROM trip_transactions tt
-        JOIN trips t ON t.trip_id = tt.trip_id
-        JOIN stops s ON s.stop_id = tt.boarding_stop_id OR s.stop_id = tt.alighting_stop_id
-        WHERE t.start_time >= ? AND t.start_time < ?';
+               COALESCE(SUM(events.is_boarding), 0) AS in_count,
+               COALESCE(SUM(events.is_alighting), 0) AS off_count
+        FROM (
+            SELECT tt.boarding_stop_id AS stop_id, t.route_id,
+                   1 AS is_boarding, 0 AS is_alighting
+            FROM trip_transactions tt
+            JOIN trips t ON t.trip_id = tt.trip_id
+            WHERE ((tt.boarding_time >= ? AND tt.boarding_time < ?)
+                OR (tt.boarding_time IS NULL AND t.start_time >= ? AND t.start_time < ?))';
 if ($routeId > 0) {
     $sql .= ' AND t.route_id = ?';
 }
+$sql .= '
+            UNION ALL
+            SELECT tt.alighting_stop_id AS stop_id, t.route_id,
+                   0 AS is_boarding, 1 AS is_alighting
+            FROM trip_transactions tt
+            JOIN trips t ON t.trip_id = tt.trip_id
+            WHERE ((tt.alighting_time >= ? AND tt.alighting_time < ?)
+                OR (tt.alighting_time IS NULL AND t.end_time >= ? AND t.end_time < ?)
+                OR (tt.alighting_time IS NULL AND t.end_time IS NULL
+                    AND t.start_time >= ? AND t.start_time < ?))';
+if ($routeId > 0) {
+    $sql .= ' AND t.route_id = ?';
+}
+$sql .= ') events
+        JOIN stops s ON s.stop_id = events.stop_id';
 $rankOrder = $view === 'in'
-    ? 'SUM(CASE WHEN tt.boarding_stop_id = s.stop_id THEN 1 ELSE 0 END)'
+    ? 'SUM(events.is_boarding)'
     : ($view === 'off'
-        ? 'SUM(CASE WHEN tt.alighting_stop_id = s.stop_id THEN 1 ELSE 0 END)'
-        : 'SUM(CASE WHEN tt.boarding_stop_id = s.stop_id THEN 1 ELSE 0 END) + SUM(CASE WHEN tt.alighting_stop_id = s.stop_id THEN 1 ELSE 0 END)');
+        ? 'SUM(events.is_alighting)'
+        : 'SUM(events.is_boarding) + SUM(events.is_alighting)');
 $sql .= ' GROUP BY s.stop_id, s.stop_name, s.municipality, s.lat, s.lng
           ORDER BY ' . $rankOrder . ' DESC, s.stop_name ASC';
 $stmt = $conn->prepare($sql);
@@ -76,10 +111,24 @@ if (!$stmt) {
     http_response_code(500);
     exit('Unable to load hotspot report.');
 }
+$types = 'ssss' . ($routeId > 0 ? 'i' : '') . 'ssssss' . ($routeId > 0 ? 'i' : '');
+$params = [$startDateTime, $endDateTime, $startDateTime, $endDateTime];
 if ($routeId > 0) {
-    $stmt->bind_param('ssi', $startDateTime, $endDateTime, $routeId);
-} else {
-    $stmt->bind_param('ss', $startDateTime, $endDateTime);
+    $params[] = $routeId;
+}
+array_push($params, $startDateTime, $endDateTime, $startDateTime, $endDateTime, $startDateTime, $endDateTime);
+if ($routeId > 0) {
+    $params[] = $routeId;
+}
+$bindings = [$types];
+foreach ($params as &$param) {
+    $bindings[] = &$param;
+}
+unset($param);
+if (!call_user_func_array([$stmt, 'bind_param'], $bindings)) {
+    error_log('Boarding hotspot parameter binding failed.');
+    http_response_code(500);
+    exit('Unable to load hotspot report.');
 }
 if (!$stmt->execute()) {
     error_log('Boarding hotspot query failed: ' . $stmt->error);
@@ -122,6 +171,26 @@ if ($view !== 'in') {
 $escape = static function ($value): string {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 };
+$exportInput = $_GET['export'] ?? '';
+$export = is_string($exportInput) ? $exportInput : '';
+if ($export === 'csv') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="boarding-hotspots-' . $startDate . '-to-' . $endDate . '.csv"');
+    $output = fopen('php://output', 'w');
+    fputcsv($output, ['Stop ID', 'Stop', 'Municipality', 'Boardings', 'Alightings', 'Total']);
+    foreach ($visibleHotspots as $row) {
+        fputcsv($output, [
+            $row['stop_id'],
+            $row['stop_name'],
+            $row['municipality'],
+            $row['in_count'],
+            $row['off_count'],
+            $row['total'],
+        ]);
+    }
+    fclose($output);
+    exit;
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -137,10 +206,51 @@ $escape = static function ($value): string {
 </head>
 <body class="min-h-screen bg-slate-50 font-['Inter'] text-slate-900">
   <div class="flex min-h-screen">
-    <?php require __DIR__ . '/_sidebar.php'; ?>
+    <?php
+    $adminNavPage = basename($_SERVER['PHP_SELF'] ?? '');
+    $adminNavItems = [
+        ['file' => '01_dashboard.php', 'icon' => 'dashboard', 'label' => 'Dashboard'],
+        ['file' => '02_passengers.php', 'icon' => 'group', 'label' => 'Passengers'],
+        ['file' => '03_drivers.php', 'icon' => 'badge', 'label' => 'Drivers'],
+        ['file' => '04_fleet.php', 'icon' => 'local_shipping', 'label' => 'Fleet'],
+        ['file' => '05_routes_fares.php', 'icon' => 'alt_route', 'label' => 'Routes & Fares'],
+        ['file' => '06_transactions.php', 'icon' => 'payments', 'label' => 'Transactions'],
+        ['file' => '07_analytics.php', 'icon' => 'monitoring', 'label' => 'Analytics'],
+        ['file' => '08_profile.php', 'icon' => 'person', 'label' => 'Profile'],
+    ];
+    ?>
+    <aside class="fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-slate-200 bg-slate-50">
+      <div class="border-b border-slate-200 px-6 py-8">
+        <a href="01_dashboard.php" class="text-2xl font-black tracking-tight text-blue-900">TrackFare</a>
+        <p class="mt-2 text-sm text-slate-500">Fleet Manager Portal</p>
+      </div>
+      <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-6" aria-label="Admin navigation">
+        <?php foreach ($adminNavItems as $item): ?>
+          <?php
+          $isAnalyticsNavItem = $item['file'] === '07_analytics.php';
+          $isActiveNavItem = $isAnalyticsNavItem
+              ? in_array($adminNavPage, ['07_analytics.php', 'boarding_hotspot.php', 'peak_boarding_time.php'], true)
+              : $adminNavPage === $item['file'];
+          ?>
+          <a class="flex items-center gap-3 rounded-r-full px-5 py-3 transition <?= $isActiveNavItem ? 'border-r-4 border-blue-700 bg-blue-50 font-semibold text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-blue-700' ?>" href="<?= htmlspecialchars($item['file'], ENT_QUOTES, 'UTF-8') ?>" <?= $adminNavPage === $item['file'] ? 'aria-current="page"' : '' ?>>
+            <span class="material-symbols-outlined"><?= htmlspecialchars($item['icon'], ENT_QUOTES, 'UTF-8') ?></span>
+            <span><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+          </a>
+        <?php endforeach; ?>
+      </nav>
+      <div class="border-t border-slate-200 px-6 py-6">
+        <div class="flex items-center gap-3">
+          <div class="h-12 w-12 overflow-hidden rounded-2xl border border-slate-200"><img src="../../images/pfp.png" alt="Fleet Manager" class="h-full w-full object-cover"></div>
+          <div><p class="text-sm font-semibold text-slate-900">Fleet Manager</p><p class="text-xs text-slate-500">Admin</p></div>
+        </div>
+        <a href="../../auth/logout.php" class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+          <span class="material-symbols-outlined">logout</span>Logout
+        </a>
+      </div>
+    </aside>
     <main class="ml-72 min-h-screen flex-1 p-8">
       <div class="mx-auto max-w-7xl">
-    <a href="01_dashboard.php" class="text-sm font-semibold text-blue-800">&larr; Admin dashboard</a>
+    <a href="07_analytics.php" class="text-sm font-semibold text-blue-800">&larr; Analytics</a>
     <header class="my-6">
       <p class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Admin analytics</p>
       <h1 class="mt-2 text-3xl font-extrabold">Boarding &amp; alighting hotspots</h1>
@@ -178,7 +288,10 @@ $escape = static function ($value): string {
           <option value="off" <?= $view === 'off' ? 'selected' : '' ?>>Getting Off</option>
         </select>
       </label>
-      <button class="self-end rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-bold text-white">Apply filters</button>
+      <div class="self-end flex gap-2">
+        <button class="rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-bold text-white">Apply filters</button>
+        <button name="export" value="csv" class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700">Export CSV</button>
+      </div>
     </form>
 
     <!-- Chart summarizes the highest-volume stops in the filtered result. -->
